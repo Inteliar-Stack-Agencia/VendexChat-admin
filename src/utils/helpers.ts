@@ -1,0 +1,71 @@
+// ========================================
+// VENDExChat Admin - Funciones auxiliares
+// ========================================
+
+// Formatear precio en formato moneda
+export function formatPrice(price: number): string {
+  return new Intl.NumberFormat('es-AR', {
+    style: 'currency',
+    currency: 'ARS',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(price)
+}
+
+// Formatear fecha legible
+export function formatDate(dateString: string): string {
+  const date = new Date(dateString)
+  return new Intl.DateTimeFormat('es-AR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date)
+}
+
+// Formatear fecha corta (solo día)
+export function formatShortDate(dateString: string): string {
+  const date = new Date(dateString)
+  return new Intl.DateTimeFormat('es-AR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(date)
+}
+
+// Generar slug desde texto
+export function generateSlug(text: string): string {
+  return text
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // Quitar acentos
+    .replace(/[^a-z0-9]+/g, '-')     // Reemplazar caracteres especiales con guiones
+    .replace(/^-+|-+$/g, '')          // Quitar guiones al inicio y final
+}
+
+// Generar link de WhatsApp
+export function whatsappLink(phone: string, message?: string): string {
+  const cleanPhone = phone.replace(/\D/g, '')
+  const url = `https://wa.me/${cleanPhone}`
+  return message ? `${url}?text=${encodeURIComponent(message)}` : url
+}
+
+// Colores para los estados de pedidos
+export const orderStatusConfig: Record<string, { label: string; color: string; bg: string }> = {
+  pending: { label: 'Pendiente', color: 'text-yellow-800', bg: 'bg-yellow-100' },
+  confirmed: { label: 'Confirmado', color: 'text-blue-800', bg: 'bg-blue-100' },
+  completed: { label: 'Completado', color: 'text-green-800', bg: 'bg-green-100' },
+  cancelled: { label: 'Cancelado', color: 'text-red-800', bg: 'bg-red-100' },
+}
+
+// Truncar texto
+export function truncate(text: string, maxLength: number): string {
+  if (text.length <= maxLength) return text
+  return text.slice(0, maxLength) + '...'
+}
+
+// Validar email
+export function isValidEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+}
