@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react'
 import { User } from '../types'
 import { authApi } from '../services/api'
@@ -36,6 +37,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         })
         .finally(() => setLoading(false))
     } else {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLoading(false)
     }
   }, [token])
