@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { Plus, Search, Pencil, Trash2, Package } from 'lucide-react'
 import { Card, Badge, LoadingSpinner, EmptyState, Pagination, ConfirmDialog } from '../../components/common'
@@ -19,7 +19,7 @@ export default function ProductsPage() {
   const [deleteId, setDeleteId] = useState<number | null>(null)
   const [deleting, setDeleting] = useState(false)
 
-  const loadProducts = async () => {
+  const loadProducts = useCallback(async () => {
     setLoading(true)
     try {
       const params: Record<string, unknown> = { page, limit: 20 }
@@ -33,11 +33,11 @@ export default function ProductsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [page, search, categoryFilter])
 
   useEffect(() => {
     loadProducts()
-  }, [page, search, categoryFilter])
+  }, [loadProducts])
 
   useEffect(() => {
     categoriesApi.list().then(setCategories).catch(console.error)

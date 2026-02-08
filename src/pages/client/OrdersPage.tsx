@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { Eye, ShoppingCart } from 'lucide-react'
 import { Card, Badge, LoadingSpinner, EmptyState, Pagination } from '../../components/common'
@@ -14,7 +14,7 @@ export default function OrdersPage() {
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
 
-  const loadOrders = async () => {
+  const loadOrders = useCallback(async () => {
     setLoading(true)
     try {
       const params: Record<string, string | number> = { page, limit: 20 }
@@ -41,11 +41,11 @@ export default function OrdersPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [page, statusFilter, dateFilter])
 
   useEffect(() => {
     loadOrders()
-  }, [page, statusFilter, dateFilter])
+  }, [loadOrders])
 
   return (
     <div className="space-y-6">
