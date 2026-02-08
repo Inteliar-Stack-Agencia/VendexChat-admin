@@ -12,14 +12,13 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({})
 
-  const { login, isSuperadmin } = useAuth()
+  const { login } = useAuth()
   const navigate = useNavigate()
 
   const validate = () => {
     const newErrors: typeof errors = {}
-    if (!email) newErrors.email = 'El email es obligatorio'
+    if (!email.trim()) newErrors.email = 'El email es obligatorio'
     if (!password) newErrors.password = 'La contraseña es obligatoria'
-    else if (password.length < 8) newErrors.password = 'Mínimo 8 caracteres'
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
   }
