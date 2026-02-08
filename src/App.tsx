@@ -1,0 +1,79 @@
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { AuthProvider } from './contexts/AuthContext'
+import ToastContainer from './components/common/Toast'
+
+// Layout
+import AppLayout from './components/layout/AppLayout'
+import ProtectedRoute, { SuperadminRoute } from './components/layout/ProtectedRoute'
+
+// Auth pages
+import LoginPage from './pages/auth/LoginPage'
+import RegisterPage from './pages/auth/RegisterPage'
+import RecoverPasswordPage from './pages/auth/RecoverPasswordPage'
+import ResetPasswordPage from './pages/auth/ResetPasswordPage'
+
+// Client pages
+import DashboardPage from './pages/client/DashboardPage'
+import ProductsPage from './pages/client/ProductsPage'
+import ProductFormPage from './pages/client/ProductFormPage'
+import CategoriesPage from './pages/client/CategoriesPage'
+import OrdersPage from './pages/client/OrdersPage'
+import OrderDetailPage from './pages/client/OrderDetailPage'
+import SettingsPage from './pages/client/SettingsPage'
+
+// Superadmin pages
+import SuperadminDashboard from './pages/superadmin/SuperadminDashboard'
+import TenantsPage from './pages/superadmin/TenantsPage'
+import UsersPage from './pages/superadmin/UsersPage'
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AuthProvider>
+        <ToastContainer />
+        <Routes>
+          {/* Rutas públicas (Auth) */}
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
+          <Route path="/recover-password" element={<RecoverPasswordPage />} />
+          <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
+
+          {/* Rutas protegidas del cliente */}
+          <Route
+            element={
+              <ProtectedRoute>
+                <AppLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/products" element={<ProductsPage />} />
+            <Route path="/products/new" element={<ProductFormPage />} />
+            <Route path="/products/edit/:id" element={<ProductFormPage />} />
+            <Route path="/categories" element={<CategoriesPage />} />
+            <Route path="/orders" element={<OrdersPage />} />
+            <Route path="/orders/:id" element={<OrderDetailPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
+          </Route>
+
+          {/* Rutas protegidas del superadmin */}
+          <Route
+            element={
+              <SuperadminRoute>
+                <AppLayout />
+              </SuperadminRoute>
+            }
+          >
+            <Route path="/superadmin/dashboard" element={<SuperadminDashboard />} />
+            <Route path="/superadmin/tenants" element={<TenantsPage />} />
+            <Route path="/superadmin/users" element={<UsersPage />} />
+          </Route>
+
+          {/* Redirigir raíz al login */}
+          <Route path="/" element={<Navigate to="/login" replace />} />
+          <Route path="*" element={<Navigate to="/login" replace />} />
+        </Routes>
+      </AuthProvider>
+    </BrowserRouter>
+  )
+}
