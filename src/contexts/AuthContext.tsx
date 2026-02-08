@@ -16,6 +16,11 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null)
 
+const resolveAuthPayload = (response: unknown) => {
+  const dataResponse = response as { data?: { token?: string; access_token?: string; user: User } }
+  return dataResponse.data ?? (response as { token?: string; access_token?: string; user: User })
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [token, setToken] = useState<string | null>(localStorage.getItem('vendexchat_token'))
@@ -44,16 +49,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async (email: string, password: string) => {
     const response = await authApi.login(email, password)
-    localStorage.setItem('vendexchat_token', response.token)
-    setToken(response.token)
-    setUser(response.user)
+    const payload = resolveAuthPayload(response)
+    const authToken = payload.token ?? payload.access_token
+    if (!authToken) {
+      throw new Error('Token no recibido')
+    }
+    localStorage.setItem('vendexchat_token', authToken)
+    setToken(authToken)
+    setUser(payload.user)
   }, [])
 
   const register = useCallback(async (data: { store_name: string; email: string; password: string; slug: string }) => {
     const response = await authApi.register(data)
-    localStorage.setItem('vendexchat_token', response.token)
-    setToken(response.token)
-    setUser(response.user)
+    const payload = resolveAuthPayload(response)
+    const authToken = payload.token ?? payload.access_token
+    if (!authToken) {
+      throw new Error('Token no recibido')
+    }
+    localStorage.setItem('vendexchat_token', authToken)
+    setToken(authToken)
+    setUser(payload.user)
   }, [])
 
   const logout = useCallback(() => {
