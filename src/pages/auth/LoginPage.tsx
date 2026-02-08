@@ -1,4 +1,4 @@
-import { useState, FormEvent } from 'react'
+import { useState, FormEvent, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Store } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
@@ -14,6 +14,16 @@ export default function LoginPage() {
 
   const { login } = useAuth()
   const navigate = useNavigate()
+  const { user } = useAuth()
+
+  useEffect(() => {
+    if (!user) return
+    if (user.role === 'superadmin') {
+      navigate('/superadmin/dashboard', { replace: true })
+    } else {
+      navigate('/dashboard', { replace: true })
+    }
+  }, [user, navigate])
 
   const validate = () => {
     const newErrors: typeof errors = {}
@@ -39,17 +49,6 @@ export default function LoginPage() {
     } finally {
       setLoading(false)
     }
-  }
-
-  // Redirigir si ya está autenticado
-  const { user } = useAuth()
-  if (user) {
-    if (user.role === 'superadmin') {
-      navigate('/superadmin/dashboard', { replace: true })
-    } else {
-      navigate('/dashboard', { replace: true })
-    }
-    return null
   }
 
   return (
