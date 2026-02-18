@@ -9,7 +9,7 @@ export interface User {
   email: string
   name: string
   role: 'client' | 'superadmin'
-  store_id: number | null
+  store_id: string | null
   created_at: string
 }
 
@@ -32,7 +32,7 @@ export interface AuthResponse {
 
 // --- Tenant (Tienda) ---
 export interface Tenant {
-  id: number
+  id: string
   name: string
   slug: string
   logo_url: string | null
@@ -60,15 +60,15 @@ export interface ScheduleDay {
 
 // --- Producto ---
 export interface Product {
-  id: number
-  store_id: number
+  id: string
+  store_id: string
   name: string
   description: string | null
   price: number
   stock: number
   unlimited_stock: boolean
   image_url: string | null
-  category_id: number | null
+  category_id: string | null
   category_name?: string
   is_active: boolean
   is_featured: boolean
@@ -82,15 +82,15 @@ export interface ProductFormData {
   stock: number | string
   unlimited_stock: boolean
   image_url: string
-  category_id: number | string
+  category_id: string
   is_active: boolean
   is_featured: boolean
 }
 
 // --- Categoría ---
 export interface Category {
-  id: number
-  store_id: number
+  id: string
+  store_id: string
   name: string
   sort_order: number
   product_count?: number
@@ -99,8 +99,8 @@ export interface Category {
 
 // --- Pedido ---
 export interface Order {
-  id: number
-  store_id: number
+  id: string
+  store_id: string
   order_number: string
   customer_name: string
   customer_whatsapp: string
@@ -118,8 +118,8 @@ export interface Order {
 export type OrderStatus = 'pending' | 'confirmed' | 'completed' | 'cancelled'
 
 export interface OrderItem {
-  id: number
-  product_id: number
+  id: string
+  product_id: string
   product_name: string
   quantity: number
   unit_price: number
@@ -149,9 +149,45 @@ export interface SuperadminUser {
   email: string
   name: string
   role: string
-  store_id: number | null
+  store_id: string | null
   store_name?: string
   last_login: string | null
+  is_active: boolean
+  created_at: string
+}
+
+// --- Facturación y Suscripciones ---
+export interface Subscription {
+  id: string
+  store_id: string
+  plan_type: 'free' | 'pro' | 'premium'
+  status: 'active' | 'past_due' | 'canceled' | 'trial'
+  current_period_end: string | null
+  cancel_at_period_end: boolean
+  stripe_subscription_id?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface SubscriptionPlan {
+  id: string
+  name: string
+  price: number
+  interval: 'month' | 'year'
+  features: string[]
+  is_popular?: boolean
+}
+
+export interface PaymentGateway {
+  id: string
+  store_id: string | null
+  provider: 'stripe' | 'mercadopago' | 'paypal'
+  is_master: boolean
+  config: {
+    public_key: string
+    secret_key?: string
+    access_token?: string
+  }
   is_active: boolean
   created_at: string
 }

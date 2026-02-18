@@ -19,7 +19,7 @@ export default function LoginPage() {
   useEffect(() => {
     if (!user) return
     if (user.role === 'superadmin') {
-      navigate('/superadmin/dashboard', { replace: true })
+      navigate('/sa/overview', { replace: true })
     } else {
       navigate('/dashboard', { replace: true })
     }

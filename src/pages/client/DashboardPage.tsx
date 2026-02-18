@@ -1,12 +1,25 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { ShoppingCart, Package, DollarSign, Plus, Clock, AlertTriangle, ChevronRight, ClipboardList, ExternalLink } from 'lucide-react'
+import {
+  ShoppingCart,
+  Package,
+  DollarSign,
+  Plus,
+  Clock,
+  AlertTriangle,
+  ChevronRight,
+  ClipboardList,
+  ExternalLink,
+  Zap
+} from 'lucide-react'
 import { Card, LoadingSpinner, Badge, Button } from '../../components/common'
 import { dashboardApi, tenantApi } from '../../services/api'
 import { DashboardStats, Tenant } from '../../types'
 import { formatPrice, formatDate, orderStatusConfig } from '../../utils/helpers'
+import { useAuth } from '../../contexts/AuthContext'
 
 export default function DashboardPage() {
+  const { subscription } = useAuth()
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [tenant, setTenant] = useState<Tenant | null>(null)
   const [loading, setLoading] = useState(true)
@@ -25,6 +38,7 @@ export default function DashboardPage() {
   }, [])
 
   const storefrontUrl = `${import.meta.env.VITE_STOREFRONT_URL}/${tenant?.slug}`
+  const currentPlan = subscription?.plan_type || 'free'
 
   if (loading) return <LoadingSpinner text="Cargando dashboard..." />
 
@@ -33,10 +47,27 @@ export default function DashboardPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Dashboard</h1>
-          <p className="text-slate-500 mt-1 font-medium">Resumen de tu tienda hoy</p>
+          <div className="flex items-center gap-2 mb-1">
+            <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Dashboard</h1>
+            <Badge
+              bg={currentPlan === 'free' ? 'bg-slate-100' : 'bg-emerald-50'}
+              color={currentPlan === 'free' ? 'text-slate-500' : 'text-emerald-600'}
+              className="uppercase text-[10px] font-black tracking-widest mt-1"
+            >
+              Plan {currentPlan}
+            </Badge>
+          </div>
+          <p className="text-slate-500 font-medium">Resumen de tu tienda hoy</p>
         </div>
         <div className="flex items-center gap-3">
+          {currentPlan === 'free' && (
+            <Link to="/subscription">
+              <Button variant="secondary" className="bg-indigo-50 text-indigo-600 border-indigo-100 hover:bg-indigo-100 font-bold">
+                <Zap className="w-4 h-4 fill-current" />
+                Mejorar Plan
+              </Button>
+            </Link>
+          )}
           <a href={storefrontUrl} target="_blank" rel="noopener noreferrer">
             <Button variant="outline" className="bg-white">
               <ExternalLink className="w-5 h-5 text-slate-400" />

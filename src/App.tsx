@@ -23,6 +23,7 @@ import CustomersPage from './pages/client/CustomersPage'
 import CouponsPage from './pages/client/CouponsPage'
 import SchedulePage from './pages/client/SchedulePage'
 import PaymentsPage from './pages/client/PaymentsPage'
+import SubscriptionPage from './pages/client/SubscriptionPage'
 import SettingsPage from './pages/client/SettingsPage'
 
 // Superadmin pages (Legacy)
@@ -39,6 +40,7 @@ import SAPaymentsPage from './pages/superadmin/SAPaymentsPage'
 import SASubscriptionsPage from './pages/superadmin/SASubscriptionsPage'
 import SAPermissionsPage from './pages/superadmin/SAPermissionsPage'
 import SAStatsPage from './pages/superadmin/SAStatsPage'
+import SALiquidationsPage from './pages/superadmin/SALiquidationsPage'
 import SASettingsPage from './pages/superadmin/SASettingsPage'
 
 export default function App() {
@@ -72,6 +74,7 @@ export default function App() {
             <Route path="/coupons" element={<CouponsPage />} />
             <Route path="/horarios" element={<SchedulePage />} />
             <Route path="/payments" element={<PaymentsPage />} />
+            <Route path="/subscription" element={<SubscriptionPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Route>
 
@@ -90,6 +93,7 @@ export default function App() {
             <Route path="/sa/payments" element={<SAPaymentsPage />} />
             <Route path="/sa/permissions" element={<SAPermissionsPage />} />
             <Route path="/sa/stats" element={<SAStatsPage />} />
+            <Route path="/sa/liquidations" element={<SALiquidationsPage />} />
             <Route path="/sa/settings" element={<SASettingsPage />} />
 
             {/* Alias para el dashboard de entrada */}

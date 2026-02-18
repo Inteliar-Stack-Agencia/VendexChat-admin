@@ -14,7 +14,7 @@ export default function SAHeader({ onMenuClick }: SAHeaderProps) {
                 <button onClick={onMenuClick} className="lg:hidden p-2 rounded-xl hover:bg-slate-100 transition-colors">
                     <Menu className="w-6 h-6 text-slate-600" />
                 </button>
-                <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100">
+                <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100">
                     <ShieldCheck className="w-4 h-4" />
                     <span className="text-xs font-bold uppercase tracking-wider">Superadmin Mode</span>
                 </div>

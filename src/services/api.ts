@@ -17,7 +17,7 @@ import type {
  * Utilidad para obtener el store_id del usuario actual con lógica de "Auto-reparación"
  * Si el perfil no tiene store_id, intenta encontrar la tienda por el slug en los metadatos de auth.
  */
-export const getStoreId = async (): Promise<number> => {
+export const getStoreId = async (): Promise<string> => {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
     console.error('getStoreId: No hay sesión activa')
@@ -202,7 +202,7 @@ export const productsApi = {
       store_id: storeId,
       price: Number(data.price),
       stock: Number(data.stock),
-      category_id: data.category_id ? Number(data.category_id) : null
+      category_id: data.category_id || null
     }).select('*, categories(name)').single()
 
     if (error) {
@@ -271,7 +271,7 @@ export const categoriesApi = {
     return updatedCat as Category
   },
 
-  delete: async (id: string | number) => {
+  deleteCategory: async (id: string | number) => {
     const { error } = await supabase.from('categories').delete().eq('id', id)
     if (error) throw error
   },
@@ -368,46 +368,105 @@ export const tenantApi = {
       .single()
 
     if (error) throw error
-    return updated as Tenant
+    return updated as unknown as Tenant
+  },
+
+  listGateways: async () => {
+    const { data: profile } = await supabase.from('profiles').select('store_id').single();
+    if (!profile?.store_id) return [];
+
+    const { data, error } = await supabase
+      .from('gateways')
+      .select('*')
+      .eq('store_id', profile.store_id)
+      .eq('is_master', false)
+
+    if (error) throw error
+    return data
+  },
+
+  connectGateway: async (provider: string, config: any) => {
+    const { data: profile } = await supabase.from('profiles').select('store_id').single();
+    if (!profile?.store_id) throw new Error('No store associated with this user');
+
+    const { data, error } = await supabase
+      .from('gateways')
+      .upsert({
+        store_id: profile.store_id,
+        provider,
+        config,
+        is_master: false
+      })
+      .select()
+      .single()
+
+    if (error) throw error
+    return data
   },
 }
 
 // --- Superadmin ---
 export const superadminApi = {
-  dashboard: async (): Promise<any> => {
-    const { count: storesCount } = await supabase.from('stores').select('*', { count: 'exact', head: true })
-    const { count: ordersCount } = await supabase.from('orders').select('*', { count: 'exact', head: true })
+  overview: async (): Promise<any> => {
+    // 1. Total stores
+    const { count: totalStores } = await supabase.from('stores').select('*', { count: 'exact', head: true })
+
+    // 2. New stores in last 7 days
+    const sevenDaysAgo = new Date()
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+    const { count: newStores } = await supabase
+      .from('stores')
+      .select('*', { count: 'exact', head: true })
+      .gte('created_at', sevenDaysAgo.toISOString())
+
+    // 3. Active stores (assuming is_active exists)
+    const { count: activeStores } = await supabase
+      .from('stores')
+      .select('*', { count: 'exact', head: true })
+      .eq('is_active', true)
+
+    // 4. Failed payments (Placeholder for now)
+    // const { count: failedPayments } = await supabase.from('payments').select('*', { count: 'exact', head: true }).eq('status', 'failed')
 
     return {
-      total_stores: storesCount || 0,
-      total_orders: ordersCount || 0,
-      total_revenue: 0,
-      new_registrations_week: 0,
-      stores: []
+      total_stores: totalStores || 0,
+      active_stores: activeStores || 0,
+      new_stores_7d: newStores || 0,
+      mrr_estimated: 12450, // Mock for now until plans table is ready
+      failed_payments: 3    // Mock for now
     }
   },
 
-  listTenants: async () => {
-    const { data, error } = await supabase.from('stores').select('*').order('created_at', { ascending: false })
+  listTenants: async (params?: { q?: string; status?: string; plan?: string; page?: number; limit?: number }) => {
+    let query = supabase.from('stores').select('*', { count: 'exact' })
+
+    if (params?.q) query = query.or(`name.ilike.%${params.q}%,slug.ilike.%${params.q}%`)
+    if (params?.status && params.status !== 'all') query = query.eq('is_active', params.status === 'active')
+
+    // Note: 'plan' column might not exist yet, assuming 'premium' flag or similar if applicable
+    // If not, we'll just handle it as a placeholder filter for now.
+
+    const from = ((params?.page || 1) - 1) * (params?.limit || 10)
+    const to = from + (params?.limit || 10) - 1
+
+    const { data, error, count } = await query.range(from, to).order('created_at', { ascending: false })
     if (error) throw error
-    return data as Tenant[]
+
+    return {
+      data: data as Tenant[],
+      total: count || 0,
+      page: params?.page || 1,
+      total_pages: Math.ceil((count || 0) / (params?.limit || 10))
+    }
   },
 
-  createTenant: async (data: any) => {
-    // Nota: Crear un tenant implica crear un usuario y una tienda.
-    // Para compilar, implementamos la parte de la tienda.
-    const { data: newTenant, error } = await supabase.from('stores').insert({
-      name: data.name,
-      slug: data.slug,
-      whatsapp: data.whatsapp,
-      is_active: data.is_active,
-      // El email/password requerirían lógica de Admin Auth (Edge Function preferiblemente)
-    }).select().single()
+  getTenant: async (id: string | number) => {
+    const { data, error } = await supabase.from('stores').select('*').eq('id', id).single()
     if (error) throw error
-    return newTenant as Tenant
+    return data as Tenant
   },
 
-  updateTenant: async (id: string | number, data: Partial<Tenant>) => {
+  updateTenant: async (id: string | number, data: any) => {
     const { data: updated, error } = await supabase.from('stores').update(data).eq('id', id).select().single()
     if (error) throw error
     return updated as Tenant
@@ -416,6 +475,12 @@ export const superadminApi = {
   deleteTenant: async (id: string | number) => {
     const { error } = await supabase.from('stores').delete().eq('id', id)
     if (error) throw error
+  },
+
+  createTenant: async (data: any) => {
+    const { data: newTenant, error } = await supabase.from('stores').insert(data).select().single()
+    if (error) throw error
+    return newTenant as Tenant
   },
 
   listUsers: async () => {
@@ -428,22 +493,13 @@ export const superadminApi = {
   },
 
   createUser: async (data: any) => {
-    // Requiere lógica de Admin Auth
-    const { data: newUser, error } = await supabase.from('profiles').insert({
-      name: data.name,
-      role: data.role,
-      store_id: data.store_id
-    }).select().single()
+    const { data: newUser, error } = await supabase.from('profiles').insert(data).select().single()
     if (error) throw error
     return newUser
   },
 
   updateUser: async (id: string | number, data: any) => {
-    const { data: updated, error } = await supabase.from('profiles').update({
-      name: data.name,
-      role: data.role,
-      store_id: data.store_id
-    }).eq('id', id).select().single()
+    const { data: updated, error } = await supabase.from('profiles').update(data).eq('id', id).select().single()
     if (error) throw error
     return updated
   },
@@ -451,5 +507,123 @@ export const superadminApi = {
   deleteUser: async (id: string | number) => {
     const { error } = await supabase.from('profiles').delete().eq('id', id)
     if (error) throw error
+  },
+
+  listGlobalOrders: async (params?: { page?: number; limit?: number }) => {
+    const from = ((params?.page || 1) - 1) * (params?.limit || 20)
+    const to = from + (params?.limit || 20) - 1
+
+    const { data, error, count } = await supabase
+      .from('orders')
+      .select('*, stores(name)')
+      .range(from, to)
+      .order('created_at', { ascending: false })
+
+    if (error) throw error
+    return {
+      data: (data || []).map(o => ({
+        ...o,
+        store_name: (o as any).stores?.name
+      })),
+      total: count || 0
+    }
+  },
+
+  getGlobalStats: async (): Promise<any> => {
+    // Esto es un placeholder que simula datos de tendencias para los gráficos de la Fase 3
+    return {
+      revenue_trend: [
+        { date: '2024-02-12', value: 10500 },
+        { date: '2024-02-13', value: 11200 },
+        { date: '2024-02-14', value: 10800 },
+        { date: '2024-02-15', value: 12100 },
+        { date: '2024-02-16', value: 13500 },
+        { date: '2024-02-17', value: 12900 },
+        { date: '2024-02-18', value: 14200 },
+      ],
+      orders_trend: [
+        { date: '2024-02-12', value: 85 },
+        { date: '2024-02-13', value: 92 },
+        { date: '2024-02-14', value: 78 },
+        { date: '2024-02-15', value: 104 },
+        { date: '2024-02-16', value: 115 },
+        { date: '2024-02-17', value: 98 },
+        { date: '2024-02-18', value: 122 },
+      ]
+    }
+  },
+
+  updateGlobalSettings: async (settings: any) => {
+    // Simulamos la persistencia de settings globales (ej. en una tabla 'config' o metadatos)
+    console.log('Updating global settings:', settings)
+    return { success: true }
+  },
+
+  connectGateway: async (provider: string, config: any, isMaster: boolean = false) => {
+    const { data, error } = await supabase
+      .from('gateways')
+      .upsert({
+        provider,
+        config,
+        is_master: isMaster,
+        store_id: isMaster ? null : await (async () => {
+          const { data: profile } = await supabase.from('profiles').select('store_id').single();
+          return profile?.store_id;
+        })()
+      })
+      .select()
+      .single()
+
+    if (error) throw error
+    return data
+  },
+
+  listGateways: async (isMaster: boolean = false) => {
+    let query = supabase.from('gateways').select('*')
+    if (isMaster) {
+      query = query.eq('is_master', true)
+    } else {
+      query = query.eq('is_master', false)
+    }
+
+    const { data, error } = await query
+    if (error) throw error
+    return data
+  },
+
+  dashboard: async () => superadminApi.overview()
+}
+
+// --- Facturación ---
+export const billingApi = {
+  getPlans: async (): Promise<any[]> => {
+    // Mock de planes (estos podrían venir de una tabla 'plans' en el futuro)
+    return [
+      { id: 'free', name: 'Free', price: 0, features: ['Hasta 50 productos', 'Pedidos ilimitados', 'Dashboard básico'] },
+      { id: 'pro', name: 'Pro', price: 15, features: ['Productos ilimitados', 'Estadísticas avanzadas', 'Soporte prioritario'], is_popular: true },
+      { id: 'premium', name: 'Premium', price: 35, features: ['Marca blanca', 'Dominio personalizado', 'Integraciones VIP'] },
+    ]
+  },
+
+  getCurrentSubscription: async () => {
+    const storeId = await getStoreId()
+    const { data, error } = await supabase
+      .from('subscriptions')
+      .select('*')
+      .eq('store_id', storeId)
+      .single()
+
+    if (error && error.code !== 'PGRST116') throw error // PGRST116 is "no rows returned"
+    return data
+  },
+
+  createCheckoutSession: async (planId: string) => {
+    const storeId = await getStoreId()
+
+    // Aquí iría la llamada a un Edge Function de Supabase o backend
+    // que interactúe con la API de Stripe/MercadoPago.
+    // Simulamos una respuesta exitosa.
+    console.log(`Iniciando checkout para el plan ${planId} en la tienda ${storeId}`)
+    return { checkout_url: 'https://checkout.vendexchat.app/mock-session' }
   }
 }

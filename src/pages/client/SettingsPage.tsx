@@ -3,8 +3,13 @@ import { Card, Button, Input, LoadingSpinner } from '../../components/common'
 import { showToast } from '../../components/common/Toast'
 import { tenantApi, authApi } from '../../services/api'
 import { Tenant } from '../../types'
+import { CreditCard, Plus, RefreshCw, Trash2 } from 'lucide-react'
+import { useAuth } from '../../contexts/AuthContext'
+import FeatureGuard from '../../components/FeatureGuard'
 
 export default function SettingsPage() {
+  const { subscription } = useAuth()
+  const currentPlan = subscription?.plan_type || 'free'
   const [tenant, setTenant] = useState<Tenant | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -38,10 +43,15 @@ export default function SettingsPage() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [changingPassword, setChangingPassword] = useState(false)
 
+  // Pagos
+  const [gateways, setGateways] = useState<any[]>([])
+  const [loadingGateways, setLoadingGateways] = useState(false)
+  const [newGateway, setNewGateway] = useState({ provider: 'mercadopago', public_key: '', secret_key: '' })
+
   useEffect(() => {
-    tenantApi
-      .getMe()
-      .then((data) => {
+    const loadData = async () => {
+      try {
+        const data = await tenantApi.getMe()
         setTenant(data)
         setName(data.name || '')
         setDescription(data.description || '')
@@ -57,9 +67,16 @@ export default function SettingsPage() {
         setPrimaryColor(data.primary_color || '#10b981')
         setWelcomeMessage(data.welcome_message || '')
         setFooterMessage(data.footer_message || '')
-      })
-      .catch(console.error)
-      .finally(() => setLoading(false))
+
+        const gws = await tenantApi.listGateways()
+        setGateways(gws)
+      } catch (err) {
+        console.error(err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadData()
   }, [])
 
   const handleSaveGeneral = async (e: FormEvent) => {
@@ -152,6 +169,25 @@ export default function SettingsPage() {
     }
   }
 
+  const handleConnectGateway = async (e: FormEvent) => {
+    e.preventDefault()
+    setLoadingGateways(true)
+    try {
+      await tenantApi.connectGateway(newGateway.provider, {
+        public_key: newGateway.public_key,
+        secret_key: newGateway.secret_key
+      })
+      const gws = await tenantApi.listGateways()
+      setGateways(gws)
+      setNewGateway({ provider: 'mercadopago', public_key: '', secret_key: '' })
+      showToast('success', 'Pasarela conectada correctamente')
+    } catch (err) {
+      showToast('error', 'Error al conectar pasarela')
+    } finally {
+      setLoadingGateways(false)
+    }
+  }
+
   if (loading) return <LoadingSpinner text="Cargando configuración..." />
 
   const tabs = [
@@ -159,6 +195,7 @@ export default function SettingsPage() {
     { id: 'contact', label: 'Contacto' },
     { id: 'orders', label: 'Pedidos' },
     { id: 'customization', label: 'Personalización' },
+    { id: 'payments', label: 'Pagos' },
     { id: 'account', label: 'Cuenta' },
   ]
 
@@ -173,8 +210,8 @@ export default function SettingsPage() {
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
             className={`px-4 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${activeTab === tab.id
-                ? 'border-emerald-600 text-emerald-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
+              ? 'border-emerald-600 text-emerald-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
           >
             {tab.label}
@@ -271,6 +308,73 @@ export default function SettingsPage() {
             <Button type="submit" loading={saving}>Guardar cambios</Button>
           </form>
         </Card>
+      )}
+
+      {/* Tab: Pagos */}
+      {activeTab === 'payments' && (
+        <div className="space-y-6">
+          <FeatureGuard feature="white-label" minPlan="pro" fallback="message">
+            <Card>
+              <h2 className="text-sm font-semibold text-gray-500 uppercase mb-4">Configurar Pasarela de Pagos Propia</h2>
+              <p className="text-xs text-slate-400 mb-6 font-medium">
+                Como usuario <span className="text-indigo-600 font-bold uppercase">{currentPlan}</span>, puedes vincular tus propias credenciales para recibir pagos directos sin comisiones de plataforma adicionales.
+              </p>
+              <form onSubmit={handleConnectGateway} className="space-y-4 max-w-md">
+                <div className="space-y-1">
+                  <label className="text-sm font-medium text-gray-700">Proveedor</label>
+                  <select
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    value={newGateway.provider}
+                    onChange={(e) => setNewGateway(n => ({ ...n, provider: e.target.value }))}
+                  >
+                    <option value="mercadopago">MercadoPago</option>
+                    <option value="stripe">Stripe</option>
+                    <option value="paypal">PayPal</option>
+                  </select>
+                </div>
+                <Input
+                  label="Public Key / Client ID"
+                  value={newGateway.public_key}
+                  onChange={(e) => setNewGateway(n => ({ ...n, public_key: e.target.value }))}
+                  placeholder="APP_USR-..."
+                />
+                <Input
+                  label="Access Token / Secret Key"
+                  type="password"
+                  value={newGateway.secret_key}
+                  onChange={(e) => setNewGateway(n => ({ ...n, secret_key: e.target.value }))}
+                  placeholder="TEST-..."
+                />
+                <Button type="submit" loading={loadingGateways} className="bg-emerald-600 text-white font-bold">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Vincular Pasarela
+                </Button>
+              </form>
+            </Card>
+          </FeatureGuard>
+
+          {gateways.length > 0 && (
+            <Card>
+              <h2 className="text-sm font-semibold text-gray-500 uppercase mb-4">Pasarelas Activas</h2>
+              <div className="space-y-3">
+                {gateways.map((gw) => (
+                  <div key={gw.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-100">
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 bg-white rounded-lg border border-gray-200 flex items-center justify-center">
+                        <CreditCard className="w-5 h-5 text-gray-400" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-gray-900 capitalize">{gw.provider}</p>
+                        <p className="text-xs text-emerald-600 font-medium">Conectada y Activa</p>
+                      </div>
+                    </div>
+                    {/* Aquí se podría agregar botón de eliminar */}
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+        </div>
       )}
 
       {/* Tab: Cuenta */}

@@ -13,7 +13,9 @@ import {
   Shield,
   Percent,
   CreditCard,
-  Clock
+  Clock,
+  Zap,
+  DollarSign
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -21,15 +23,20 @@ interface SidebarProps {
   onClose: () => void
 }
 
-const linkClass = ({ isActive }: { isActive: boolean }) =>
-  `flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${isActive
-    ? 'bg-emerald-50 text-emerald-700'
-    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-  }`
-
 export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const { logout, isSuperadmin } = useAuth()
   const navigate = useNavigate()
+
+  const linkClass = ({ isActive }: { isActive: boolean }) => {
+    const activeColors = isSuperadmin
+      ? 'bg-indigo-50 text-indigo-700'
+      : 'bg-emerald-50 text-emerald-700'
+
+    return `flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${isActive
+      ? activeColors
+      : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+      }`
+  }
 
   const handleLogout = () => {
     logout()
@@ -49,7 +56,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         {/* Logo */}
         <div className="flex items-center justify-between h-16 px-4 border-b border-gray-200 shrink-0">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center">
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isSuperadmin ? 'bg-indigo-600' : 'bg-emerald-600'}`}>
               <Store className="w-5 h-5 text-white" />
             </div>
             <span className="font-bold text-gray-900">VENDExChat</span>
@@ -73,6 +80,10 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
               <NavLink to="/superadmin/tenants" className={linkClass} onClick={onClose}>
                 <Store className="w-5 h-5" />
                 Tiendas
+              </NavLink>
+              <NavLink to="/superadmin/liquidations" className={linkClass} onClick={onClose}>
+                <DollarSign className="w-5 h-5" />
+                Liquidaciones
               </NavLink>
               <NavLink to="/superadmin/users" className={linkClass} onClick={onClose}>
                 <Users className="w-5 h-5" />
@@ -126,6 +137,10 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                 <NavLink to="/horarios" className={linkClass} onClick={onClose}>
                   <Clock className="w-5 h-5" />
                   Horarios
+                </NavLink>
+                <NavLink to="/subscription" className={linkClass} onClick={onClose}>
+                  <Zap className="w-5 h-5" />
+                  Mi Plan
                 </NavLink>
                 <NavLink to="/payments" className={linkClass} onClick={onClose}>
                   <CreditCard className="w-5 h-5" />

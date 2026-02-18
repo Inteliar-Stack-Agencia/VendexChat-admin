@@ -1,4 +1,4 @@
-import { Navigate, useLocation } from 'react-router-dom'
+import { Navigate, useLocation, Link } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { LoadingSpinner } from '../common'
 
@@ -44,7 +44,21 @@ export function SuperadminRoute({ children }: { children: React.ReactNode }) {
   }
 
   if (user?.role !== 'superadmin') {
-    return <Navigate to="/dashboard" replace />
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-white p-6 text-center">
+        <div className="w-20 h-20 bg-rose-50 rounded-3xl flex items-center justify-center mb-6 border border-rose-100 animate-bounce">
+          <span className="text-4xl">🚫</span>
+        </div>
+        <h1 className="text-3xl font-black text-slate-900 mb-2 tracking-tight">Acceso Denegado (403)</h1>
+        <p className="text-slate-500 max-w-md leading-relaxed mb-8">
+          Lo sentimos, pero no tienes los permisos globales de <span className="font-bold text-slate-900">SaaS Owner</span> necesarios para acceder a esta consola.<br />
+          <span className="text-[10px] text-slate-300 mt-2 block uppercase font-black tracking-widest">Tu rol actual: {user?.role || 'null'}</span>
+        </p>
+        <Link to="/dashboard" className="bg-slate-900 text-white font-bold px-8 py-3 rounded-xl hover:bg-slate-800 transition-colors shadow-lg shadow-slate-200">
+          Volver a mi Dashboard de Tienda
+        </Link>
+      </div>
+    )
   }
 
   return <>{children}</>

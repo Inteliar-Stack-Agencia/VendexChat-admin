@@ -41,8 +41,8 @@ export default function SuperadminDashboard() {
 
         <Card>
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-              <ShoppingCart className="w-6 h-6 text-blue-600" />
+            <div className="w-12 h-12 bg-indigo-100 rounded-xl flex items-center justify-center">
+              <ShoppingCart className="w-6 h-6 text-indigo-600" />
             </div>
             <div>
               <p className="text-sm text-gray-500">Total pedidos</p>

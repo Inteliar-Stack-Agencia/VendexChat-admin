@@ -10,7 +10,8 @@ import {
     LogOut,
     X,
     PieChart,
-    Lock
+    Lock,
+    TrendingUp
 } from 'lucide-react'
 
 interface SASidebarProps {
@@ -20,7 +21,7 @@ interface SASidebarProps {
 
 const linkClass = ({ isActive }: { isActive: boolean }) =>
     `flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 ${isActive
-        ? 'bg-blue-600 text-white shadow-lg shadow-blue-200'
+        ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200'
         : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
     }`
 
@@ -45,12 +46,12 @@ export default function SASidebar({ isOpen, onClose }: SASidebarProps) {
             >
                 <div className="flex items-center justify-between h-20 px-6 border-b border-slate-100 shrink-0">
                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-100">
+                        <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-100">
                             <Shield className="w-6 h-6 text-white" />
                         </div>
                         <div>
                             <span className="block font-bold text-slate-900 leading-none">VENDEx</span>
-                            <span className="text-[10px] font-bold text-blue-600 uppercase tracking-widest">Superadmin</span>
+                            <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest">Superadmin</span>
                         </div>
                     </div>
                     <button onClick={onClose} className="lg:hidden p-2 rounded-lg hover:bg-slate-100">
@@ -74,6 +75,10 @@ export default function SASidebar({ isOpen, onClose }: SASidebarProps) {
                         <NavLink to="/sa/subscriptions" className={linkClass} onClick={onClose}>
                             <Users className="w-5 h-5" />
                             Suscripciones
+                        </NavLink>
+                        <NavLink to="/sa/liquidations" className={linkClass} onClick={onClose}>
+                            <TrendingUp className="w-5 h-5" />
+                            Liquidaciones
                         </NavLink>
                         <NavLink to="/sa/payments" className={linkClass} onClick={onClose}>
                             <CreditCard className="w-5 h-5" />

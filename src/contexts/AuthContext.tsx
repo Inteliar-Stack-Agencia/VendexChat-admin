@@ -1,7 +1,8 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react'
 import { User } from '../types'
-import { authApi } from '../services/api'
+import { authApi, billingApi } from '../services/api'
+import { Subscription } from '../types'
 
 interface AuthContextType {
   user: User | null
@@ -12,6 +13,8 @@ interface AuthContextType {
   logout: () => void
   isAuthenticated: boolean
   isSuperadmin: boolean
+  subscription: Subscription | null
+  refreshSubscription: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | null>(null)
@@ -23,6 +26,7 @@ const resolveAuthPayload = (response: unknown) => {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
+  const [subscription, setSubscription] = useState<Subscription | null>(null)
   const [token, setToken] = useState<string | null>(localStorage.getItem('vendexchat_token'))
   const [loading, setLoading] = useState(true)
 
@@ -75,7 +79,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem('vendexchat_token')
     setToken(null)
     setUser(null)
+    setSubscription(null)
   }, [])
+
+  const refreshSubscription = useCallback(async () => {
+    if (!user || user.role === 'superadmin') return
+    try {
+      const sub = await billingApi.getCurrentSubscription()
+      setSubscription(sub)
+    } catch (err) {
+      console.error('Error refreshing subscription:', err)
+    }
+  }, [user])
+
+  useEffect(() => {
+    if (user && user.role !== 'superadmin') {
+      refreshSubscription()
+    }
+  }, [user, refreshSubscription])
 
   return (
     <AuthContext.Provider
@@ -88,6 +109,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         logout,
         isAuthenticated: !!user,
         isSuperadmin: user?.role === 'superadmin',
+        subscription,
+        refreshSubscription,
       }}
     >
       {children}
