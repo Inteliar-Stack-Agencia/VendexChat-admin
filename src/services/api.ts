@@ -64,6 +64,27 @@ export const authApi = {
   },
 
   signOut: () => supabase.auth.signOut(),
+
+  requestPasswordReset: async (email: string) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    })
+    if (error) throw error
+    return { message: 'Se ha enviado un correo para restablecer tu contraseña' }
+  },
+
+  resetPassword: async (_token: string, password: string) => {
+    // Nota: El token lo maneja Supabase Auth automáticamente si el usuario llega vía link
+    const { error } = await supabase.auth.updateUser({ password })
+    if (error) throw error
+    return { message: 'Contraseña actualizada correctamente' }
+  },
+
+  changePassword: async (_currentPassword: string, newPassword: string) => {
+    const { error } = await supabase.auth.updateUser({ password: newPassword })
+    if (error) throw error
+    return { message: 'Contraseña cambiada correctamente' }
+  },
 }
 
 // --- Dashboard ---
@@ -213,4 +234,32 @@ export const tenantApi = {
     if (error) throw error
     return updated as Tenant
   },
+}
+
+// --- Superadmin ---
+export const superadminApi = {
+  dashboard: async (): Promise<any> => {
+    const { count: tenantsCount } = await supabase.from('stores').select('*', { count: 'exact', head: true })
+    const { count: ordersCount } = await supabase.from('orders').select('*', { count: 'exact', head: true })
+
+    return {
+      total_tenants: tenantsCount || 0,
+      total_orders: ordersCount || 0,
+      total_revenue: 0,
+      new_registrations_week: 0,
+      tenants: []
+    }
+  },
+
+  listTenants: async () => {
+    const { data, error } = await supabase.from('stores').select('*')
+    if (error) throw error
+    return data as Tenant[]
+  },
+
+  listUsers: async () => {
+    const { data, error } = await supabase.from('profiles').select('*')
+    if (error) throw error
+    return data as any[]
+  }
 }
