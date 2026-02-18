@@ -1,229 +1,191 @@
 // ========================================
-// VENDExChat Admin - Servicio API principal
+// VENDExChat Admin - Servicio Supabase
 // ========================================
 
-const API_URL = import.meta.env.VITE_API_URL || 'https://api.vendexchat.app'
-
-// Obtiene el token guardado en localStorage
-function getToken(): string | null {
-  return localStorage.getItem('vendexchat_token')
-}
-
-// Función principal para hacer peticiones al backend
-async function request<T>(
-  endpoint: string,
-  options: RequestInit = {}
-): Promise<T> {
-  const token = getToken()
-
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...(options.headers as Record<string, string>),
-  }
-
-  // Agregar token de autenticación si existe
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`
-  }
-
-  const response = await fetch(`${API_URL}${endpoint}`, {
-    ...options,
-    headers,
-  })
-
-  // Si el token es inválido, limpiar y redirigir a login
-  if (response.status === 401) {
-    localStorage.removeItem('vendexchat_token')
-    window.location.href = '/login'
-    throw new Error('Sesión expirada')
-  }
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Error de conexión' }))
-    throw new Error(error.message || `Error ${response.status}`)
-  }
-
-  // Si la respuesta es 204 (No Content), retornar vacío
-  if (response.status === 204) {
-    return {} as T
-  }
-
-  return response.json()
-}
+import { supabase } from '../supabaseClient'
+import type {
+  Product,
+  ProductFormData,
+  Category,
+  Order,
+  OrderStatus,
+  Tenant,
+  User
+} from '../types'
 
 // --- Auth ---
 export const authApi = {
-  login: (email: string, password: string) =>
-    request<{ token: string; user: import('../types').User }>('/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ email, password }),
-    }),
+  login: async (email: string, _password: string) => {
+    // Nota: El login ahora se maneja vía Supabase Auth
+    // Esta función es un placeholder para compatibilidad o login manual si fuera necesario
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password: _password })
+    if (error) throw error
+    return { token: data.session?.access_token || '', user: data.user as unknown as User }
+  },
 
-  register: (data: import('../types').RegisterRequest) =>
-    request<{ token: string; user: import('../types').User }>('/auth/register', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
+  register: async (data: any) => {
+    const { data: authData, error } = await supabase.auth.signUp({
+      email: data.email,
+      password: data.password,
+    })
+    if (error) throw error
+    return { token: authData.session?.access_token || '', user: authData.user as unknown as User }
+  },
 
-  me: () =>
-    request<{ user: import('../types').User }>('/auth/me'),
+  me: async () => {
+    const { data: { user }, error } = await supabase.auth.getUser()
+    if (error) throw error
+    return { user: user as unknown as User }
+  },
 
-  requestPasswordReset: (email: string) =>
-    request<{ message: string }>('/auth/request-password-reset', {
-      method: 'POST',
-      body: JSON.stringify({ email }),
-    }),
-
-  resetPassword: (token: string, password: string) =>
-    request<{ message: string }>('/auth/reset-password', {
-      method: 'POST',
-      body: JSON.stringify({ token, password }),
-    }),
-
-  changePassword: (currentPassword: string, newPassword: string) =>
-    request<{ message: string }>('/auth/change-password', {
-      method: 'PUT',
-      body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
-    }),
+  signOut: () => supabase.auth.signOut(),
 }
 
 // --- Dashboard ---
 export const dashboardApi = {
-  getStats: () =>
-    request<import('../types').DashboardStats>('/dashboard/stats'),
+  getStats: async (): Promise<any> => {
+    // Implementación básica de estadísticas vía Supabase
+    const { count: ordersCount } = await supabase.from('orders').select('*', { count: 'exact', head: true })
+    const { count: productsCount } = await supabase.from('products').select('*', { count: 'exact', head: true })
+
+    return {
+      orders_today: ordersCount || 0,
+      sales_today: 0,
+      active_products: productsCount || 0,
+      recent_orders: [],
+      low_stock_products: []
+    }
+  }
 }
 
 // --- Productos ---
 export const productsApi = {
-  list: (params?: { page?: number; limit?: number; search?: string; category_id?: number | string }) => {
-    const searchParams = new URLSearchParams()
-    if (params?.page) searchParams.set('page', String(params.page))
-    if (params?.limit) searchParams.set('limit', String(params.limit))
-    if (params?.search) searchParams.set('search', params.search)
-    if (params?.category_id) searchParams.set('category_id', String(params.category_id))
-    const query = searchParams.toString()
-    return request<import('../types').PaginatedResponse<import('../types').Product>>(
-      `/products${query ? `?${query}` : ''}`
-    )
+  list: async (params?: { page?: number; limit?: number; search?: string; category_id?: number | string }) => {
+    let query = supabase.from('products').select('*', { count: 'exact' })
+
+    if (params?.search) query = query.ilike('name', `%${params.search}%`)
+    if (params?.category_id) query = query.eq('category_id', params.category_id)
+
+    const from = ((params?.page || 1) - 1) * (params?.limit || 10)
+    const to = from + (params?.limit || 10) - 1
+
+    const { data, error, count } = await query.range(from, to).order('created_at', { ascending: false })
+    if (error) throw error
+
+    return {
+      data: data as Product[],
+      total: count || 0,
+      page: params?.page || 1,
+      limit: params?.limit || 10,
+      total_pages: Math.ceil((count || 0) / (params?.limit || 10))
+    }
   },
 
-  get: (id: number) =>
-    request<import('../types').Product>(`/products/${id}`),
+  get: async (id: string | number) => {
+    const { data, error } = await supabase.from('products').select('*').eq('id', id).single()
+    if (error) throw error
+    return data as Product
+  },
 
-  create: (data: import('../types').ProductFormData) =>
-    request<import('../types').Product>('/products', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
+  create: async (data: ProductFormData) => {
+    // Asegurar que usamos 'price' y no 'final_price'
+    const { data: newProd, error } = await supabase.from('products').insert({
+      ...data,
+      price: typeof data.price === 'string' ? parseFloat(data.price) : data.price,
+      stock: typeof data.stock === 'string' ? parseInt(data.stock) : data.stock
+    }).select().single()
+    if (error) throw error
+    return newProd as Product
+  },
 
-  update: (id: number, data: Partial<import('../types').ProductFormData>) =>
-    request<import('../types').Product>(`/products/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    }),
+  update: async (id: string | number, data: Partial<ProductFormData>) => {
+    const updateData: any = { ...data }
+    if (data.price) updateData.price = typeof data.price === 'string' ? parseFloat(data.price) : data.price
+    if (data.stock) updateData.stock = typeof data.stock === 'string' ? parseInt(data.stock) : data.stock
 
-  delete: (id: number) =>
-    request<void>(`/products/${id}`, { method: 'DELETE' }),
+    const { data: updatedProd, error } = await supabase.from('products').update(updateData).eq('id', id).select().single()
+    if (error) throw error
+    return updatedProd as Product
+  },
+
+  delete: async (id: string | number) => {
+    const { error } = await supabase.from('products').delete().eq('id', id)
+    if (error) throw error
+  },
 }
 
 // --- Categorías ---
 export const categoriesApi = {
-  list: () =>
-    request<import('../types').Category[]>('/categories'),
+  list: async () => {
+    const { data, error } = await supabase.from('categories').select('*').order('name')
+    if (error) throw error
+    return data as Category[]
+  },
 
-  get: (id: number) =>
-    request<import('../types').Category>(`/categories/${id}`),
+  create: async (data: { name: string; sort_order?: number }) => {
+    const { data: newCat, error } = await supabase.from('categories').insert(data).select().single()
+    if (error) throw error
+    return newCat as Category
+  },
 
-  create: (data: { name: string; sort_order?: number }) =>
-    request<import('../types').Category>('/categories', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
+  update: async (id: string | number, data: { name?: string; sort_order?: number }) => {
+    const { data: updatedCat, error } = await supabase.from('categories').update(data).eq('id', id).select().single()
+    if (error) throw error
+    return updatedCat as Category
+  },
 
-  update: (id: number, data: { name?: string; sort_order?: number }) =>
-    request<import('../types').Category>(`/categories/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    }),
-
-  delete: (id: number) =>
-    request<void>(`/categories/${id}`, { method: 'DELETE' }),
+  delete: async (id: string | number) => {
+    const { error } = await supabase.from('categories').delete().eq('id', id)
+    if (error) throw error
+  },
 }
 
 // --- Pedidos ---
 export const ordersApi = {
-  list: (params?: { status?: string; date_from?: string; date_to?: string; page?: number; limit?: number }) => {
-    const searchParams = new URLSearchParams()
-    if (params?.status && params.status !== 'all') searchParams.set('status', params.status)
-    if (params?.date_from) searchParams.set('date_from', params.date_from)
-    if (params?.date_to) searchParams.set('date_to', params.date_to)
-    if (params?.page) searchParams.set('page', String(params.page))
-    if (params?.limit) searchParams.set('limit', String(params.limit))
-    const query = searchParams.toString()
-    return request<import('../types').PaginatedResponse<import('../types').Order>>(
-      `/orders${query ? `?${query}` : ''}`
-    )
+  list: async (params?: { status?: string; page?: number; limit?: number }) => {
+    let query = supabase.from('orders').select('*', { count: 'exact' })
+    if (params?.status && params.status !== 'all') query = query.eq('status', params.status)
+
+    const from = ((params?.page || 1) - 1) * (params?.limit || 10)
+    const to = from + (params?.limit || 10) - 1
+
+    const { data, error, count } = await query.range(from, to).order('created_at', { ascending: false })
+    if (error) throw error
+
+    return {
+      data: data as Order[],
+      total: count || 0,
+      page: params?.page || 1,
+      limit: params?.limit || 10,
+      total_pages: Math.ceil((count || 0) / (params?.limit || 10))
+    }
   },
 
-  get: (id: number) =>
-    request<import('../types').Order>(`/orders/${id}`),
+  get: async (id: string | number) => {
+    const { data, error } = await supabase.from('orders').select('*, order_items(*)').eq('id', id).single()
+    if (error) throw error
+    return data as Order
+  },
 
-  updateStatus: (id: number, status: import('../types').OrderStatus) =>
-    request<import('../types').Order>(`/orders/${id}/status`, {
-      method: 'PUT',
-      body: JSON.stringify({ status }),
-    }),
+  updateStatus: async (id: string | number, status: OrderStatus) => {
+    const { data, error } = await supabase.from('orders').update({ status }).eq('id', id).select().single()
+    if (error) throw error
+    return data as Order
+  },
 }
 
 // --- Tenant (Configuración de la tienda) ---
 export const tenantApi = {
-  getMe: () =>
-    request<import('../types').Tenant>('/tenants/me'),
+  getMe: async () => {
+    // Como simplificación para esta etapa, usamos el slug 'morfi-demo'
+    const { data, error } = await supabase.from('stores').select('*').eq('slug', 'morfi-demo').single()
+    if (error) throw error
+    return data as Tenant
+  },
 
-  updateMe: (data: Partial<import('../types').Tenant>) =>
-    request<import('../types').Tenant>('/tenants/me', {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    }),
-}
-
-// --- Superadmin ---
-export const superadminApi = {
-  dashboard: () =>
-    request<import('../types').SuperadminDashboard>('/superadmin/dashboard'),
-
-  // Tenants
-  listTenants: () =>
-    request<import('../types').Tenant[]>('/superadmin/tenants'),
-
-  createTenant: (data: Partial<import('../types').Tenant> & { email: string; password: string }) =>
-    request<import('../types').Tenant>('/superadmin/tenants', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
-
-  updateTenant: (id: number, data: Partial<import('../types').Tenant>) =>
-    request<import('../types').Tenant>(`/superadmin/tenants/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    }),
-
-  deleteTenant: (id: number) =>
-    request<void>(`/superadmin/tenants/${id}`, { method: 'DELETE' }),
-
-  // Users
-  listUsers: () =>
-    request<import('../types').SuperadminUser[]>('/superadmin/users'),
-
-  createUser: (data: { email: string; name: string; password: string; role: string; tenant_id?: number }) =>
-    request<import('../types').SuperadminUser>('/superadmin/users', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
-
-  updateUser: (id: number, data: Partial<import('../types').SuperadminUser> & { password?: string }) =>
-    request<import('../types').SuperadminUser>(`/superadmin/users/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    }),
+  updateMe: async (data: Partial<Tenant>) => {
+    const { data: updated, error } = await supabase.from('stores').update(data).eq('slug', 'morfi-demo').select().single()
+    if (error) throw error
+    return updated as Tenant
+  },
 }
