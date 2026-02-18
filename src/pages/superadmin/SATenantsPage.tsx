@@ -12,7 +12,7 @@ export default function SATenantsPage() {
     const [loading, setLoading] = useState(true)
     const [showModal, setShowModal] = useState(false)
     const [saving, setSaving] = useState(false)
-    const [newTenant, setNewTenant] = useState({ name: '', slug: '', email: '' })
+    const [newTenant, setNewTenant] = useState({ name: '', slug: '', email: '', country: 'Argentina' })
 
     const loadTenants = () => {
         setLoading(true)
@@ -40,10 +40,11 @@ export default function SATenantsPage() {
                 name: newTenant.name,
                 slug: newTenant.slug.toLowerCase().replace(/\s+/g, '-'),
                 email: newTenant.email,
+                country: newTenant.country,
                 is_active: true
             })
             setShowModal(false)
-            setNewTenant({ name: '', slug: '', email: '' })
+            setNewTenant({ name: '', slug: '', email: '', country: 'Argentina' })
             loadTenants()
         } catch (err) {
             console.error('Error creating tenant:', err)
@@ -207,18 +208,33 @@ export default function SATenantsPage() {
                                 </div>
                             </div>
                             <div>
-                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Email del Propietario (Opcional)</label>
-                                <input
-                                    type="email"
-                                    className="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 font-medium text-slate-900 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
-                                    placeholder="pepe@email.com"
-                                    value={newTenant.email}
-                                    onChange={(e) => setNewTenant(t => ({ ...t, email: e.target.value }))}
-                                />
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">País</label>
+                                <select
+                                    className="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
+                                    value={newTenant.country}
+                                    onChange={(e) => setNewTenant(t => ({ ...t, country: e.target.value }))}
+                                >
+                                    <option value="Argentina">🇦🇷 Argentina</option>
+                                    <option value="Chile">🇨🇱 Chile</option>
+                                    <option value="Uruguay">🇺🇾 Uruguay</option>
+                                    <option value="México">🇲🇽 México</option>
+                                    <option value="Colombia">🇨🇴 Colombia</option>
+                                    <option value="España">🇪🇸 España</option>
+                                    <option value="Otros">Otro / Internacional</option>
+                                </select>
+                            </div>
+                            <div className="bg-amber-50 p-4 rounded-xl border border-amber-100 flex gap-3">
+                                <div className="w-8 h-8 rounded-lg bg-amber-500 flex items-center justify-center shrink-0">
+                                    <RefreshCw className="w-5 h-5 text-white animate-spin-slow" />
+                                </div>
+                                <p className="text-[10px] text-amber-700 font-medium leading-relaxed">
+                                    <strong className="block uppercase tracking-widest mb-0.5">Flujo de Acceso:</strong>
+                                    Al dar de alta la tienda, se enviará automáticamente un <strong>email de invitación</strong> al dueño para que cree su contraseña e ingrese al sistema.
+                                </p>
                             </div>
                             <button
                                 onClick={handleCreate}
-                                disabled={saving || !newTenant.name || !newTenant.slug}
+                                disabled={saving || !newTenant.name || !newTenant.slug || !newTenant.email}
                                 className="w-full bg-indigo-600 text-white font-bold py-4 rounded-2xl hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-100 flex items-center justify-center gap-2 group disabled:opacity-50"
                             >
                                 {saving ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />}
