@@ -31,7 +31,8 @@ export const authApi = {
       options: {
         data: {
           name: data.store_name,
-          slug: data.slug, // Incluimos slug para creación automática
+          slug: data.slug,
+          whatsapp: '', // Nuevo: Para evitar el error de not-null en la tabla stores
           role: 'client'
         }
       }
