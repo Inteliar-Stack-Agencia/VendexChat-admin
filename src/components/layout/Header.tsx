@@ -11,6 +11,7 @@ const STOREFRONT_URL = import.meta.env.VITE_STOREFRONT_URL || 'https://vendexcha
 
 export default function Header({ onMenuClick, storeName, storeSlug }: HeaderProps) {
   const { user, isSuperadmin } = useAuth()
+  const isImpersonating = !!localStorage.getItem('vendexchat_impersonated_store')
 
   return (
     <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-4 lg:px-6">
@@ -29,7 +30,7 @@ export default function Header({ onMenuClick, storeName, storeSlug }: HeaderProp
             href={`${STOREFRONT_URL}/${storeSlug}`}
             target="_blank"
             rel="noopener noreferrer"
-            className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg transition-colors ${isSuperadmin
+            className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg transition-colors ${(isSuperadmin && !isImpersonating)
               ? 'text-indigo-700 bg-indigo-50 hover:bg-indigo-100'
               : 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100'
               }`}
@@ -39,7 +40,7 @@ export default function Header({ onMenuClick, storeName, storeSlug }: HeaderProp
           </a>
         )}
         <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gray-50">
-          <div className={`w-7 h-7 rounded-full flex items-center justify-center ${isSuperadmin ? 'bg-indigo-600' : 'bg-emerald-600'}`}>
+          <div className={`w-7 h-7 rounded-full flex items-center justify-center ${(isSuperadmin && !isImpersonating) ? 'bg-indigo-600' : 'bg-emerald-600'}`}>
             <User className="w-4 h-4 text-white" />
           </div>
           <span className="hidden sm:block text-sm text-gray-700 max-w-32 truncate">
