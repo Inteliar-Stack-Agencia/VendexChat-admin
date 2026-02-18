@@ -44,7 +44,7 @@ export default function Header({ onMenuClick, storeName, storeSlug }: HeaderProp
             <User className="w-4 h-4 text-white" />
           </div>
           <span className="hidden sm:block text-sm text-gray-700 max-w-32 truncate">
-            {user?.name || user?.email}
+            {isImpersonating ? (storeName || 'Merchant Mode') : (user?.name || user?.email)}
           </span>
         </div>
       </div>
