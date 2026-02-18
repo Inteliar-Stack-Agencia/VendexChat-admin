@@ -24,6 +24,19 @@ export const getStoreId = async (): Promise<string> => {
     throw new Error('No hay sesión activa')
   }
 
+  // 1. Soporte para Suplantación (Impersonation) para Superadmins
+  const impersonatedId = localStorage.getItem('vendexchat_impersonated_store')
+  if (impersonatedId) {
+    // Verificar si el usuario realmente es superadmin por seguridad
+    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+    if (profile?.role === 'superadmin') {
+      console.log('getStoreId: Usando tienda suplantada:', impersonatedId)
+      return impersonatedId
+    } else {
+      localStorage.removeItem('vendexchat_impersonated_store')
+    }
+  }
+
   // 1. Intentar por perfil
   const { data: profile } = await supabase.from('profiles').select('store_id').eq('id', user.id).single()
 
@@ -703,7 +716,17 @@ export const superadminApi = {
     }))
   },
 
-  dashboard: async () => superadminApi.overview()
+  dashboard: async () => superadminApi.overview(),
+
+  impersonate: async (storeId: string) => {
+    localStorage.setItem('vendexchat_impersonated_store', storeId)
+    window.location.href = '/dashboard'
+  },
+
+  stopImpersonation: async () => {
+    localStorage.removeItem('vendexchat_impersonated_store')
+    window.location.href = '/sa/overview'
+  }
 }
 
 // --- Facturación ---

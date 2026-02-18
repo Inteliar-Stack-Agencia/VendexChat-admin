@@ -19,6 +19,7 @@ import {
 } from 'lucide-react'
 import { superadminApi } from '../../services/api'
 import { Tenant } from '../../types'
+import { showToast } from '../../components/common/Toast'
 
 export default function SATenantDetailPage() {
     const { id } = useParams()
@@ -32,6 +33,28 @@ export default function SATenantDetailPage() {
                 .finally(() => setLoading(false))
         }
     }, [id])
+
+    const handleToggleStatus = async () => {
+        if (!tenant || !id) return
+        try {
+            const newStatus = !tenant.is_active
+            await superadminApi.updateTenant(id, { is_active: newStatus })
+            setTenant({ ...tenant, is_active: newStatus })
+            showToast('success', `Tienda ${newStatus ? 'activada' : 'suspendida'} con éxito.`)
+        } catch (err) {
+            showToast('error', 'Error al cambiar el estado de la tienda.')
+        }
+    }
+
+    const handleImpersonate = async () => {
+        if (!tenant) return
+        try {
+            showToast('success', `Iniciando sesión como ${tenant.name}...`)
+            await superadminApi.impersonate(tenant.id)
+        } catch (err) {
+            showToast('error', 'Error al intentar suplantar la identidad.')
+        }
+    }
 
     if (loading) {
         return <div className="p-20 text-center font-bold text-slate-400 animate-pulse uppercase tracking-widest text-xs">Cargando ficha técnica del tenant...</div>
@@ -139,10 +162,16 @@ export default function SATenantDetailPage() {
                     {/* Quick Actions */}
                     <div className="bg-white rounded-[2rem] p-8 border border-slate-100 shadow-sm space-y-4">
                         <h3 className="font-bold text-slate-900 mb-4">Acciones Críticas</h3>
-                        <button className="w-full bg-slate-100 text-slate-900 font-bold py-3 rounded-xl hover:bg-slate-200 transition-colors">
+                        <button
+                            onClick={handleImpersonate}
+                            className="w-full bg-slate-100 text-slate-900 font-bold py-3 rounded-xl hover:bg-slate-200 transition-colors"
+                        >
                             Iniciar Sesión como Merchant
                         </button>
-                        <button className={`w-full border font-bold py-3 rounded-xl transition-colors ${tenant.is_active ? 'border-rose-200 text-rose-600 hover:bg-rose-50' : 'border-emerald-200 text-emerald-600 hover:bg-emerald-50'}`}>
+                        <button
+                            onClick={handleToggleStatus}
+                            className={`w-full border font-bold py-3 rounded-xl transition-colors ${tenant.is_active ? 'border-rose-200 text-rose-600 hover:bg-rose-50' : 'border-emerald-200 text-emerald-600 hover:bg-emerald-50'}`}
+                        >
                             {tenant.is_active ? 'Suspender Tienda' : 'Activar Tienda'}
                         </button>
                     </div>
