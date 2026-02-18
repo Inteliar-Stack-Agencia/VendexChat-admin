@@ -198,22 +198,37 @@ export const productsApi = {
 export const categoriesApi = {
   list: async () => {
     const { data: { user } } = await supabase.auth.getUser()
-    const { data: profile } = await supabase.from('profiles').select('store_id').eq('id', user?.id).single()
+    if (!user) throw new Error('No hay sesión de usuario activa')
 
-    const { data, error } = await supabase.from('categories').select('*').eq('store_id', profile?.store_id).order('name')
+    const { data: profile, error: profileError } = await supabase.from('profiles').select('store_id').eq('id', user.id).single()
+    if (profileError || !profile?.store_id) throw new Error('No se encontró el ID de la tienda del usuario')
+
+    const { data, error } = await supabase
+      .from('categories')
+      .select('*')
+      .eq('store_id', profile.store_id)
+      .order('name')
+
     if (error) throw error
     return data as Category[]
   },
 
   create: async (data: { name: string; sort_order?: number }) => {
     const { data: { user } } = await supabase.auth.getUser()
-    const { data: profile } = await supabase.from('profiles').select('store_id').eq('id', user?.id).single()
+    if (!user) throw new Error('No hay sesión activa')
+
+    const { data: profile, error: profileError } = await supabase.from('profiles').select('store_id').eq('id', user.id).single()
+    if (profileError || !profile?.store_id) throw new Error('Error al identificar la tienda (store_id ausente)')
 
     const { data: newCat, error } = await supabase.from('categories').insert({
       ...data,
-      store_id: profile?.store_id
+      store_id: profile.store_id
     }).select().single()
-    if (error) throw error
+
+    if (error) {
+      console.error('Supabase error creating category:', error)
+      throw new Error(`Error BD: ${error.message}`)
+    }
     return newCat as Category
   },
 

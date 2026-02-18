@@ -66,7 +66,8 @@ export default function CategoriesPage() {
       setModalOpen(false)
       loadCategories()
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Error al guardar'
+      console.error('Category handleSave error:', err)
+      const msg = err instanceof Error ? err.message : 'Error al guardar la categoría'
       showToast('error', msg)
     } finally {
       setSaving(false)
