@@ -39,6 +39,10 @@ export default function SASettingsPage() {
             setShowModal(false)
             setNewGateway({ provider: 'stripe', public_key: '', secret_key: '' })
             superadminApi.listGateways(true).then(setGateways)
+            alert('Pasarela conectada con éxito.')
+        } catch (err: any) {
+            console.error('Error connecting gateway:', err)
+            alert('Error al conectar la pasarela: ' + (err.message || 'Error desconocido'))
         } finally {
             setSaving(false)
         }
