@@ -345,15 +345,15 @@ export const tenantApi = {
 // --- Superadmin ---
 export const superadminApi = {
   dashboard: async (): Promise<any> => {
-    const { count: tenantsCount } = await supabase.from('stores').select('*', { count: 'exact', head: true })
+    const { count: storesCount } = await supabase.from('stores').select('*', { count: 'exact', head: true })
     const { count: ordersCount } = await supabase.from('orders').select('*', { count: 'exact', head: true })
 
     return {
-      total_tenants: tenantsCount || 0,
+      total_stores: storesCount || 0,
       total_orders: ordersCount || 0,
       total_revenue: 0,
       new_registrations_week: 0,
-      tenants: []
+      stores: []
     }
   },
 
@@ -393,7 +393,7 @@ export const superadminApi = {
     if (error) throw error
     return (data || []).map(u => ({
       ...u,
-      tenant_name: (u as any).stores?.name
+      store_name: (u as any).stores?.name
     })) as any[]
   },
 
@@ -402,7 +402,7 @@ export const superadminApi = {
     const { data: newUser, error } = await supabase.from('profiles').insert({
       name: data.name,
       role: data.role,
-      store_id: data.tenant_id
+      store_id: data.store_id
     }).select().single()
     if (error) throw error
     return newUser
@@ -412,7 +412,7 @@ export const superadminApi = {
     const { data: updated, error } = await supabase.from('profiles').update({
       name: data.name,
       role: data.role,
-      store_id: data.tenant_id
+      store_id: data.store_id
     }).eq('id', id).select().single()
     if (error) throw error
     return updated

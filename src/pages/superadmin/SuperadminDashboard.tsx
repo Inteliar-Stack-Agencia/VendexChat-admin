@@ -34,7 +34,7 @@ export default function SuperadminDashboard() {
             </div>
             <div>
               <p className="text-sm text-gray-500">Tiendas activas</p>
-              <p className="text-2xl font-bold text-gray-900">{data?.total_tenants ?? 0}</p>
+              <p className="text-2xl font-bold text-gray-900">{data?.total_stores ?? 0}</p>
             </div>
           </div>
         </Card>
@@ -93,7 +93,7 @@ export default function SuperadminDashboard() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {data?.tenants?.map((tenant) => (
+              {data?.stores?.map((tenant) => (
                 <tr key={tenant.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3 font-medium text-gray-900">{tenant.name}</td>
                   <td className="px-4 py-3 text-gray-600 hidden sm:table-cell">{tenant.slug}</td>

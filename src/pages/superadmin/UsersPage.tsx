@@ -19,7 +19,7 @@ export default function UsersPage() {
   const [formName, setFormName] = useState('')
   const [formPassword, setFormPassword] = useState('')
   const [formRole, setFormRole] = useState('client')
-  const [formTenantId, setFormTenantId] = useState('')
+  const [formStoreId, setFormStoreId] = useState('')
 
   const loadData = async () => {
     try {
@@ -46,7 +46,7 @@ export default function UsersPage() {
     setFormName('')
     setFormPassword('')
     setFormRole('client')
-    setFormTenantId('')
+    setFormStoreId('')
     setModalOpen(true)
   }
 
@@ -56,7 +56,7 @@ export default function UsersPage() {
     setFormName(user.name)
     setFormPassword('')
     setFormRole(user.role)
-    setFormTenantId(user.tenant_id ? String(user.tenant_id) : '')
+    setFormStoreId(user.store_id ? String(user.store_id) : '')
     setModalOpen(true)
   }
 
@@ -74,7 +74,7 @@ export default function UsersPage() {
           email: formEmail,
           name: formName,
           role: formRole,
-          tenant_id: formTenantId ? Number(formTenantId) : null,
+          store_id: formStoreId ? Number(formStoreId) : null,
         }
         if (formPassword) updateData.password = formPassword
         await superadminApi.updateUser(editing.id, updateData as Parameters<typeof superadminApi.updateUser>[1])
@@ -90,7 +90,7 @@ export default function UsersPage() {
           name: formName,
           password: formPassword,
           role: formRole,
-          tenant_id: formTenantId ? Number(formTenantId) : undefined,
+          store_id: formStoreId ? Number(formStoreId) : undefined,
         })
         showToast('success', 'Usuario creado')
       }
@@ -141,7 +141,7 @@ export default function UsersPage() {
                   <tr key={user.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 text-gray-900">{user.email}</td>
                     <td className="px-4 py-3 text-gray-600 hidden sm:table-cell">{user.name}</td>
-                    <td className="px-4 py-3 text-gray-600 hidden md:table-cell">{user.tenant_name || '-'}</td>
+                    <td className="px-4 py-3 text-gray-600 hidden md:table-cell">{user.store_name || '-'}</td>
                     <td className="px-4 py-3">
                       <Badge
                         color={user.role === 'superadmin' ? 'text-purple-800' : 'text-blue-800'}
@@ -189,8 +189,8 @@ export default function UsersPage() {
           {formRole === 'client' && (
             <Select
               label="Tienda asociada"
-              value={formTenantId}
-              onChange={(e) => setFormTenantId(e.target.value)}
+              value={formStoreId}
+              onChange={(e) => setFormStoreId(e.target.value)}
               placeholder="Seleccionar tienda"
               options={tenants.map((t) => ({ value: t.id, label: t.name }))}
             />

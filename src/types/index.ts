@@ -137,11 +137,11 @@ export interface DashboardStats {
 
 // --- Superadmin ---
 export interface SuperadminDashboard {
-  total_tenants: number
+  total_stores: number
   total_orders: number
   total_revenue: number
   new_registrations_week: number
-  tenants: Tenant[]
+  stores: Tenant[]
 }
 
 export interface SuperadminUser {

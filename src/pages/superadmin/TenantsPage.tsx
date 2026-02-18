@@ -9,7 +9,7 @@ import { formatShortDate, generateSlug } from '../../utils/helpers'
 const STOREFRONT_URL = import.meta.env.VITE_STOREFRONT_URL || 'https://vendexchat.app'
 
 export default function TenantsPage() {
-  const [tenants, setTenants] = useState<Tenant[]>([])
+  const [stores, setStores] = useState<Tenant[]>([])
   const [loading, setLoading] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<Tenant | null>(null)
@@ -25,10 +25,10 @@ export default function TenantsPage() {
   const [formWhatsapp, setFormWhatsapp] = useState('')
   const [formActive, setFormActive] = useState(true)
 
-  const loadTenants = async () => {
+  const loadStores = async () => {
     try {
       const data = await superadminApi.listTenants()
-      setTenants(Array.isArray(data) ? data : [])
+      setStores(Array.isArray(data) ? data : [])
     } catch (err) {
       console.error('Error cargando tiendas:', err)
     } finally {
@@ -37,7 +37,7 @@ export default function TenantsPage() {
   }
 
   useEffect(() => {
-    loadTenants()
+    loadStores()
   }, [])
 
   const openCreate = () => {
@@ -95,7 +95,7 @@ export default function TenantsPage() {
         showToast('success', 'Tienda creada')
       }
       setModalOpen(false)
-      loadTenants()
+      loadStores()
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Error al guardar'
       showToast('error', msg)
@@ -111,7 +111,7 @@ export default function TenantsPage() {
       await superadminApi.deleteTenant(deleteId)
       showToast('success', 'Tienda eliminada')
       setDeleteId(null)
-      loadTenants()
+      loadStores()
     } catch {
       showToast('error', 'Error al eliminar')
     } finally {
@@ -131,7 +131,7 @@ export default function TenantsPage() {
 
       {loading ? (
         <LoadingSpinner text="Cargando tiendas..." />
-      ) : tenants.length === 0 ? (
+      ) : stores.length === 0 ? (
         <EmptyState
           icon={<Store className="w-16 h-16" />}
           title="No hay tiendas"
@@ -153,7 +153,7 @@ export default function TenantsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {tenants.map((tenant) => (
+                {stores.map((tenant) => (
                   <tr key={tenant.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 font-medium text-gray-900">{tenant.name}</td>
                     <td className="px-4 py-3 text-gray-600 hidden sm:table-cell">{tenant.slug}</td>
