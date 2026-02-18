@@ -57,6 +57,11 @@ export default function SALiquidationsPage() {
     }, [])
 
     if (loading) return <LoadingSpinner text="Calculando ingresos globales..." />
+    if (!data) return (
+        <div className="p-20 text-center text-slate-400 font-bold">
+            Hubo un error al cargar los datos financieros. Por favor, reintenta más tarde.
+        </div>
+    )
 
     const stats = [
         { name: 'MRR Actual', value: `$${(data.totals.mrr_estimated || 0).toLocaleString()}`, icon: TrendingUp, color: 'text-indigo-600', bg: 'bg-indigo-50' },
