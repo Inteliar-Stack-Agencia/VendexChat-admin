@@ -7,13 +7,45 @@ export default function SAPermissionsPage() {
     const [loading, setLoading] = useState(true)
 
     useEffect(() => {
+        loadUsers()
+    }, [])
+
+    const loadUsers = () => {
         superadminApi.listUsers()
             .then(res => {
-                // Filtramos solo los superadmins para esta vista de gestión de staff
                 setUsers(res.filter((u: any) => u.role === 'superadmin'))
             })
             .finally(() => setLoading(false))
-    }, [])
+    }
+
+    const handleInvite = async () => {
+        const email = prompt('Introduce el email del usuario registrado que querés promover a Administrador:')
+        if (!email) return
+        try {
+            setLoading(true)
+            await superadminApi.inviteStaff(email)
+            alert('Usuario promovido a Administrador con éxito.')
+            loadUsers()
+        } catch (err: any) {
+            alert(err.message || 'Error al invitar admin.')
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    const handleDelete = async (id: string, name: string) => {
+        if (!confirm(`¿Estás seguro de eliminar el acceso administrativo a ${name}?`)) return
+        try {
+            setLoading(true)
+            await superadminApi.updateUser(id, { role: 'merchant' }) // Lo bajamos de rango
+            alert('Acceso revocado con éxito.')
+            loadUsers()
+        } catch (err) {
+            alert('Error al revocar acceso.')
+        } finally {
+            setLoading(false)
+        }
+    }
 
     return (
         <div className="space-y-8">
@@ -22,7 +54,10 @@ export default function SAPermissionsPage() {
                     <h2 className="text-3xl font-bold text-slate-900 tracking-tight">Staff Administrativo</h2>
                     <p className="text-slate-500 mt-1">Gestiona los usuarios con acceso total a la consola de control.</p>
                 </div>
-                <button className="bg-slate-900 text-white font-bold px-6 py-3 rounded-xl hover:bg-slate-800 transition-colors shadow-lg shadow-slate-200 flex items-center gap-2">
+                <button
+                    onClick={handleInvite}
+                    className="bg-slate-900 text-white font-bold px-6 py-3 rounded-xl hover:bg-slate-800 transition-colors shadow-lg shadow-slate-200 flex items-center gap-2"
+                >
                     <UserPlus className="w-5 h-5" /> Invitar Admin
                 </button>
             </header>
@@ -57,7 +92,10 @@ export default function SAPermissionsPage() {
                                 </div>
                             </div>
                             <div className="flex items-center gap-2">
-                                <button className="p-2 rounded-lg text-slate-300 hover:text-rose-600 hover:bg-rose-50 transition-all">
+                                <button
+                                    onClick={() => handleDelete(user.id, user.full_name || user.email)}
+                                    className="p-2 rounded-lg text-slate-300 hover:text-rose-600 hover:bg-rose-50 transition-all"
+                                >
                                     <Trash2 className="w-5 h-5" />
                                 </button>
                                 <button className="p-2 rounded-lg text-slate-300 hover:text-slate-600 transition-all">

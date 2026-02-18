@@ -665,10 +665,42 @@ export const superadminApi = {
     }
   },
 
+  getGlobalSettings: async () => {
+    const { data, error } = await supabase.from('global_settings').select('*')
+    if (error) throw error
+    // Convert array of key-value pairs to object
+    return (data || []).reduce((acc: any, curr: any) => {
+      acc[curr.key] = curr.value
+      return acc
+    }, {})
+  },
+
   updateGlobalSettings: async (settings: any) => {
-    // Simulamos la persistencia de settings globales (ej. en una tabla 'config' o metadatos)
-    console.log('Updating global settings:', settings)
+    const updates = Object.entries(settings).map(([key, value]) => ({
+      key,
+      value,
+      updated_at: new Date().toISOString()
+    }))
+
+    const { error } = await supabase.from('global_settings').upsert(updates)
+    if (error) throw error
     return { success: true }
+  },
+
+  inviteStaff: async (email: string) => {
+    // Nota: En un entorno real esto usaría supabase.auth.admin.inviteUserByEmail
+    // Aquí simulamos la creación de un perfil con rol superadmin directamente
+    // (A fines de demo/desarrollo rápido si el usuario ya existe)
+    console.log('Inviting staff:', email)
+    const { data, error } = await supabase
+      .from('profiles')
+      .update({ role: 'superadmin' })
+      .eq('email', email)
+      .select()
+      .single()
+
+    if (error) throw new Error('El usuario debe estar registrado primero para ser promovido a superadmin.')
+    return data
   },
 
   connectGateway: async (provider: string, config: any, isMaster: boolean = false) => {

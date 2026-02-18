@@ -16,6 +16,7 @@ export default function SASettingsPage() {
 
     useEffect(() => {
         superadminApi.listGateways(true).then(setGateways).catch(console.error)
+        superadminApi.getGlobalSettings().then(setSettings).catch(console.error)
     }, [])
 
     const handleSave = async () => {
