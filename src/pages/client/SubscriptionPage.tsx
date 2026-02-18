@@ -14,15 +14,16 @@ import { billingApi } from '../../services/api'
 import { Subscription, SubscriptionPlan } from '../../types'
 import { useAuth } from '../../contexts/AuthContext'
 
+import MPPaymentBrick from '../../components/billing/MPPaymentBrick'
+
 export default function SubscriptionPage() {
     const { refreshSubscription } = useAuth()
     const [plans, setPlans] = useState<SubscriptionPlan[]>([])
     const [currentSub, setCurrentSub] = useState<Subscription | null>(null)
     const [loading, setLoading] = useState(true)
-    const [actionLoading, setActionLoading] = useState<string | null>(null)
     const [showCheckoutModal, setShowCheckoutModal] = useState(false)
     const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(null)
-    const [simulatingPayment, setSimulatingPayment] = useState(false)
+    const [isProcessing, setIsProcessing] = useState(false)
 
     useEffect(() => {
         const loadData = async () => {
@@ -51,25 +52,20 @@ export default function SubscriptionPage() {
         setShowCheckoutModal(true)
     }
 
-    const handleConfirmSimulatedPayment = async () => {
-        if (!selectedPlan) return
-        setSimulatingPayment(true)
-
+    const handlePaymentSuccess = async (paymentId: string) => {
+        console.log('Payment Success ID:', paymentId)
+        setIsProcessing(true)
         try {
-            await billingApi.createCheckoutSession(selectedPlan.id)
-            // Simulamos que el webhook ya procesó el pago
-            showToast('success', `¡Pago de ${selectedPlan.name} procesado correctamente!`)
-
-            // Refrescamos datos locales
+            // Refrescamos datos locales tras el pago exitoso confirmado por el Brick
             await refreshSubscription()
             const subData = await billingApi.getCurrentSubscription()
             setCurrentSub(subData)
-
             setShowCheckoutModal(false)
+            showToast('success', '¡Suscripción activada con éxito!')
         } catch (err) {
-            showToast('error', 'Error al procesar el pago simulado')
+            showToast('error', 'Pago recibido, pero hubo un error al actualizar tu perfil. Contacta a soporte.')
         } finally {
-            setSimulatingPayment(false)
+            setIsProcessing(false)
         }
     }
 
@@ -77,6 +73,7 @@ export default function SubscriptionPage() {
 
     return (
         <div className="space-y-8 max-w-6xl mx-auto">
+            {/* ... (Header y Banner omitidos por brevedad, se mantienen igual) ... */}
             <header>
                 <h2 className="text-3xl font-bold text-slate-900 tracking-tight text-center sm:text-left">Planes y Facturación</h2>
                 <p className="text-slate-500 mt-1 text-center sm:text-left">Escala tu negocio con herramientas avanzadas y soporte dedicado.</p>
@@ -159,8 +156,8 @@ export default function SubscriptionPage() {
 
                             <Button
                                 onClick={() => handleSubscribe(plan.id)}
-                                disabled={isCurrent || !!actionLoading}
-                                loading={actionLoading === plan.id}
+                                disabled={isCurrent || isProcessing}
+                                loading={isProcessing && selectedPlan?.id === plan.id}
                                 className={`w-full py-4 rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-2 group transition-all ${isCurrent
                                     ? 'bg-slate-100 text-slate-400 cursor-not-allowed border-0'
                                     : isPopular
@@ -176,7 +173,7 @@ export default function SubscriptionPage() {
                 })}
             </div>
 
-            {/* billing history placeholder */}
+            {/* billing history */}
             <div className="mt-12 bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden">
                 <div className="p-8 border-b border-slate-50 flex items-center justify-between">
                     <h3 className="font-bold text-lg text-slate-900 flex items-center gap-2">
@@ -220,56 +217,30 @@ export default function SubscriptionPage() {
                 </div>
             </div>
 
-            <div className="bg-amber-50 rounded-[2rem] p-8 flex items-start gap-4 border border-amber-100">
+            <div className="bg-amber-50 rounded-[2rem] p-8 flex items-start gap-4 border border-amber-100 mb-10">
                 <AlertCircle className="w-6 h-6 text-amber-600 shrink-0" />
                 <div>
-                    <h4 className="font-bold text-amber-900 uppercase text-xs tracking-widest mb-1">Nota sobre pagos automáticos</h4>
+                    <h4 className="font-bold text-amber-900 uppercase text-xs tracking-widest mb-1">Nota sobre pagos seguros</h4>
                     <p className="text-amber-800 text-sm leading-relaxed">
-                        Tus suscripciones se renovarán automáticamente cada mes. Puedes cancelar o cambiar de plan en cualquier momento desde esta pantalla sin cargos adicionales.
+                        Utilizamos Mercado Pago para procesar todos tus pagos de forma segura. Tus datos están protegidos y nunca almacenamos información sensible de tarjetas en nuestros servidores.
                     </p>
                 </div>
             </div>
 
-            {/* Checkout Simulation Modal */}
+            {/* Real Checkout Modal with Mercado Pago Brick */}
             <Modal
                 isOpen={showCheckoutModal}
                 onClose={() => setShowCheckoutModal(false)}
-                title="Simulador de Pago Seguro"
+                title="Pagar Suscripción VENDEx"
             >
-                <div className="space-y-6">
-                    <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100">
-                        <p className="text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Resumen de orden</p>
-                        <div className="flex justify-between items-center">
-                            <h4 className="font-bold text-slate-900">Suscripción VENDEx {selectedPlan?.name}</h4>
-                            <span className="text-xl font-black text-indigo-600">${selectedPlan?.price}</span>
-                        </div>
-                        <p className="text-xs text-slate-500 mt-1 italic">Cobro mensual recurrente</p>
-                    </div>
-
-                    <div className="space-y-4">
-                        <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-100 flex items-center gap-3">
-                            <Shield className="w-5 h-5 text-emerald-600" />
-                            <p className="text-sm text-emerald-800 font-medium">Entorno de pruebas activo. No se realizará ningún cargo real.</p>
-                        </div>
-
-                        <div className="pt-4 border-t border-slate-100">
-                            <Button
-                                className="w-full bg-slate-900 text-white font-black uppercase tracking-widest py-4 rounded-2xl hover:bg-slate-800 flex items-center justify-center gap-2"
-                                onClick={handleConfirmSimulatedPayment}
-                                loading={simulatingPayment}
-                            >
-                                <CreditCard className="w-5 h-5" />
-                                Confirmar y Pagar
-                            </Button>
-                            <button
-                                onClick={() => setShowCheckoutModal(false)}
-                                className="w-full mt-4 text-slate-400 text-sm font-bold hover:text-slate-600"
-                            >
-                                Cancelar transacción
-                            </button>
-                        </div>
-                    </div>
-                </div>
+                {selectedPlan && (
+                    <MPPaymentBrick
+                        plan={selectedPlan}
+                        storeId={useAuth().user?.store_id || ''}
+                        onSuccess={handlePaymentSuccess}
+                        onCancel={() => setShowCheckoutModal(false)}
+                    />
+                )}
             </Modal>
         </div>
     )
