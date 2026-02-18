@@ -2,7 +2,7 @@ import { ButtonHTMLAttributes, ReactNode } from 'react'
 import { Loader2 } from 'lucide-react'
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'danger' | 'ghost'
+  variant?: 'primary' | 'secondary' | 'danger' | 'ghost' | 'outline'
   size?: 'sm' | 'md' | 'lg'
   loading?: boolean
   children: ReactNode
@@ -13,6 +13,7 @@ const variantClasses = {
   secondary: 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 focus:ring-slate-300 shadow-sm',
   danger: 'bg-red-600 text-white hover:bg-red-700 focus:ring-red-500 shadow-sm',
   ghost: 'bg-transparent text-slate-600 hover:bg-slate-50 focus:ring-slate-300',
+  outline: 'bg-transparent border border-slate-200 text-slate-600 hover:bg-slate-50 focus:ring-slate-300'
 }
 
 const sizeClasses = {

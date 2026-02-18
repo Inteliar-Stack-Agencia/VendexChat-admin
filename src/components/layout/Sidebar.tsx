@@ -123,7 +123,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                   <Settings className="w-5 h-5" />
                   Tienda
                 </NavLink>
-                <NavLink to="/schedule" className={linkClass} onClick={onClose}>
+                <NavLink to="/horarios" className={linkClass} onClick={onClose}>
                   <Clock className="w-5 h-5" />
                   Horarios
                 </NavLink>

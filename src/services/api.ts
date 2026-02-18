@@ -19,22 +19,38 @@ import type {
  */
 export const getStoreId = async (): Promise<number> => {
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('No hay sesión activa')
+  if (!user) {
+    console.error('getStoreId: No hay sesión activa')
+    throw new Error('No hay sesión activa')
+  }
 
   // 1. Intentar por perfil
   const { data: profile } = await supabase.from('profiles').select('store_id').eq('id', user.id).single()
 
-  if (profile?.store_id) return profile.store_id
+  if (profile?.store_id) {
+    return profile.store_id
+  }
+
+  console.warn('getStoreId: Store ID no encontrado en perfil, intentando auto-reparación...')
 
   // 2. Auto-reparación: Si no tiene store_id, buscar por slug en metadatos
   const metaSlug = user.user_metadata?.slug
   if (metaSlug) {
     const { data: store } = await supabase.from('stores').select('id').eq('slug', metaSlug).single()
     if (store) {
+      console.log('getStoreId: Tienda encontrada por slug, vinculando perfil...', store.id)
       // Vincular permanentemente para futuras llamadas
-      await supabase.from('profiles').update({ store_id: store.id }).eq('id', user.id)
+      const { error: updateError } = await supabase.from('profiles').update({ store_id: store.id }).eq('id', user.id)
+      if (updateError) {
+        console.error('getStoreId: Error al actualizar perfil con store_id:', updateError)
+        // Aun así devolvemos el ID para que la petición actual funcione si es posible
+      }
       return store.id
+    } else {
+      console.error('getStoreId: No se encontró tienda con slug:', metaSlug)
     }
+  } else {
+    console.warn('getStoreId: Usuario no tiene slug en metadata')
   }
 
   throw new Error('Error al identificar la tienda (store_id ausente)')
@@ -188,7 +204,12 @@ export const productsApi = {
       stock: Number(data.stock),
       category_id: data.category_id ? Number(data.category_id) : null
     }).select('*, categories(name)').single()
-    if (error) throw error
+
+    if (error) {
+      console.error('Error al crear producto en Supabase:', error)
+      throw new Error(`Error BD: ${error.message} (${error.code})`)
+    }
+
     return {
       ...newProd,
       category_name: (newProd as any).categories?.name

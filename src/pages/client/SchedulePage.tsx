@@ -101,6 +101,8 @@ export default function SchedulePage() {
             <div className="space-y-4">
                 {DAYS.map((day) => {
                     const config = schedule[day.id] || { open: false, intervals: [] }
+                    const intervals = config.intervals || []
+
                     return (
                         <Card key={day.id}>
                             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -121,39 +123,48 @@ export default function SchedulePage() {
 
                                 <div className="flex-1 space-y-2">
                                     {config.open ? (
-                                        config.intervals.map((interval, idx) => (
-                                            <div key={idx} className="flex items-center gap-2">
-                                                <input
-                                                    type="time"
-                                                    value={interval.start}
-                                                    onChange={(e) => handleIntervalChange(day.id, idx, 'start', e.target.value)}
-                                                    className="px-2 py-1 border border-gray-300 rounded text-sm focus:ring-emerald-500"
-                                                />
-                                                <span className="text-gray-400">—</span>
-                                                <input
-                                                    type="time"
-                                                    value={interval.end}
-                                                    onChange={(e) => handleIntervalChange(day.id, idx, 'end', e.target.value)}
-                                                    className="px-2 py-1 border border-gray-300 rounded text-sm focus:ring-emerald-500"
-                                                />
-                                                {config.intervals.length > 1 && (
-                                                    <button
-                                                        onClick={() => removeInterval(day.id, idx)}
-                                                        className="p-1 text-red-500 hover:bg-red-50 rounded"
-                                                    >
-                                                        <Trash2 className="w-4 h-4" />
-                                                    </button>
-                                                )}
-                                                {idx === config.intervals.length - 1 && config.intervals.length < 2 && (
-                                                    <button
-                                                        onClick={() => addInterval(day.id)}
-                                                        className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"
-                                                    >
-                                                        <Plus className="w-4 h-4" />
-                                                    </button>
-                                                )}
-                                            </div>
-                                        ))
+                                        intervals.length > 0 ? (
+                                            intervals.map((interval, idx) => (
+                                                <div key={idx} className="flex items-center gap-2">
+                                                    <input
+                                                        type="time"
+                                                        value={interval.start}
+                                                        onChange={(e) => handleIntervalChange(day.id, idx, 'start', e.target.value)}
+                                                        className="px-2 py-1 border border-gray-300 rounded text-sm focus:ring-emerald-500"
+                                                    />
+                                                    <span className="text-gray-400">—</span>
+                                                    <input
+                                                        type="time"
+                                                        value={interval.end}
+                                                        onChange={(e) => handleIntervalChange(day.id, idx, 'end', e.target.value)}
+                                                        className="px-2 py-1 border border-gray-300 rounded text-sm focus:ring-emerald-500"
+                                                    />
+                                                    {intervals.length > 1 && (
+                                                        <button
+                                                            onClick={() => removeInterval(day.id, idx)}
+                                                            className="p-1 text-red-500 hover:bg-red-50 rounded"
+                                                        >
+                                                            <Trash2 className="w-4 h-4" />
+                                                        </button>
+                                                    )}
+                                                    {idx === intervals.length - 1 && intervals.length < 2 && (
+                                                        <button
+                                                            onClick={() => addInterval(day.id)}
+                                                            className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"
+                                                        >
+                                                            <Plus className="w-4 h-4" />
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            ))
+                                        ) : (
+                                            <button
+                                                onClick={() => addInterval(day.id)}
+                                                className="text-sm text-emerald-600 hover:underline flex items-center gap-1"
+                                            >
+                                                <Plus className="w-4 h-4" /> Agregar horario
+                                            </button>
+                                        )
                                     ) : (
                                         <span className="text-sm text-gray-400 italic">Cerrado</span>
                                     )}

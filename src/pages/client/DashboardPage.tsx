@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { ShoppingCart, Package, DollarSign, Plus, Clock, AlertTriangle, ChevronRight, ClipboardList } from 'lucide-react'
+import { ShoppingCart, Package, DollarSign, Plus, Clock, AlertTriangle, ChevronRight, ClipboardList, ExternalLink } from 'lucide-react'
 import { Card, LoadingSpinner, Badge, Button } from '../../components/common'
 import { dashboardApi, tenantApi } from '../../services/api'
 import { DashboardStats, Tenant } from '../../types'
@@ -24,6 +24,8 @@ export default function DashboardPage() {
       .finally(() => setLoading(false))
   }, [])
 
+  const storefrontUrl = `${import.meta.env.VITE_STOREFRONT_URL}/${tenant?.slug}`
+
   if (loading) return <LoadingSpinner text="Cargando dashboard..." />
 
   return (
@@ -34,12 +36,20 @@ export default function DashboardPage() {
           <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Dashboard</h1>
           <p className="text-slate-500 mt-1 font-medium">Resumen de tu tienda hoy</p>
         </div>
-        <Link to="/products/new">
-          <Button variant="primary" className="shadow-lg shadow-green-200">
-            <Plus className="w-5 h-5" />
-            Nuevo Producto
-          </Button>
-        </Link>
+        <div className="flex items-center gap-3">
+          <a href={storefrontUrl} target="_blank" rel="noopener noreferrer">
+            <Button variant="outline" className="bg-white">
+              <ExternalLink className="w-5 h-5 text-slate-400" />
+              Ver tienda
+            </Button>
+          </a>
+          <Link to="/products/new">
+            <Button variant="primary" className="shadow-lg shadow-green-200">
+              <Plus className="w-5 h-5" />
+              Nuevo Producto
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {/* KPI Cards */}
