@@ -23,13 +23,28 @@ export const authApi = {
     return { token: data.session?.access_token || '', user: data.user as unknown as User }
   },
 
-  register: async (data: any) => {
-    const { data: authData, error } = await supabase.auth.signUp({
+  register: async (data: { store_name: string; email: string; password: string; slug: string }) => {
+    // 1. Crear usuario en Auth
+    const { data: authData, error: authError } = await supabase.auth.signUp({
       email: data.email,
       password: data.password,
     })
-    if (error) throw error
-    return { token: authData.session?.access_token || '', user: authData.user as unknown as User }
+    if (authError) throw authError
+    if (!authData.user) throw new Error('No se pudo crear el usuario')
+
+    // 2. Crear tienda vinculada (si es necesario por el esquema)
+    // Nota: Por ahora creamos la entrada en 'stores'
+    const { error: storeError } = await supabase.from('stores').insert({
+      name: data.store_name,
+      slug: data.slug,
+      // Vincularíamos el user_id aquí si la tabla lo requiere
+    })
+    if (storeError) throw storeError
+
+    return {
+      token: authData.session?.access_token || '',
+      user: authData.user as unknown as User
+    }
   },
 
   me: async () => {
