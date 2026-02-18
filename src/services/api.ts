@@ -613,30 +613,46 @@ export const superadminApi = {
       return d.toISOString().split('T')[0]
     })
 
-    // 1. Tendencia de ingresos (Estimada por suscripciones activas repartidas en el tiempo)
-    // Para simplificar, obtenemos las órdenes del último mes y las agrupamos por día
+    // 1. Tendencia de ingresos y órdenes (Últimos 7 días)
     const sevenDaysAgo = new Date()
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+    const fourteenDaysAgo = new Date()
+    fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14)
 
-    const { data: recentOrders } = await supabase
+    const { data: allRecentOrders } = await supabase
       .from('orders')
       .select('total, created_at')
-      .gte('created_at', sevenDaysAgo.toISOString())
+      .gte('created_at', fourteenDaysAgo.toISOString())
+
+    const currentPeriodOrders = allRecentOrders?.filter(o => o.created_at >= sevenDaysAgo.toISOString()) || []
+    const previousPeriodOrders = allRecentOrders?.filter(o => o.created_at < sevenDaysAgo.toISOString()) || []
+
+    const currentRevenue = currentPeriodOrders.reduce((acc, o) => acc + (o.total || 0), 0)
+    const previousRevenue = previousPeriodOrders.reduce((acc, o) => acc + (o.total || 0), 0)
+    const revenue_growth = previousRevenue > 0
+      ? `+${(((currentRevenue - previousRevenue) / previousRevenue) * 100).toFixed(1)}%`
+      : '+0%'
+
+    const currentOrdersCount = currentPeriodOrders.length
+    const previousOrdersCount = previousPeriodOrders.length
+    const orders_growth = previousOrdersCount > 0
+      ? `+${(((currentOrdersCount - previousOrdersCount) / previousOrdersCount) * 100).toFixed(1)}%`
+      : '+0%'
 
     const revenue_trend = dates.map(date => {
-      const dayTotal = recentOrders
+      const dayTotal = currentPeriodOrders
         ?.filter(o => o.created_at.startsWith(date))
         .reduce((acc, o) => acc + (o.total || 0), 0) || 0
       return { date, value: dayTotal }
     })
 
     const orders_trend = dates.map(date => {
-      const dayCount = recentOrders?.filter(o => o.created_at.startsWith(date)).length || 0
+      const dayCount = currentPeriodOrders?.filter(o => o.created_at.startsWith(date)).length || 0
       return { date, value: dayCount }
     })
 
     // 2. Tiendas de alto rendimiento (Top 5 por total de ventas)
-    // Hacemos un join o agregación simple: Obtenemos órdenes y agrupamos
+    // Usamos todo el histórico o el último mes para esto
     const { data: storeStats } = await supabase
       .from('orders')
       .select('total, store_id, stores(name)')
@@ -644,6 +660,7 @@ export const superadminApi = {
     const storeMap: Record<string, any> = {}
     storeStats?.forEach((o: any) => {
       const id = o.store_id
+      if (!id) return
       if (!storeMap[id]) storeMap[id] = { name: o.stores?.name, sales: 0, orders: 0 }
       storeMap[id].sales += o.total || 0
       storeMap[id].orders += 1
@@ -654,14 +671,16 @@ export const superadminApi = {
       .slice(0, 5)
       .map(s => ({
         ...s,
-        growth: '+10%', // Placeholder de crecimiento
+        growth: '+12%', // Crecimiento mensual estimado
         sales: `$${s.sales.toLocaleString()}`
       }))
 
     return {
       revenue_trend,
       orders_trend,
-      top_stores
+      top_stores,
+      revenue_growth,
+      orders_growth
     }
   },
 

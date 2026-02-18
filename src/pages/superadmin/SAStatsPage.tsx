@@ -34,7 +34,7 @@ export default function SAStatsPage() {
                             </div>
                             <h3 className="font-bold text-slate-900">Tendencia de Ingresos</h3>
                         </div>
-                        <span className="text-xs font-black text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full">+14.2%</span>
+                        <span className="text-xs font-black text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full">{stats?.revenue_growth}</span>
                     </div>
 
                     <div className="h-48 flex items-end gap-2 px-2">
@@ -63,7 +63,7 @@ export default function SAStatsPage() {
                             </div>
                             <h3 className="font-bold text-slate-900">Volumen de Órdenes</h3>
                         </div>
-                        <span className="text-xs font-black text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full">+8.5%</span>
+                        <span className="text-xs font-black text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full">{stats?.orders_growth}</span>
                     </div>
 
                     <div className="h-48 flex items-end gap-2 px-2">
