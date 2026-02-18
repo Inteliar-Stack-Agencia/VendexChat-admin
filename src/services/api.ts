@@ -24,22 +24,32 @@ export const authApi = {
   },
 
   register: async (data: { store_name: string; email: string; password: string; slug: string }) => {
-    // 1. Crear usuario en Auth
+    // 1. Crear usuario en Auth con metadatos para el trigger de profiles
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: data.email,
       password: data.password,
+      options: {
+        data: {
+          name: data.store_name,
+          role: 'client'
+        }
+      }
     })
+
     if (authError) throw authError
     if (!authData.user) throw new Error('No se pudo crear el usuario')
 
-    // 2. Crear tienda vinculada (si es necesario por el esquema)
-    // Nota: Por ahora creamos la entrada en 'stores'
+    // 2. Crear tienda vinculando el owner_id (Requerido por RLS)
     const { error: storeError } = await supabase.from('stores').insert({
       name: data.store_name,
       slug: data.slug,
-      // Vincularíamos el user_id aquí si la tabla lo requiere
+      owner_id: authData.user.id
     })
-    if (storeError) throw storeError
+
+    if (storeError) {
+      console.error('Error creating store:', storeError)
+      throw new Error('Usuario creado pero no se pudo registrar la tienda: ' + storeError.message)
+    }
 
     return {
       token: authData.session?.access_token || '',
