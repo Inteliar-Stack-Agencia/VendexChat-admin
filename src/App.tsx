@@ -20,6 +20,8 @@ import CategoriesPage from './pages/client/CategoriesPage'
 import OrdersPage from './pages/client/OrdersPage'
 import OrderDetailPage from './pages/client/OrderDetailPage'
 import CustomersPage from './pages/client/CustomersPage'
+import SchedulePage from './pages/client/SchedulePage'
+import PaymentsPage from './pages/client/PaymentsPage'
 import SettingsPage from './pages/client/SettingsPage'
 
 // Superadmin pages
@@ -55,6 +57,8 @@ export default function App() {
             <Route path="/orders" element={<OrdersPage />} />
             <Route path="/orders/:id" element={<OrderDetailPage />} />
             <Route path="/customers" element={<CustomersPage />} />
+            <Route path="/schedule" element={<SchedulePage />} />
+            <Route path="/payments" element={<PaymentsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Route>
 

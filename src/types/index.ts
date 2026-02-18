@@ -3,12 +3,13 @@
 // ========================================
 
 // --- Usuario y Autenticación ---
+// --- Usuario y Autenticación ---
 export interface User {
-  id: number
+  id: string // Supabase Auth uses UUID
   email: string
   name: string
   role: 'client' | 'superadmin'
-  tenant_id: number | null
+  store_id: number | null
   created_at: string
 }
 
@@ -47,15 +48,20 @@ export interface Tenant {
   footer_message: string | null
   min_order: number
   delivery_cost: number
-  schedule: Record<string, unknown> | null
+  schedule: Record<string, ScheduleDay> | null
   is_active: boolean
   created_at: string
+}
+
+export interface ScheduleDay {
+  open: boolean
+  intervals: { start: string; end: string }[]
 }
 
 // --- Producto ---
 export interface Product {
   id: number
-  tenant_id: number
+  store_id: number
   name: string
   description: string | null
   price: number
@@ -84,7 +90,7 @@ export interface ProductFormData {
 // --- Categoría ---
 export interface Category {
   id: number
-  tenant_id: number
+  store_id: number
   name: string
   sort_order: number
   product_count?: number
@@ -94,7 +100,7 @@ export interface Category {
 // --- Pedido ---
 export interface Order {
   id: number
-  tenant_id: number
+  store_id: number
   order_number: string
   customer_name: string
   customer_whatsapp: string
@@ -139,12 +145,12 @@ export interface SuperadminDashboard {
 }
 
 export interface SuperadminUser {
-  id: number
+  id: string
   email: string
   name: string
   role: string
-  tenant_id: number | null
-  tenant_name?: string
+  store_id: number | null
+  store_name?: string
   last_login: string | null
   is_active: boolean
   created_at: string
