@@ -31,6 +31,7 @@ export const authApi = {
       options: {
         data: {
           name: data.store_name,
+          slug: data.slug, // Incluimos slug para creación automática
           role: 'client'
         }
       }
@@ -39,17 +40,8 @@ export const authApi = {
     if (authError) throw authError
     if (!authData.user) throw new Error('No se pudo crear el usuario')
 
-    // 2. Crear tienda vinculando el owner_id (Requerido por RLS)
-    const { error: storeError } = await supabase.from('stores').insert({
-      name: data.store_name,
-      slug: data.slug,
-      owner_id: authData.user.id
-    })
-
-    if (storeError) {
-      console.error('Error creating store:', storeError)
-      throw new Error('Usuario creado pero no se pudo registrar la tienda: ' + storeError.message)
-    }
+    // 2. Nota: Ya no creamos la tienda desde aquí para evitar el error RLS (400).
+    // La tienda se creará automáticamente en Postgres mediante un trigger.
 
     return {
       token: authData.session?.access_token || '',
