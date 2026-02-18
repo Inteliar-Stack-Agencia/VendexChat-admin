@@ -16,7 +16,7 @@ export default function ProductsPage() {
   const [statusFilter, setStatusFilter] = useState('')
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
-  const [deleteId, setDeleteId] = useState<number | null>(null)
+  const [deleteId, setDeleteId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
 
   const loadProducts = useCallback(async () => {
@@ -180,7 +180,7 @@ export default function ProductsPage() {
                           <Pencil className="w-4 h-4" />
                         </Link>
                         <button
-                          onClick={() => setDeleteId(Number(product.id))}
+                          onClick={() => setDeleteId(product.id)}
                           className="p-1.5 rounded-lg hover:bg-red-50 text-gray-500 hover:text-red-600"
                         >
                           <Trash2 className="w-4 h-4" />

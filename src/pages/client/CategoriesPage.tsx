@@ -10,7 +10,7 @@ export default function CategoriesPage() {
   const [loading, setLoading] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
   const [editingCategory, setEditingCategory] = useState<Category | null>(null)
-  const [deleteId, setDeleteId] = useState<number | null>(null)
+  const [deleteId, setDeleteId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
 
   // Form fields
@@ -78,7 +78,7 @@ export default function CategoriesPage() {
     if (!deleteId) return
     setDeleting(true)
     try {
-      await categoriesApi.delete(deleteId)
+      await categoriesApi.deleteCategory(deleteId)
       showToast('success', 'Categoría eliminada')
       setDeleteId(null)
       loadCategories()

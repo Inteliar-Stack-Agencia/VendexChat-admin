@@ -18,7 +18,7 @@ export default function OrderDetailPage() {
   useEffect(() => {
     if (id) {
       ordersApi
-        .get(Number(id))
+        .get(id)
         .then((data) => {
           setOrder(data)
           setNewStatus(data.status)

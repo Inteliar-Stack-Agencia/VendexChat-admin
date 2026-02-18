@@ -39,7 +39,7 @@ export default function ProductFormPage() {
   useEffect(() => {
     if (isEditing && id) {
       productsApi
-        .get(Number(id))
+        .get(id)
         .then((product) => {
           setForm({
             name: product.name,
@@ -110,11 +110,11 @@ export default function ProductFormPage() {
         ...form,
         price: Number(form.price),
         stock: Number(form.stock),
-        category_id: Number(form.category_id),
+        category_id: form.category_id,
       }
 
       if (isEditing) {
-        await productsApi.update(Number(id), data)
+        await productsApi.update(id, data)
         showToast('success', 'Producto actualizado')
       } else {
         await productsApi.create(data)
