@@ -654,6 +654,19 @@ export const superadminApi = {
     return data
   },
 
+  listSubscriptions: async () => {
+    const { data, error } = await supabase
+      .from('subscriptions')
+      .select('*, stores(name)')
+      .order('updated_at', { ascending: false })
+
+    if (error) throw error
+    return (data || []).map(s => ({
+      ...s,
+      store_name: (s as any).stores?.name
+    }))
+  },
+
   dashboard: async () => superadminApi.overview()
 }
 
