@@ -266,6 +266,37 @@ export const ordersApi = {
   },
 }
 
+// --- Clientes ---
+export const customersApi = {
+  list: async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    const { data: profile } = await supabase.from('profiles').select('store_id').eq('id', user?.id).single()
+
+    // Obtenemos los datos de la tabla orders para derivar los clientes
+    const { data, error } = await supabase
+      .from('orders')
+      .select('customer_name, customer_whatsapp, customer_address')
+      .eq('store_id', profile?.store_id)
+      .order('created_at', { ascending: false })
+
+    if (error) throw error
+
+    // Eliminar duplicados por whatsapp
+    const uniqueCustomers = new Map()
+    data?.forEach(order => {
+      if (!uniqueCustomers.has(order.customer_whatsapp)) {
+        uniqueCustomers.set(order.customer_whatsapp, {
+          name: order.customer_name,
+          whatsapp: order.customer_whatsapp,
+          address: order.customer_address
+        })
+      }
+    })
+
+    return Array.from(uniqueCustomers.values())
+  }
+}
+
 // --- Tenant (Configuración de la tienda) ---
 export const tenantApi = {
   getMe: async () => {

@@ -1,162 +1,121 @@
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
-import { ShoppingCart, Package, DollarSign, Plus, Clock, AlertTriangle } from 'lucide-react'
-import { Card, LoadingSpinner, Badge } from '../../components/common'
-import { dashboardApi } from '../../services/api'
-import { DashboardStats } from '../../types'
+import {
+  ShoppingCart, Package, FolderOpen,
+  Store, Clock, HelpCircle,
+  DollarSign, Settings, Bell,
+  QrCode, CreditCard, Star,
+  Percent, Image, History,
+  LayoutGrid
+} from 'lucide-react'
+import { Card, LoadingSpinner, Badge, ModuleCard } from '../../components/common'
+import { dashboardApi, tenantApi } from '../../services/api'
+import { DashboardStats, Tenant } from '../../types'
 import { formatPrice, formatDate, orderStatusConfig } from '../../utils/helpers'
 
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null)
+  const [tenant, setTenant] = useState<Tenant | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    dashboardApi
-      .getStats()
-      .then(setStats)
+    Promise.all([
+      dashboardApi.getStats(),
+      tenantApi.getMe()
+    ])
+      .then(([statsData, tenantData]) => {
+        setStats(statsData)
+        setTenant(tenantData)
+      })
       .catch(console.error)
       .finally(() => setLoading(false))
   }, [])
 
-  if (loading) return <LoadingSpinner text="Cargando dashboard..." />
+  if (loading) return <LoadingSpinner text="Cargando panel de control..." />
+
+  const modules = [
+    { title: 'Ayuda', icon: HelpCircle, href: '#', color: 'bg-green-500' },
+    { title: 'Mi Tienda', icon: Store, href: '/settings', color: 'bg-blue-500' },
+    { title: 'Categorías', icon: FolderOpen, href: '/categories', color: 'bg-blue-600' },
+    { title: 'Sliders', icon: Image, href: '#', color: 'bg-blue-500' },
+    { title: 'Cambiar Precios', icon: DollarSign, href: '/products', color: 'bg-blue-600' },
+    { title: 'Información', icon: Settings, href: '/settings', color: 'bg-blue-500' },
+    { title: 'Horarios', icon: Clock, href: '#', color: 'bg-blue-600' },
+    { title: 'Métodos de Cobro', icon: CreditCard, href: '#', color: 'bg-blue-500' },
+    { title: 'Estadísticas', icon: DollarSign, href: '#', color: 'bg-blue-600' },
+    { title: 'Envío / Retiro', icon: ShoppingCart, href: '#', color: 'bg-blue-500' },
+    { title: 'Menú QR', icon: QrCode, href: '#', color: 'bg-blue-600' },
+    { title: 'Campos Personalizados', icon: Bell, href: '#', color: 'bg-blue-500' },
+    { title: 'Adicionales', icon: PlusIcon, href: '#', color: 'bg-blue-600' },
+    { title: 'Opcionales', icon: Star, href: '#', color: 'bg-blue-500' },
+    { title: 'Mercado Pago', icon: CreditCard, href: '#', color: 'bg-blue-600' },
+    { title: 'Mensajes Emergentes', icon: Bell, href: '#', color: 'bg-blue-500' },
+    { title: 'Cupones de Descuento', icon: Percent, href: '#', color: 'bg-blue-600' },
+    { title: 'Destacados', icon: Star, href: '#', color: 'bg-blue-500' },
+    { title: 'Variantes', icon: LayoutGrid, href: '#', color: 'bg-blue-600' },
+    { title: 'Control Stock', icon: Package, href: '/products', color: 'bg-blue-500' },
+  ]
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-        <Link
-          to="/products/new"
-          className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          Agregar producto
-        </Link>
+    <div className="space-y-8">
+      <div className="flex flex-col sm:flex-row items-baseline justify-between gap-2 border-b border-gray-200 pb-4">
+        <h1 className="text-2xl font-bold text-gray-900">Modulos</h1>
+        <div className="flex items-center gap-2 text-sm text-gray-500">
+          <Store className="w-4 h-4" />
+          <span>{tenant?.name}</span>
+        </div>
       </div>
 
-      {/* Cards de resumen */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card>
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-              <ShoppingCart className="w-6 h-6 text-blue-600" />
-            </div>
-            <div>
-              <p className="text-sm text-gray-500">Pedidos hoy</p>
-              <p className="text-2xl font-bold text-gray-900">{stats?.orders_today ?? 0}</p>
-            </div>
-          </div>
-        </Card>
-
-        <Card>
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
-              <DollarSign className="w-6 h-6 text-green-600" />
-            </div>
-            <div>
-              <p className="text-sm text-gray-500">Ventas hoy</p>
-              <p className="text-2xl font-bold text-gray-900">{formatPrice(stats?.sales_today ?? 0)}</p>
-            </div>
-          </div>
-        </Card>
-
-        <Card>
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
-              <Package className="w-6 h-6 text-purple-600" />
-            </div>
-            <div>
-              <p className="text-sm text-gray-500">Productos activos</p>
-              <p className="text-2xl font-bold text-gray-900">{stats?.active_products ?? 0}</p>
-            </div>
-          </div>
-        </Card>
+      {/* Grid de Modulos */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        {modules.map((mod, idx) => (
+          <ModuleCard
+            key={idx}
+            title={mod.title}
+            icon={mod.icon}
+            href={mod.href}
+            color={mod.color}
+          />
+        ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Últimos pedidos */}
-        <Card padding={false}>
-          <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-            <h2 className="font-semibold text-gray-900 flex items-center gap-2">
-              <Clock className="w-5 h-5 text-gray-400" />
-              Últimos pedidos
-            </h2>
-            <Link to="/orders" className="text-sm text-emerald-600 hover:text-emerald-700">
-              Ver todos
-            </Link>
+      {/* Información de Perfil / Estado */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-6 italic">
+        <div>
+          <h4 className="text-gray-500 mb-1">Perfil:</h4>
+          <p className="text-gray-900 not-italic font-medium">{tenant?.name}</p>
+        </div>
+        <div>
+          <h4 className="text-gray-500 mb-1">Estado de Mi Tienda:</h4>
+          <div className="w-full bg-gray-200 rounded-full h-2.5 mt-2">
+            <div className="bg-green-600 h-2.5 rounded-full" style={{ width: '100%' }}></div>
           </div>
-          <div className="divide-y divide-gray-100">
-            {stats?.recent_orders && stats.recent_orders.length > 0 ? (
-              stats.recent_orders.slice(0, 5).map((order) => {
-                const statusConf = orderStatusConfig[order.status]
-                return (
-                  <Link
-                    key={order.id}
-                    to={`/orders/${order.id}`}
-                    className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors"
-                  >
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">{order.customer_name}</p>
-                      <p className="text-xs text-gray-500">{formatDate(order.created_at)}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-semibold text-gray-900">{formatPrice(order.total)}</p>
-                      <Badge color={statusConf?.color} bg={statusConf?.bg}>
-                        {statusConf?.label || order.status}
-                      </Badge>
-                    </div>
-                  </Link>
-                )
-              })
-            ) : (
-              <div className="px-4 py-8 text-center text-sm text-gray-500">
-                No hay pedidos recientes
-              </div>
-            )}
-          </div>
-        </Card>
-
-        {/* Productos sin stock */}
-        <Card padding={false}>
-          <div className="p-4 border-b border-gray-200">
-            <h2 className="font-semibold text-gray-900 flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-yellow-500" />
-              Productos sin stock / inactivos
-            </h2>
-          </div>
-          <div className="divide-y divide-gray-100">
-            {stats?.low_stock_products && stats.low_stock_products.length > 0 ? (
-              stats.low_stock_products.map((product) => (
-                <Link
-                  key={product.id}
-                  to={`/products/edit/${product.id}`}
-                  className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    {product.image_url ? (
-                      <img src={product.image_url} alt="" className="w-10 h-10 rounded-lg object-cover" />
-                    ) : (
-                      <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
-                        <Package className="w-5 h-5 text-gray-400" />
-                      </div>
-                    )}
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">{product.name}</p>
-                      <p className="text-xs text-gray-500">Stock: {product.stock}</p>
-                    </div>
-                  </div>
-                  <Badge color="text-yellow-800" bg="bg-yellow-100">
-                    {product.is_active ? 'Sin stock' : 'Inactivo'}
-                  </Badge>
-                </Link>
-              ))
-            ) : (
-              <div className="px-4 py-8 text-center text-sm text-gray-500">
-                Todos tus productos están en orden
-              </div>
-            )}
-          </div>
-        </Card>
+          <p className="text-xs text-center mt-1 text-green-600 font-bold">100%</p>
+        </div>
+        <div>
+          <h4 className="text-gray-500 mb-1">Notificaciones:</h4>
+          <p className="text-gray-400">Sin notificaciones pendientes</p>
+        </div>
       </div>
     </div>
+  )
+}
+
+function PlusIcon(props: any) {
+  return (
+    <svg
+      {...props}
+      xmlns="http://www.w3.org/2000/svg"
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M5 12h14" />
+      <path d="M12 5v14" />
+    </svg>
   )
 }
