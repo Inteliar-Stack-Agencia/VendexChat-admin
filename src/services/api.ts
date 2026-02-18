@@ -147,15 +147,54 @@ export const dashboardApi = {
 
     if (!storeId) return { orders_today: 0, sales_today: 0, active_products: 0, recent_orders: [], low_stock_products: [] }
 
-    const { count: ordersCount } = await supabase.from('orders').select('*', { count: 'exact', head: true }).eq('store_id', storeId)
-    const { count: productsCount } = await supabase.from('products').select('*', { count: 'exact', head: true }).eq('store_id', storeId)
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    // 1. Pedidos de hoy
+    const { count: ordersCount } = await supabase
+      .from('orders')
+      .select('*', { count: 'exact', head: true })
+      .eq('store_id', storeId)
+      .gte('created_at', today.toISOString())
+
+    // 2. Ventas hoy (Suma de totales)
+    const { data: salesData } = await supabase
+      .from('orders')
+      .select('total')
+      .eq('store_id', storeId)
+      .eq('status', 'completed') // Solo sumamos las entregadas/pagadas
+      .gte('created_at', today.toISOString())
+
+    const salesToday = salesData?.reduce((acc, curr) => acc + (curr.total || 0), 0) || 0
+
+    // 3. Productos activos totales
+    const { count: productsCount } = await supabase
+      .from('products')
+      .select('*', { count: 'exact', head: true })
+      .eq('store_id', storeId)
+
+    // 4. Últimos 5 pedidos (con detalles)
+    const { data: recentOrders } = await supabase
+      .from('orders')
+      .select('*')
+      .eq('store_id', storeId)
+      .order('created_at', { ascending: false })
+      .limit(5)
+
+    // 5. Alertas de stock bajo (< 5 unidades)
+    const { data: lowStock } = await supabase
+      .from('products')
+      .select('*')
+      .eq('store_id', storeId)
+      .lt('stock', 5)
+      .order('stock', { ascending: true })
 
     return {
       orders_today: ordersCount || 0,
-      sales_today: 0,
+      sales_today: salesToday,
       active_products: productsCount || 0,
-      recent_orders: [],
-      low_stock_products: []
+      recent_orders: recentOrders || [],
+      low_stock_products: lowStock || []
     }
   }
 }
@@ -318,28 +357,35 @@ export const customersApi = {
   list: async () => {
     const storeId = await getStoreId()
 
-    // Obtenemos los datos de la tabla orders para derivar los clientes
     const { data, error } = await supabase
-      .from('orders')
-      .select('customer_name, customer_whatsapp, customer_address')
+      .from('customers')
+      .select('*')
       .eq('store_id', storeId)
-      .order('created_at', { ascending: false })
+      .order('last_order_at', { ascending: false })
 
     if (error) throw error
+    return data || []
+  },
 
-    // Eliminar duplicados por whatsapp
-    const uniqueCustomers = new Map()
-    data?.forEach(order => {
-      if (!uniqueCustomers.has(order.customer_whatsapp)) {
-        uniqueCustomers.set(order.customer_whatsapp, {
-          name: order.customer_name,
-          whatsapp: order.customer_whatsapp,
-          address: order.customer_address
-        })
-      }
-    })
+  get: async (id: string) => {
+    const { data, error } = await supabase
+      .from('customers')
+      .select('*')
+      .eq('id', id)
+      .single()
+    if (error) throw error
+    return data
+  },
 
-    return Array.from(uniqueCustomers.values())
+  updateNotes: async (id: string, notes: string) => {
+    const { data, error } = await supabase
+      .from('customers')
+      .update({ notes })
+      .eq('id', id)
+      .select()
+      .single()
+    if (error) throw error
+    return data
   }
 }
 
