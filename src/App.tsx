@@ -34,6 +34,12 @@ import UsersPage from './pages/superadmin/UsersPage'
 import SuperadminLayout from './components/layout/SuperadminLayout'
 import SAOverviewPage from './pages/superadmin/SAOverviewPage'
 import SATenantsPage from './pages/superadmin/SATenantsPage'
+import SATenantDetailPage from './pages/superadmin/SATenantDetailPage'
+import SAPaymentsPage from './pages/superadmin/SAPaymentsPage'
+import SASubscriptionsPage from './pages/superadmin/SASubscriptionsPage'
+import SAPermissionsPage from './pages/superadmin/SAPermissionsPage'
+import SAStatsPage from './pages/superadmin/SAStatsPage'
+import SASettingsPage from './pages/superadmin/SASettingsPage'
 
 export default function App() {
   return (
@@ -79,11 +85,12 @@ export default function App() {
           >
             <Route path="/sa/overview" element={<SAOverviewPage />} />
             <Route path="/sa/tenants" element={<SATenantsPage />} />
-            <Route path="/sa/subscriptions" element={<div className="p-10 font-bold">Módulo de Suscripciones (Próximamente)</div>} />
-            <Route path="/sa/payments" element={<div className="p-10 font-bold">Módulo de Pagos (Próximamente)</div>} />
-            <Route path="/sa/permissions" element={<div className="p-10 font-bold">Gestión de Roles (Próximamente)</div>} />
-            <Route path="/sa/stats" element={<div className="p-10 font-bold">KPIs & Stats (Próximamente)</div>} />
-            <Route path="/sa/settings" element={<div className="p-10 font-bold">Configuración Global (Próximamente)</div>} />
+            <Route path="/sa/tenants/:id" element={<SATenantDetailPage />} />
+            <Route path="/sa/subscriptions" element={<SASubscriptionsPage />} />
+            <Route path="/sa/payments" element={<SAPaymentsPage />} />
+            <Route path="/sa/permissions" element={<SAPermissionsPage />} />
+            <Route path="/sa/stats" element={<SAStatsPage />} />
+            <Route path="/sa/settings" element={<SASettingsPage />} />
 
             {/* Alias para el dashboard de entrada */}
             <Route path="/sa" element={<Navigate to="/sa/overview" replace />} />
