@@ -252,14 +252,68 @@ export const superadminApi = {
   },
 
   listTenants: async () => {
-    const { data, error } = await supabase.from('stores').select('*')
+    const { data, error } = await supabase.from('stores').select('*').order('created_at', { ascending: false })
     if (error) throw error
     return data as Tenant[]
   },
 
-  listUsers: async () => {
-    const { data, error } = await supabase.from('profiles').select('*')
+  createTenant: async (data: any) => {
+    // Nota: Crear un tenant implica crear un usuario y una tienda.
+    // Para compilar, implementamos la parte de la tienda.
+    const { data: newTenant, error } = await supabase.from('stores').insert({
+      name: data.name,
+      slug: data.slug,
+      whatsapp: data.whatsapp,
+      is_active: data.is_active,
+      // El email/password requerirían lógica de Admin Auth (Edge Function preferiblemente)
+    }).select().single()
     if (error) throw error
-    return data as any[]
+    return newTenant as Tenant
+  },
+
+  updateTenant: async (id: string | number, data: Partial<Tenant>) => {
+    const { data: updated, error } = await supabase.from('stores').update(data).eq('id', id).select().single()
+    if (error) throw error
+    return updated as Tenant
+  },
+
+  deleteTenant: async (id: string | number) => {
+    const { error } = await supabase.from('stores').delete().eq('id', id)
+    if (error) throw error
+  },
+
+  listUsers: async () => {
+    const { data, error } = await supabase.from('profiles').select('*, stores(name)')
+    if (error) throw error
+    return (data || []).map(u => ({
+      ...u,
+      tenant_name: (u as any).stores?.name
+    })) as any[]
+  },
+
+  createUser: async (data: any) => {
+    // Requiere lógica de Admin Auth
+    const { data: newUser, error } = await supabase.from('profiles').insert({
+      name: data.name,
+      role: data.role,
+      store_id: data.tenant_id
+    }).select().single()
+    if (error) throw error
+    return newUser
+  },
+
+  updateUser: async (id: string | number, data: any) => {
+    const { data: updated, error } = await supabase.from('profiles').update({
+      name: data.name,
+      role: data.role,
+      store_id: data.tenant_id
+    }).eq('id', id).select().single()
+    if (error) throw error
+    return updated
+  },
+
+  deleteUser: async (id: string | number) => {
+    const { error } = await supabase.from('profiles').delete().eq('id', id)
+    if (error) throw error
   }
 }
