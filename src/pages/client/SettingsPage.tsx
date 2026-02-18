@@ -65,6 +65,11 @@ export default function SettingsPage() {
   const handleSaveGeneral = async (e: FormEvent) => {
     e.preventDefault()
     setSaving(true)
+    if (!tenant?.id) {
+      showToast('error', 'No se encontró el ID de la tienda')
+      setSaving(false)
+      return
+    }
     try {
       await tenantApi.updateMe({ name, description, logo_url: logoUrl })
       showToast('success', 'Información actualizada')
@@ -167,11 +172,10 @@ export default function SettingsPage() {
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`px-4 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
-              activeTab === tab.id
+            className={`px-4 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${activeTab === tab.id
                 ? 'border-emerald-600 text-emerald-600'
                 : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
+              }`}
           >
             {tab.label}
           </button>

@@ -128,7 +128,7 @@ export const productsApi = {
     const { data: profile } = await supabase.from('profiles').select('store_id').eq('id', user?.id).single()
     const storeId = profile?.store_id
 
-    let query = supabase.from('products').select('*', { count: 'exact' }).eq('store_id', storeId)
+    let query = supabase.from('products').select('*, categories(name)', { count: 'exact' }).eq('store_id', storeId)
 
     if (params?.search) query = query.ilike('name', `%${params.search}%`)
     if (params?.category_id) query = query.eq('category_id', params.category_id)
@@ -140,7 +140,10 @@ export const productsApi = {
     if (error) throw error
 
     return {
-      data: data as Product[],
+      data: (data || []).map(p => ({
+        ...p,
+        category_name: (p as any).categories?.name
+      })) as Product[],
       total: count || 0,
       page: params?.page || 1,
       limit: params?.limit || 10,
@@ -161,11 +164,15 @@ export const productsApi = {
     const { data: newProd, error } = await supabase.from('products').insert({
       ...data,
       store_id: profile?.store_id,
-      price: typeof data.price === 'string' ? parseFloat(data.price) : data.price,
-      stock: typeof data.stock === 'string' ? parseInt(data.stock) : data.stock
-    }).select().single()
+      price: Number(data.price),
+      stock: Number(data.stock),
+      category_id: data.category_id ? Number(data.category_id) : null
+    }).select('*, categories(name)').single()
     if (error) throw error
-    return newProd as Product
+    return {
+      ...newProd,
+      category_name: (newProd as any).categories?.name
+    } as Product
   },
 
   update: async (id: string | number, data: Partial<ProductFormData>) => {
@@ -173,9 +180,12 @@ export const productsApi = {
     if (data.price) updateData.price = typeof data.price === 'string' ? parseFloat(data.price) : data.price
     if (data.stock) updateData.stock = typeof data.stock === 'string' ? parseInt(data.stock) : data.stock
 
-    const { data: updatedProd, error } = await supabase.from('products').update(updateData).eq('id', id).select().single()
+    const { data: updatedProd, error } = await supabase.from('products').update(updateData).eq('id', id).select('*, categories(name)').single()
     if (error) throw error
-    return updatedProd as Product
+    return {
+      ...updatedProd,
+      category_name: (updatedProd as any).categories?.name
+    } as Product
   },
 
   delete: async (id: string | number) => {

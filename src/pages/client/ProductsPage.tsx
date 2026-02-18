@@ -180,7 +180,7 @@ export default function ProductsPage() {
                           <Pencil className="w-4 h-4" />
                         </Link>
                         <button
-                          onClick={() => setDeleteId(product.id)}
+                          onClick={() => setDeleteId(Number(product.id))}
                           className="p-1.5 rounded-lg hover:bg-red-50 text-gray-500 hover:text-red-600"
                         >
                           <Trash2 className="w-4 h-4" />
