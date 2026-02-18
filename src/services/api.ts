@@ -13,6 +13,33 @@ import type {
   User
 } from '../types'
 
+/**
+ * Utilidad para obtener el store_id del usuario actual con lógica de "Auto-reparación"
+ * Si el perfil no tiene store_id, intenta encontrar la tienda por el slug en los metadatos de auth.
+ */
+export const getStoreId = async (): Promise<number> => {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('No hay sesión activa')
+
+  // 1. Intentar por perfil
+  const { data: profile } = await supabase.from('profiles').select('store_id').eq('id', user.id).single()
+
+  if (profile?.store_id) return profile.store_id
+
+  // 2. Auto-reparación: Si no tiene store_id, buscar por slug en metadatos
+  const metaSlug = user.user_metadata?.slug
+  if (metaSlug) {
+    const { data: store } = await supabase.from('stores').select('id').eq('slug', metaSlug).single()
+    if (store) {
+      // Vincular permanentemente para futuras llamadas
+      await supabase.from('profiles').update({ store_id: store.id }).eq('id', user.id)
+      return store.id
+    }
+  }
+
+  throw new Error('Error al identificar la tienda (store_id ausente)')
+}
+
 // --- Auth ---
 export const authApi = {
   login: async (email: string, _password: string) => {
@@ -100,11 +127,7 @@ export const authApi = {
 // --- Dashboard ---
 export const dashboardApi = {
   getStats: async (): Promise<any> => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('No authenticated user')
-
-    const { data: profile } = await supabase.from('profiles').select('store_id').eq('id', user.id).single()
-    const storeId = profile?.store_id
+    const storeId = await getStoreId()
 
     if (!storeId) return { orders_today: 0, sales_today: 0, active_products: 0, recent_orders: [], low_stock_products: [] }
 
@@ -124,9 +147,7 @@ export const dashboardApi = {
 // --- Productos ---
 export const productsApi = {
   list: async (params?: { page?: number; limit?: number; search?: string; category_id?: number | string }) => {
-    const { data: { user } } = await supabase.auth.getUser()
-    const { data: profile } = await supabase.from('profiles').select('store_id').eq('id', user?.id).single()
-    const storeId = profile?.store_id
+    const storeId = await getStoreId()
 
     let query = supabase.from('products').select('*, categories(name)', { count: 'exact' }).eq('store_id', storeId)
 
@@ -158,12 +179,11 @@ export const productsApi = {
   },
 
   create: async (data: ProductFormData) => {
-    const { data: { user } } = await supabase.auth.getUser()
-    const { data: profile } = await supabase.from('profiles').select('store_id').eq('id', user?.id).single()
+    const storeId = await getStoreId()
 
     const { data: newProd, error } = await supabase.from('products').insert({
       ...data,
-      store_id: profile?.store_id,
+      store_id: storeId,
       price: Number(data.price),
       stock: Number(data.stock),
       category_id: data.category_id ? Number(data.category_id) : null
@@ -197,16 +217,12 @@ export const productsApi = {
 // --- Categorías ---
 export const categoriesApi = {
   list: async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('No hay sesión de usuario activa')
-
-    const { data: profile, error: profileError } = await supabase.from('profiles').select('store_id').eq('id', user.id).single()
-    if (profileError || !profile?.store_id) throw new Error('No se encontró el ID de la tienda del usuario')
+    const storeId = await getStoreId()
 
     const { data, error } = await supabase
       .from('categories')
       .select('*')
-      .eq('store_id', profile.store_id)
+      .eq('store_id', storeId)
       .order('name')
 
     if (error) throw error
@@ -214,15 +230,11 @@ export const categoriesApi = {
   },
 
   create: async (data: { name: string; sort_order?: number }) => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('No hay sesión activa')
-
-    const { data: profile, error: profileError } = await supabase.from('profiles').select('store_id').eq('id', user.id).single()
-    if (profileError || !profile?.store_id) throw new Error('Error al identificar la tienda (store_id ausente)')
+    const storeId = await getStoreId()
 
     const { data: newCat, error } = await supabase.from('categories').insert({
       ...data,
-      store_id: profile.store_id
+      store_id: storeId
     }).select().single()
 
     if (error) {
@@ -247,10 +259,9 @@ export const categoriesApi = {
 // --- Pedidos ---
 export const ordersApi = {
   list: async (params?: { status?: string; page?: number; limit?: number }) => {
-    const { data: { user } } = await supabase.auth.getUser()
-    const { data: profile } = await supabase.from('profiles').select('store_id').eq('id', user?.id).single()
+    const storeId = await getStoreId()
 
-    let query = supabase.from('orders').select('*', { count: 'exact' }).eq('store_id', profile?.store_id)
+    let query = supabase.from('orders').select('*', { count: 'exact' }).eq('store_id', storeId)
     if (params?.status && params.status !== 'all') query = query.eq('status', params.status)
 
     const from = ((params?.page || 1) - 1) * (params?.limit || 10)
@@ -284,14 +295,13 @@ export const ordersApi = {
 // --- Clientes ---
 export const customersApi = {
   list: async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    const { data: profile } = await supabase.from('profiles').select('store_id').eq('id', user?.id).single()
+    const storeId = await getStoreId()
 
     // Obtenemos los datos de la tabla orders para derivar los clientes
     const { data, error } = await supabase
       .from('orders')
       .select('customer_name, customer_whatsapp, customer_address')
-      .eq('store_id', profile?.store_id)
+      .eq('store_id', storeId)
       .order('created_at', { ascending: false })
 
     if (error) throw error
@@ -315,25 +325,24 @@ export const customersApi = {
 // --- Tenant (Configuración de la tienda) ---
 export const tenantApi = {
   getMe: async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('store_id, stores(*)')
-      .eq('id', user?.id)
+    const storeId = await getStoreId()
+    const { data: store } = await supabase
+      .from('stores')
+      .select('*')
+      .eq('id', storeId)
       .single()
 
-    if (!profile?.stores) throw new Error('No store found for this user')
-    return profile.stores as unknown as Tenant
+    if (!store) throw new Error('No store found for this user')
+    return store as unknown as Tenant
   },
 
   updateMe: async (data: Partial<Tenant>) => {
-    const { data: { user } } = await supabase.auth.getUser()
-    const { data: profile } = await supabase.from('profiles').select('store_id').eq('id', user?.id).single()
+    const storeId = await getStoreId()
 
     const { data: updated, error } = await supabase
       .from('stores')
       .update(data)
-      .eq('id', profile?.store_id)
+      .eq('id', storeId)
       .select()
       .single()
 
