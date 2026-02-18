@@ -147,6 +147,33 @@ export default function SASettingsPage() {
                 <CreditCard className="absolute -right-10 -bottom-10 w-64 h-64 text-white/5" />
             </div>
 
+            {/* Gateways List */}
+            {gateways.length > 0 && (
+                <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden animate-in fade-in slide-in-from-bottom duration-500">
+                    <div className="p-8 border-b border-slate-50">
+                        <h3 className="font-bold text-lg text-slate-900">Pasarelas de Pago Activas</h3>
+                    </div>
+                    <div className="divide-y divide-slate-50">
+                        {gateways.map((gw) => (
+                            <div key={gw.id} className="p-8 flex items-center justify-between group">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center border border-slate-100 group-hover:bg-indigo-600 transition-colors">
+                                        <CreditCard className="w-6 h-6 text-slate-400 group-hover:text-white transition-colors" />
+                                    </div>
+                                    <div>
+                                        <p className="font-black text-slate-900 uppercase tracking-widest">{gw.provider}</p>
+                                        <p className="text-xs text-slate-400 mt-1">Conectado el {new Date(gw.created_at || Date.now()).toLocaleDateString()}</p>
+                                    </div>
+                                </div>
+                                <span className="px-4 py-1.5 rounded-full bg-emerald-50 text-emerald-600 text-[10px] font-black uppercase tracking-widest border border-emerald-100">
+                                    Operativo
+                                </span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
             {/* Gateway Modal */}
             {showModal && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
