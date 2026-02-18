@@ -81,9 +81,5 @@ export default function SASubscriptionsPage() {
                     </table>
                 </div>
             </div>
-        </div>
-    )
-}
-        </div >
-    )
+            )
 }

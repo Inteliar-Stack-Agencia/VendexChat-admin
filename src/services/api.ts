@@ -593,26 +593,62 @@ export const superadminApi = {
   },
 
   getGlobalStats: async (): Promise<any> => {
-    // Esto es un placeholder que simula datos de tendencias para los gráficos de la Fase 3
+    // Generar últimos 7 días
+    const dates = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date()
+      d.setDate(d.getDate() - (6 - i))
+      return d.toISOString().split('T')[0]
+    })
+
+    // 1. Tendencia de ingresos (Estimada por suscripciones activas repartidas en el tiempo)
+    // Para simplificar, obtenemos las órdenes del último mes y las agrupamos por día
+    const sevenDaysAgo = new Date()
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+
+    const { data: recentOrders } = await supabase
+      .from('orders')
+      .select('total, created_at')
+      .gte('created_at', sevenDaysAgo.toISOString())
+
+    const revenue_trend = dates.map(date => {
+      const dayTotal = recentOrders
+        ?.filter(o => o.created_at.startsWith(date))
+        .reduce((acc, o) => acc + (o.total || 0), 0) || 0
+      return { date, value: dayTotal }
+    })
+
+    const orders_trend = dates.map(date => {
+      const dayCount = recentOrders?.filter(o => o.created_at.startsWith(date)).length || 0
+      return { date, value: dayCount }
+    })
+
+    // 2. Tiendas de alto rendimiento (Top 5 por total de ventas)
+    // Hacemos un join o agregación simple: Obtenemos órdenes y agrupamos
+    const { data: storeStats } = await supabase
+      .from('orders')
+      .select('total, store_id, stores(name)')
+
+    const storeMap: Record<string, any> = {}
+    storeStats?.forEach((o: any) => {
+      const id = o.store_id
+      if (!storeMap[id]) storeMap[id] = { name: o.stores?.name, sales: 0, orders: 0 }
+      storeMap[id].sales += o.total || 0
+      storeMap[id].orders += 1
+    })
+
+    const top_stores = Object.values(storeMap)
+      .sort((a, b) => b.sales - a.sales)
+      .slice(0, 5)
+      .map(s => ({
+        ...s,
+        growth: '+10%', // Placeholder de crecimiento
+        sales: `$${s.sales.toLocaleString()}`
+      }))
+
     return {
-      revenue_trend: [
-        { date: '2024-02-12', value: 10500 },
-        { date: '2024-02-13', value: 11200 },
-        { date: '2024-02-14', value: 10800 },
-        { date: '2024-02-15', value: 12100 },
-        { date: '2024-02-16', value: 13500 },
-        { date: '2024-02-17', value: 12900 },
-        { date: '2024-02-18', value: 14200 },
-      ],
-      orders_trend: [
-        { date: '2024-02-12', value: 85 },
-        { date: '2024-02-13', value: 92 },
-        { date: '2024-02-14', value: 78 },
-        { date: '2024-02-15', value: 104 },
-        { date: '2024-02-16', value: 115 },
-        { date: '2024-02-17', value: 98 },
-        { date: '2024-02-18', value: 122 },
-      ]
+      revenue_trend,
+      orders_trend,
+      top_stores
     }
   },
 

@@ -21,21 +21,30 @@ export default function SALiquidationsPage() {
     useEffect(() => {
         const loadData = async () => {
             try {
-                // Usamos getGlobalStats que ya tiene mocks de tendencias
-                const stats = await superadminApi.getGlobalStats()
-                // Combinamos con data de overview para los totales
+                // Combinamos con data de overview para los totales reales
                 const overview = await superadminApi.overview()
+                const subs = await superadminApi.listSubscriptions()
+                const orders = await superadminApi.listGlobalOrders({ limit: 5 })
 
                 setData({
-                    ...stats,
+                    revenue_trend: [
+                        { date: '2024-02-12', value: 10500 },
+                        { date: '2024-02-13', value: 11200 },
+                        { date: '2024-02-14', value: 10800 },
+                        { date: '2024-02-15', value: 12100 },
+                        { date: '2024-02-16', value: 13500 },
+                        { date: '2024-02-17', value: 12900 },
+                        { date: '2024-02-18', value: 14200 },
+                    ],
                     totals: overview,
-                    recent_payments: [
-                        { id: '1', tenant: 'Morfi Viandas', plan: 'Pro', amount: 15, status: 'completed', date: '2024-02-18T10:30:00Z' },
-                        { id: '2', tenant: 'Dulce Amelia', plan: 'Premium', amount: 35, status: 'completed', date: '2024-02-18T09:15:00Z' },
-                        { id: '3', tenant: 'Burger Palace', plan: 'Pro', amount: 15, status: 'pending', date: '2024-02-18T08:45:00Z' },
-                        { id: '4', tenant: 'Sushi Roll', plan: 'Free', amount: 0, status: 'completed', date: '2024-02-17T18:20:00Z' },
-                        { id: '5', tenant: 'Pizza Hot', plan: 'Premium', amount: 35, status: 'failed', date: '2024-02-17T16:10:00Z' },
-                    ]
+                    recent_payments: orders.data.map((o: any) => ({
+                        id: o.id,
+                        tenant: o.store_name,
+                        plan: 'Order',
+                        amount: o.total,
+                        status: o.status,
+                        date: o.created_at
+                    }))
                 })
             } catch (err) {
                 console.error('Error loading liquidations data:', err)
@@ -51,9 +60,9 @@ export default function SALiquidationsPage() {
 
     const stats = [
         { name: 'MRR Actual', value: `$${(data.totals.mrr_estimated || 0).toLocaleString()}`, icon: TrendingUp, color: 'text-indigo-600', bg: 'bg-indigo-50' },
-        { name: 'Ingresos Mes', value: '$45,280', icon: DollarSign, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-        { name: 'Pendiente Liquidar', value: '$3,840', icon: Clock, color: 'text-amber-600', bg: 'bg-amber-50' },
-        { name: 'Tasa Churn', value: '2.4%', icon: BarChart3, color: 'text-indigo-600', bg: 'bg-indigo-50' },
+        { name: 'Tiendas Activas', value: data.totals.active_stores, icon: DollarSign, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+        { name: 'Nuevas (7d)', value: data.totals.new_stores_7d, icon: Clock, color: 'text-amber-600', bg: 'bg-amber-50' },
+        { name: 'Total Tiendas', value: data.totals.total_stores, icon: BarChart3, color: 'text-indigo-600', bg: 'bg-indigo-50' },
     ]
 
     return (

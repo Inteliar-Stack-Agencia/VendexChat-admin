@@ -90,30 +90,30 @@ export default function SAStatsPage() {
                     <h3 className="font-bold text-lg text-slate-900">Tiendas de Alto Rendimiento (MDR)</h3>
                 </div>
                 <div className="p-0">
-                    {[
-                        { name: 'Morfi Viandas Retiro', growth: '+28%', sales: '$420,000', orders: 124 },
-                        { name: 'Dulce Amelia Bakery', growth: '+15%', sales: '$180,500', orders: 82 },
-                        { name: 'Burger Palace Express', growth: '+12%', sales: '$150,200', orders: 65 }
-                    ].map((store, i) => (
-                        <div key={i} className="flex items-center justify-between px-8 py-6 border-b border-slate-50 last:border-0 hover:bg-slate-50/50 transition-colors group">
-                            <div className="flex items-center gap-4">
-                                <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center border border-slate-200 group-hover:bg-indigo-600 group-hover:border-indigo-600 transition-colors">
-                                    <Store className="w-5 h-5 text-slate-400 group-hover:text-white transition-colors" />
+                    {stats?.top_stores && stats.top_stores.length > 0 ? (
+                        stats.top_stores.map((store: any, i: number) => (
+                            <div key={i} className="flex items-center justify-between px-8 py-6 border-b border-slate-50 last:border-0 hover:bg-slate-50/50 transition-colors group">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center border border-slate-200 group-hover:bg-indigo-600 group-hover:border-indigo-600 transition-colors">
+                                        <Store className="w-5 h-5 text-slate-400 group-hover:text-white transition-colors" />
+                                    </div>
+                                    <div>
+                                        <p className="font-bold text-slate-900">{store.name}</p>
+                                        <p className="text-xs text-slate-400 mt-0.5">{store.orders} pedidos registrados</p>
+                                    </div>
                                 </div>
-                                <div>
-                                    <p className="font-bold text-slate-900">{store.name}</p>
-                                    <p className="text-xs text-slate-400 mt-0.5">{store.orders} pedidos este mes</p>
-                                </div>
-                            </div>
-                            <div className="text-right">
-                                <p className="font-black text-slate-900">{store.sales}</p>
-                                <div className="flex items-center gap-1 text-emerald-600 justify-end mt-0.5">
-                                    <TrendingUp className="w-3 h-3" />
-                                    <span className="text-[10px] font-black uppercase">{store.growth}</span>
+                                <div className="text-right">
+                                    <p className="font-black text-slate-900">{store.sales}</p>
+                                    <div className="flex items-center gap-1 text-emerald-600 justify-end mt-0.5">
+                                        <TrendingUp className="w-3 h-3" />
+                                        <span className="text-[10px] font-black uppercase">{store.growth}</span>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    ))}
+                        ))
+                    ) : (
+                        <p className="p-20 text-center text-slate-400 font-bold italic">No hay suficientes datos de ventas aún.</p>
+                    )}
                 </div>
             </div>
         </div>
