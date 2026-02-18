@@ -2,24 +2,32 @@ import { useState, useEffect } from 'react'
 import { Outlet } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import Header from './Header'
-import { tenantApi } from '../../services/api'
+import { tenantApi, superadminApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import { Tenant } from '../../types'
 import { LogOut, ShieldAlert } from 'lucide-react'
-import { superadminApi } from '../../services/api'
 import { Button } from '../common'
 
 export default function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [tenant, setTenant] = useState<Tenant | null>(null)
   const { isSuperadmin } = useAuth()
+  const isImpersonating = !!localStorage.getItem('vendexchat_impersonated_store')
 
-  // Cargar datos del tenant si es cliente
+  // Cargar datos del tenant si es cliente o si estamos suplantando
   useEffect(() => {
-    if (!isSuperadmin) {
-      tenantApi.getMe().then(setTenant).catch(console.error)
+    if (!isSuperadmin || isImpersonating) {
+      tenantApi.getMe().then(setTenant).catch((err) => {
+        console.error('Error fetching tenant:', err)
+        // Si falla al cargar el tenant suplantado, quizás el ID es viejo
+        if (isImpersonating) localStorage.removeItem('vendexchat_impersonated_store')
+      })
     }
-  }, [isSuperadmin])
+  }, [isSuperadmin, isImpersonating])
+
+  const handleStopImpersonation = () => {
+    superadminApi.stopImpersonation()
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
@@ -44,6 +52,7 @@ export default function AppLayout() {
           </Button>
         </div>
       )}
+
       <div className="flex flex-1 overflow-hidden">
         <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
@@ -56,10 +65,22 @@ export default function AppLayout() {
 
           <main className="flex-1 p-4 lg:p-6 overflow-auto">
             <div className="animate-fade-in">
-              <Outlet context={{ tenant, setTenant }} />
+              {/* Si la tienda está suspendida y no somos superadmin (ni estamos en modo suplantación), mostramos aviso */}
+              {tenant && !tenant.is_active && !isSuperadmin ? (
+                <div className="flex flex-col items-center justify-center p-20 bg-white rounded-[2rem] border border-rose-100 shadow-sm text-center">
+                  <div className="w-20 h-20 rounded-3xl bg-rose-50 flex items-center justify-center text-rose-600 mb-6">
+                    <ShieldAlert className="w-10 h-10" />
+                  </div>
+                  <h2 className="text-2xl font-bold text-slate-900 mb-2">Tienda Suspendida</h2>
+                  <p className="text-slate-500 max-w-sm mx-auto">Esta tienda ha sido suspendida temporalmente por administración. Por favor, contacta a soporte para más detalles.</p>
+                </div>
+              ) : (
+                <Outlet context={{ tenant, setTenant }} />
+              )}
             </div>
           </main>
         </div>
       </div>
-      )
+    </div>
+  )
 }
