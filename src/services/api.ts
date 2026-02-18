@@ -51,9 +51,26 @@ export const authApi = {
   },
 
   me: async () => {
-    const { data: { user }, error } = await supabase.auth.getUser()
-    if (error) throw error
-    return { user: user as unknown as User }
+    const { data: { user: authUser }, error: authError } = await supabase.auth.getUser()
+    if (authError || !authUser) throw authError || new Error('No auth user')
+
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('*, stores(*)')
+      .eq('id', authUser.id)
+      .single()
+
+    if (profileError) throw profileError
+
+    return {
+      user: {
+        ...authUser,
+        role: profile.role,
+        tenant_id: profile.store_id, // Mapeo para compatibilidad con tipos viejos
+        store_id: profile.store_id,
+        store: profile.stores
+      } as unknown as User
+    }
   },
 
   signOut: () => supabase.auth.signOut(),
@@ -83,9 +100,16 @@ export const authApi = {
 // --- Dashboard ---
 export const dashboardApi = {
   getStats: async (): Promise<any> => {
-    // Implementación básica de estadísticas vía Supabase
-    const { count: ordersCount } = await supabase.from('orders').select('*', { count: 'exact', head: true })
-    const { count: productsCount } = await supabase.from('products').select('*', { count: 'exact', head: true })
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw new Error('No authenticated user')
+
+    const { data: profile } = await supabase.from('profiles').select('store_id').eq('id', user.id).single()
+    const storeId = profile?.store_id
+
+    if (!storeId) return { orders_today: 0, sales_today: 0, active_products: 0, recent_orders: [], low_stock_products: [] }
+
+    const { count: ordersCount } = await supabase.from('orders').select('*', { count: 'exact', head: true }).eq('store_id', storeId)
+    const { count: productsCount } = await supabase.from('products').select('*', { count: 'exact', head: true }).eq('store_id', storeId)
 
     return {
       orders_today: ordersCount || 0,
@@ -100,7 +124,11 @@ export const dashboardApi = {
 // --- Productos ---
 export const productsApi = {
   list: async (params?: { page?: number; limit?: number; search?: string; category_id?: number | string }) => {
-    let query = supabase.from('products').select('*', { count: 'exact' })
+    const { data: { user } } = await supabase.auth.getUser()
+    const { data: profile } = await supabase.from('profiles').select('store_id').eq('id', user?.id).single()
+    const storeId = profile?.store_id
+
+    let query = supabase.from('products').select('*', { count: 'exact' }).eq('store_id', storeId)
 
     if (params?.search) query = query.ilike('name', `%${params.search}%`)
     if (params?.category_id) query = query.eq('category_id', params.category_id)
@@ -127,9 +155,12 @@ export const productsApi = {
   },
 
   create: async (data: ProductFormData) => {
-    // Asegurar que usamos 'price' y no 'final_price'
+    const { data: { user } } = await supabase.auth.getUser()
+    const { data: profile } = await supabase.from('profiles').select('store_id').eq('id', user?.id).single()
+
     const { data: newProd, error } = await supabase.from('products').insert({
       ...data,
+      store_id: profile?.store_id,
       price: typeof data.price === 'string' ? parseFloat(data.price) : data.price,
       stock: typeof data.stock === 'string' ? parseInt(data.stock) : data.stock
     }).select().single()
@@ -156,13 +187,22 @@ export const productsApi = {
 // --- Categorías ---
 export const categoriesApi = {
   list: async () => {
-    const { data, error } = await supabase.from('categories').select('*').order('name')
+    const { data: { user } } = await supabase.auth.getUser()
+    const { data: profile } = await supabase.from('profiles').select('store_id').eq('id', user?.id).single()
+
+    const { data, error } = await supabase.from('categories').select('*').eq('store_id', profile?.store_id).order('name')
     if (error) throw error
     return data as Category[]
   },
 
   create: async (data: { name: string; sort_order?: number }) => {
-    const { data: newCat, error } = await supabase.from('categories').insert(data).select().single()
+    const { data: { user } } = await supabase.auth.getUser()
+    const { data: profile } = await supabase.from('profiles').select('store_id').eq('id', user?.id).single()
+
+    const { data: newCat, error } = await supabase.from('categories').insert({
+      ...data,
+      store_id: profile?.store_id
+    }).select().single()
     if (error) throw error
     return newCat as Category
   },
@@ -182,7 +222,10 @@ export const categoriesApi = {
 // --- Pedidos ---
 export const ordersApi = {
   list: async (params?: { status?: string; page?: number; limit?: number }) => {
-    let query = supabase.from('orders').select('*', { count: 'exact' })
+    const { data: { user } } = await supabase.auth.getUser()
+    const { data: profile } = await supabase.from('profiles').select('store_id').eq('id', user?.id).single()
+
+    let query = supabase.from('orders').select('*', { count: 'exact' }).eq('store_id', profile?.store_id)
     if (params?.status && params.status !== 'all') query = query.eq('status', params.status)
 
     const from = ((params?.page || 1) - 1) * (params?.limit || 10)
@@ -216,14 +259,28 @@ export const ordersApi = {
 // --- Tenant (Configuración de la tienda) ---
 export const tenantApi = {
   getMe: async () => {
-    // Como simplificación para esta etapa, usamos el slug 'morfi-demo'
-    const { data, error } = await supabase.from('stores').select('*').eq('slug', 'morfi-demo').single()
-    if (error) throw error
-    return data as Tenant
+    const { data: { user } } = await supabase.auth.getUser()
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('store_id, stores(*)')
+      .eq('id', user?.id)
+      .single()
+
+    if (!profile?.stores) throw new Error('No store found for this user')
+    return profile.stores as unknown as Tenant
   },
 
   updateMe: async (data: Partial<Tenant>) => {
-    const { data: updated, error } = await supabase.from('stores').update(data).eq('slug', 'morfi-demo').select().single()
+    const { data: { user } } = await supabase.auth.getUser()
+    const { data: profile } = await supabase.from('profiles').select('store_id').eq('id', user?.id).single()
+
+    const { data: updated, error } = await supabase
+      .from('stores')
+      .update(data)
+      .eq('id', profile?.store_id)
+      .select()
+      .single()
+
     if (error) throw error
     return updated as Tenant
   },
