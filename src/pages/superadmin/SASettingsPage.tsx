@@ -198,24 +198,42 @@ export default function SASettingsPage() {
                                 </select>
                             </div>
                             <div>
-                                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Public Key / Client ID</label>
+                                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">
+                                    {newGateway.provider === 'mercadopago' ? 'Public Key' :
+                                        newGateway.provider === 'paypal' ? 'Client ID' : 'Public Key'}
+                                </label>
                                 <input
                                     type="text"
                                     className="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 font-medium text-slate-900 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
-                                    placeholder="pk_test_..."
+                                    placeholder={
+                                        newGateway.provider === 'mercadopago' ? 'APP_USR-...' :
+                                            newGateway.provider === 'paypal' ? 'ASid...' : 'pk_test_...'
+                                    }
                                     value={newGateway.public_key}
                                     onChange={(e) => setNewGateway(n => ({ ...n, public_key: e.target.value }))}
                                 />
                             </div>
                             <div>
-                                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Secret Key / Client Secret</label>
+                                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">
+                                    {newGateway.provider === 'mercadopago' ? 'Access Token' :
+                                        newGateway.provider === 'paypal' ? 'Client Secret' : 'Secret Key'}
+                                </label>
                                 <input
                                     type="password"
                                     className="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 font-medium text-slate-900 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
-                                    placeholder="sk_test_..."
+                                    placeholder={
+                                        newGateway.provider === 'mercadopago' ? 'APP_USR-...' :
+                                            newGateway.provider === 'paypal' ? 'E...' : 'sk_test_...'
+                                    }
                                     value={newGateway.secret_key}
                                     onChange={(e) => setNewGateway(n => ({ ...n, secret_key: e.target.value }))}
                                 />
+                                {newGateway.provider === 'mercadopago' && (
+                                    <p className="mt-2 text-[10px] text-slate-400 leading-tight">
+                                        En MercadoPago, estas credenciales se encuentran en <br />
+                                        <strong>Panel de Desarrollador {'>'} Credenciales de Producción</strong>
+                                    </p>
+                                )}
                             </div>
                             <button
                                 onClick={handleConnect}
