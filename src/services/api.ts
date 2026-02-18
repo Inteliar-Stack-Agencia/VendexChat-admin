@@ -465,21 +465,38 @@ export const superadminApi = {
       .select('*', { count: 'exact', head: true })
       .gte('created_at', sevenDaysAgo.toISOString())
 
-    // 3. Active stores (assuming is_active exists)
+    // 3. Active stores
     const { count: activeStores } = await supabase
       .from('stores')
       .select('*', { count: 'exact', head: true })
       .eq('is_active', true)
 
-    // 4. Failed payments (Placeholder for now)
-    // const { count: failedPayments } = await supabase.from('payments').select('*', { count: 'exact', head: true }).eq('status', 'failed')
+    // 4. MRR Estimado (Suma de precios de suscripciones activas)
+    // Para simplificar, asumimos Pro = 15 y Premium = 35 si no hay tabla de planes
+    const { data: activeSubs } = await supabase
+      .from('subscriptions')
+      .select('plan_type')
+      .eq('status', 'active')
+
+    const mrr = activeSubs?.reduce((acc, sub) => {
+      const price = sub.plan_type === 'premium' ? 35 : sub.plan_type === 'pro' ? 15 : 0
+      return acc + price
+    }, 0) || 0
+
+    // 5. Actividad reciente (Últimas 5 tiendas)
+    const { data: recentStores } = await supabase
+      .from('stores')
+      .select('name, created_at, is_active')
+      .order('created_at', { ascending: false })
+      .limit(5)
 
     return {
       total_stores: totalStores || 0,
       active_stores: activeStores || 0,
       new_stores_7d: newStores || 0,
-      mrr_estimated: 12450, // Mock for now until plans table is ready
-      failed_payments: 3    // Mock for now
+      mrr_estimated: mrr,
+      recent_activity: recentStores || [],
+      failed_payments: 0 // Placeholder hasta tener logs de errores de pago
     }
   },
 

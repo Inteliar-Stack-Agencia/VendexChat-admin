@@ -56,18 +56,26 @@ export default function SAOverviewPage() {
                         <button className="text-indigo-600 text-sm font-bold hover:underline">Ver todo</button>
                     </div>
                     <div className="p-8 space-y-6">
-                        {[1, 2, 3, 4, 5].map((i) => (
-                            <div key={i} className="flex items-center gap-4 group">
-                                <div className="w-12 h-12 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 group-hover:bg-indigo-50 group-hover:border-indigo-100 transition-colors">
-                                    <Users className="w-5 h-5 text-slate-400 group-hover:text-indigo-600" />
+                        {data?.recent_activity && data.recent_activity.length > 0 ? (
+                            data.recent_activity.map((activity: any, i: number) => (
+                                <div key={i} className="flex items-center gap-4 group">
+                                    <div className="w-12 h-12 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 group-hover:bg-indigo-50 group-hover:border-indigo-100 transition-colors">
+                                        <Store className="w-5 h-5 text-slate-400 group-hover:text-indigo-600" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-bold text-slate-900 truncate">
+                                            Nueva tienda: <span className="text-indigo-600">{activity.name}</span>
+                                        </p>
+                                        <p className="text-xs text-slate-500">
+                                            {activity.is_active ? '✅ Activa' : '⏳ Pendiente'} • {new Date(activity.created_at).toLocaleDateString()}
+                                        </p>
+                                    </div>
+                                    <div className="text-xs text-slate-400 font-medium">✨ Reciente</div>
                                 </div>
-                                <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-bold text-slate-900 truncate">Nueva tienda registrada: <span className="text-indigo-600">Morfi Viandas</span></p>
-                                    <p className="text-xs text-slate-500">Hace 2 horas • Plan Pro</p>
-                                </div>
-                                <div className="text-xs text-slate-400 font-medium">Hace 2h</div>
-                            </div>
-                        ))}
+                            ))
+                        ) : (
+                            <p className="text-center text-slate-400 py-10 font-bold uppercase tracking-widest text-xs">Sin actividad reciente</p>
+                        )}
                     </div>
                 </div>
 
