@@ -49,6 +49,7 @@ export interface Tenant {
   min_order: number
   delivery_cost: number
   schedule: Record<string, ScheduleDay> | null
+  country: string | null
   is_active: boolean
   created_at: string
 }

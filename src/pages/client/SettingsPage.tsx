@@ -1,16 +1,18 @@
 import { useState, useEffect, FormEvent } from 'react'
+import { useOutletContext } from 'react-router-dom'
 import { Card, Button, Input, LoadingSpinner } from '../../components/common'
 import { showToast } from '../../components/common/Toast'
 import { tenantApi, authApi } from '../../services/api'
 import { Tenant } from '../../types'
-import { CreditCard, Plus, RefreshCw, Trash2 } from 'lucide-react'
+import { CreditCard, Plus, RefreshCw, Trash2, ShieldCheck, Globe, MessageSquare, Palette, LayoutGrid } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import FeatureGuard from '../../components/FeatureGuard'
 
 export default function SettingsPage() {
   const { subscription } = useAuth()
+  const { tenant: globalTenant, setTenant: setGlobalTenant } = useOutletContext<{ tenant: Tenant | null, setTenant: (t: Tenant) => void }>()
   const currentPlan = subscription?.plan_type || 'free'
-  const [tenant, setTenant] = useState<Tenant | null>(null)
+  const [tenant, setLocalTenant] = useState<Tenant | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [activeTab, setActiveTab] = useState('general')
@@ -52,7 +54,7 @@ export default function SettingsPage() {
     const loadData = async () => {
       try {
         const data = await tenantApi.getMe()
-        setTenant(data)
+        setLocalTenant(data)
         setName(data.name || '')
         setDescription(data.description || '')
         setLogoUrl(data.logo_url || '')
@@ -79,6 +81,14 @@ export default function SettingsPage() {
     loadData()
   }, [])
 
+  const handleUpdateTenantState = (updatedData: Partial<Tenant>) => {
+    if (tenant) {
+      const newTenant = { ...tenant, ...updatedData }
+      setLocalTenant(newTenant)
+      if (setGlobalTenant) setGlobalTenant(newTenant)
+    }
+  }
+
   const handleSaveGeneral = async (e: FormEvent) => {
     e.preventDefault()
     setSaving(true)
@@ -89,6 +99,7 @@ export default function SettingsPage() {
     }
     try {
       await tenantApi.updateMe({ name, description, logo_url: logoUrl })
+      handleUpdateTenantState({ name, description, logo_url: logoUrl })
       showToast('success', 'Información actualizada')
     } catch {
       showToast('error', 'Error al guardar')
@@ -102,6 +113,7 @@ export default function SettingsPage() {
     setSaving(true)
     try {
       await tenantApi.updateMe({ whatsapp, email, address, instagram, facebook })
+      handleUpdateTenantState({ whatsapp, email, address, instagram, facebook })
       showToast('success', 'Contacto actualizado')
     } catch {
       showToast('error', 'Error al guardar')
@@ -119,6 +131,11 @@ export default function SettingsPage() {
         min_order: Number(minOrder),
         delivery_cost: Number(deliveryCost),
       })
+      handleUpdateTenantState({
+        accept_orders: acceptOrders,
+        min_order: Number(minOrder),
+        delivery_cost: Number(deliveryCost),
+      })
       showToast('success', 'Configuración de pedidos actualizada')
     } catch {
       showToast('error', 'Error al guardar')
@@ -132,6 +149,11 @@ export default function SettingsPage() {
     setSaving(true)
     try {
       await tenantApi.updateMe({
+        primary_color: primaryColor,
+        welcome_message: welcomeMessage,
+        footer_message: footerMessage,
+      })
+      handleUpdateTenantState({
         primary_color: primaryColor,
         welcome_message: welcomeMessage,
         footer_message: footerMessage,
@@ -191,29 +213,33 @@ export default function SettingsPage() {
   if (loading) return <LoadingSpinner text="Cargando configuración..." />
 
   const tabs = [
-    { id: 'general', label: 'General' },
-    { id: 'contact', label: 'Contacto' },
-    { id: 'orders', label: 'Pedidos' },
-    { id: 'customization', label: 'Personalización' },
-    { id: 'payments', label: 'Pagos' },
-    { id: 'account', label: 'Cuenta' },
+    { id: 'general', label: 'General', icon: Globe },
+    { id: 'contact', label: 'Contacto', icon: MessageSquare },
+    { id: 'orders', label: 'Pedidos', icon: LayoutGrid },
+    { id: 'customization', label: 'Diseño', icon: Palette },
+    { id: 'payments', label: 'Pagos', icon: CreditCard },
+    { id: 'account', label: 'Cuenta', icon: ShieldCheck },
   ]
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-gray-900">Configuración</h1>
+    <div className="space-y-8 animate-fade-in pb-16">
+      <div className="px-1">
+        <h1 className="text-3xl font-black text-slate-900 tracking-tight">Configuración</h1>
+        <p className="text-slate-400 font-bold uppercase text-[10px] tracking-widest mt-1">Personaliza tu experiencia y ajustes de tienda</p>
+      </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 overflow-x-auto border-b border-gray-200">
+      <div className="flex gap-2 overflow-x-auto border-b border-slate-100 px-1 pb-px scrollbar-hide">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`px-4 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${activeTab === tab.id
-              ? 'border-emerald-600 text-emerald-600'
-              : 'border-transparent text-gray-500 hover:text-gray-700'
+            className={`flex items-center gap-2 px-6 py-4 text-[11px] font-black uppercase tracking-widest whitespace-nowrap border-b-2 transition-all duration-300 ${activeTab === tab.id
+              ? 'border-indigo-600 text-indigo-600 bg-indigo-50/30'
+              : 'border-transparent text-slate-400 hover:text-slate-600 hover:bg-slate-50'
               }`}
           >
+            <tab.icon className={`w-4 h-4 ${activeTab === tab.id ? 'text-indigo-600' : 'text-slate-300'}`} />
             {tab.label}
           </button>
         ))}

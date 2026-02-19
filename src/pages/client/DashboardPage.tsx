@@ -10,7 +10,8 @@ import {
   ChevronRight,
   ClipboardList,
   ExternalLink,
-  Zap
+  Zap,
+  Shield
 } from 'lucide-react'
 import { Card, LoadingSpinner, Badge, Button } from '../../components/common'
 import { dashboardApi, tenantApi } from '../../services/api'
@@ -43,40 +44,31 @@ export default function DashboardPage() {
   if (loading) return <LoadingSpinner text="Cargando dashboard..." />
 
   return (
-    <div className="space-y-8 animate-fade-in pb-10">
+    <div className="space-y-6 animate-fade-in">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2 mb-1">
-            <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Dashboard</h1>
-            <Badge
-              bg={currentPlan === 'free' ? 'bg-slate-100' : 'bg-emerald-50'}
-              color={currentPlan === 'free' ? 'text-slate-500' : 'text-emerald-600'}
-              className="uppercase text-[10px] font-black tracking-widest mt-1"
-            >
-              Plan {currentPlan}
-            </Badge>
-          </div>
-          <p className="text-slate-500 font-medium">Resumen de tu tienda hoy</p>
+          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+          <p className="text-gray-500 text-sm">Bienvenido de nuevo a tu panel de control.</p>
         </div>
         <div className="flex items-center gap-3">
           {currentPlan === 'free' && (
             <Link to="/subscription">
-              <Button variant="secondary" className="bg-indigo-50 text-indigo-600 border-indigo-100 hover:bg-indigo-100 font-bold">
-                <Zap className="w-4 h-4 fill-current" />
+              <Button variant="secondary" size="sm" className="bg-amber-50 text-amber-600 border-amber-100 hover:bg-amber-100">
+                <Zap className="w-4 h-4 mr-2 fill-current" />
                 Mejorar Plan
               </Button>
             </Link>
           )}
           <a href={storefrontUrl} target="_blank" rel="noopener noreferrer">
-            <Button variant="outline" className="bg-white">
-              <ExternalLink className="w-5 h-5 text-slate-400" />
+            <Button variant="outline" size="sm">
+              <ExternalLink className="w-4 h-4 mr-2" />
               Ver tienda
             </Button>
           </a>
           <Link to="/products/new">
-            <Button variant="primary" className="shadow-lg shadow-green-200">
-              <Plus className="w-5 h-5" />
+            <Button size="sm">
+              <Plus className="w-4 h-4 mr-2" />
               Nuevo Producto
             </Button>
           </Link>
@@ -85,72 +77,58 @@ export default function DashboardPage() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card className="relative overflow-hidden group hover:border-blue-200 transition-colors">
-          <div className="flex items-start justify-between">
-            <div className="space-y-3">
-              <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center transition-transform group-hover:scale-110 duration-300">
-                <ShoppingCart className="w-6 h-6 text-blue-500" />
-              </div>
-              <div>
-                <p className="text-slate-500 text-sm font-medium">Pedidos hoy</p>
-                <p className="text-4xl font-bold text-slate-900 mt-1">{stats?.orders_today ?? 0}</p>
-              </div>
-              <p className="text-xs text-slate-400 font-medium">
-                {stats?.orders_today === 0 ? 'Aún no has recibido pedidos' : 'Pedidos registrados hoy'}
-              </p>
+        <Card className="p-6 transition-all hover:shadow-md border-gray-100">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-indigo-50 text-indigo-600 rounded-lg">
+              <ShoppingCart className="w-6 h-6" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-gray-500">Pedidos de hoy</p>
+              <p className="text-2xl font-bold text-gray-900">{stats?.orders_today ?? 0}</p>
             </div>
           </div>
         </Card>
 
-        <Card className="relative overflow-hidden group hover:border-emerald-200 transition-colors">
-          <div className="flex items-start justify-between">
-            <div className="space-y-3">
-              <div className="w-12 h-12 bg-emerald-50 rounded-2xl flex items-center justify-center transition-transform group-hover:scale-110 duration-300">
-                <DollarSign className="w-6 h-6 text-emerald-500" />
-              </div>
-              <div>
-                <p className="text-slate-500 text-sm font-medium">Ventas hoy</p>
-                <p className="text-4xl font-bold text-slate-900 mt-1">{formatPrice(stats?.sales_today ?? 0)}</p>
-              </div>
-              <p className="text-xs text-slate-400 font-medium">
-                {stats?.sales_today === 0 ? 'Aún no hay ventas registradas' : 'Ingresos acumulados hoy'}
-              </p>
+        <Card className="p-6 transition-all hover:shadow-md border-gray-100">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-emerald-50 text-emerald-600 rounded-lg">
+              <DollarSign className="w-6 h-6" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-gray-500">Ventas hoy</p>
+              <p className="text-2xl font-bold text-gray-900">{formatPrice(stats?.sales_today ?? 0)}</p>
             </div>
           </div>
         </Card>
 
-        <Card className="relative overflow-hidden group hover:border-purple-200 transition-colors">
-          <div className="flex items-start justify-between">
-            <div className="space-y-3">
-              <div className="w-12 h-12 bg-purple-50 rounded-2xl flex items-center justify-center transition-transform group-hover:scale-110 duration-300">
-                <Package className="w-6 h-6 text-purple-500" />
-              </div>
-              <div>
-                <p className="text-slate-500 text-sm font-medium">Productos activos</p>
-                <p className="text-4xl font-bold text-slate-900 mt-1">{stats?.active_products ?? 0}</p>
-              </div>
-              <p className="text-xs text-slate-400 font-medium">
-                {stats?.active_products === 0 ? 'Aún no tienes productos' : 'Productos disponibles en catálogo'}
-              </p>
+        <Card className="p-6 transition-all hover:shadow-md border-gray-100">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-violet-50 text-violet-600 rounded-lg">
+              <Package className="w-6 h-6" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-gray-500">Productos activos</p>
+              <p className="text-2xl font-bold text-gray-900">{stats?.active_products ?? 0}</p>
             </div>
           </div>
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Últimos pedidos */}
-        <div className="lg:col-span-7 space-y-4">
+        <div className="space-y-4">
           <div className="flex items-center justify-between px-1">
-            <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-              <Clock className="w-5 h-5 text-slate-400" />
-              Últimos pedidos
+            <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+              <Clock className="w-5 h-5 text-gray-400" />
+              Últimos Pedidos
             </h2>
-            <Link to="/orders" className="text-sm font-semibold text-green-600 hover:text-green-700 flex items-center gap-1">
-              Ver todos <ChevronRight className="w-4 h-4" />
+            <Link to="/orders" className="text-sm font-medium text-indigo-600 hover:text-indigo-700">
+              Ver todos
             </Link>
           </div>
-          <Card padding={false} className="overflow-hidden border-slate-200/60">
-            <div className="divide-y divide-slate-100">
+
+          <Card padding={false} className="overflow-hidden border-gray-100 shadow-sm">
+            <div className="divide-y divide-gray-100">
               {stats?.recent_orders && stats.recent_orders.length > 0 ? (
                 stats.recent_orders.slice(0, 5).map((order) => {
                   const statusConf = orderStatusConfig[order.status]
@@ -158,20 +136,20 @@ export default function DashboardPage() {
                     <Link
                       key={order.id}
                       to={`/orders/${order.id}`}
-                      className="group flex items-center justify-between px-6 py-4 hover:bg-slate-50 transition-colors"
+                      className="flex items-center justify-between p-4 hover:bg-gray-50 transition-colors"
                     >
                       <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center group-hover:bg-white transition-colors">
-                          <ShoppingCart className="w-5 h-5 text-slate-400" />
+                        <div className="w-10 h-10 bg-gray-50 rounded-lg flex items-center justify-center">
+                          <ShoppingCart className="w-5 h-5 text-gray-400" />
                         </div>
                         <div>
-                          <p className="text-sm font-bold text-slate-900 group-hover:text-green-600 transition-colors line-clamp-1">{order.customer_name}</p>
-                          <p className="text-xs text-slate-400 font-medium">{formatDate(order.created_at)}</p>
+                          <p className="text-sm font-bold text-gray-900">#{order.order_number || order.id.slice(0, 8)}</p>
+                          <p className="text-xs text-gray-500">{order.customer_name}</p>
                         </div>
                       </div>
-                      <div className="text-right space-y-1">
-                        <p className="text-sm font-bold text-slate-900">{formatPrice(order.total)}</p>
-                        <Badge color={statusConf?.color} bg={statusConf?.bg} className="text-[10px] uppercase tracking-wider">
+                      <div className="text-right">
+                        <p className="text-sm font-bold text-gray-900">{formatPrice(order.total)}</p>
+                        <Badge color={statusConf?.color} bg={statusConf?.bg} className="text-[10px]">
                           {statusConf?.label || order.status}
                         </Badge>
                       </div>
@@ -179,15 +157,9 @@ export default function DashboardPage() {
                   )
                 })
               ) : (
-                <div className="px-6 py-16 flex flex-col items-center justify-center text-center">
-                  <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-4">
-                    <ClipboardList className="w-8 h-8 text-slate-300" />
-                  </div>
-                  <h3 className="text-slate-900 font-bold">Sin pedidos aún</h3>
-                  <p className="text-slate-400 text-sm mt-1 max-w-[200px]">Los nuevos pedidos se mostrarán aquí.</p>
-                  <Link to="/products" className="mt-6">
-                    <Button variant="primary" size="sm">Ver productos</Button>
-                  </Link>
+                <div className="p-12 text-center">
+                  <ClipboardList className="w-10 h-10 text-gray-200 mx-auto mb-3" />
+                  <p className="text-gray-500 text-sm">Sin pedidos recientes</p>
                 </div>
               )}
             </div>
@@ -195,48 +167,45 @@ export default function DashboardPage() {
         </div>
 
         {/* Alertas de stock */}
-        <div className="lg:col-span-5 space-y-4">
-          <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2 px-1">
-            <AlertTriangle className="w-5 h-5 text-orange-400" />
-            Alertas de inventario
-          </h2>
-          <Card padding={false} className="border-slate-200/60 overflow-hidden">
-            <div className="divide-y divide-slate-100">
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 px-1">
+            <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-amber-500" />
+              Stock Bajo
+            </h2>
+          </div>
+
+          <Card padding={false} className="overflow-hidden border-gray-100 shadow-sm">
+            <div className="divide-y divide-gray-100">
               {stats?.low_stock_products && stats.low_stock_products.length > 0 ? (
                 stats.low_stock_products.map((product) => (
                   <Link
                     key={product.id}
                     to={`/products/edit/${product.id}`}
-                    className="flex items-center justify-between px-6 py-4 hover:bg-slate-50 transition-colors group"
+                    className="flex items-center justify-between p-4 hover:bg-gray-50 transition-colors"
                   >
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-4">
                       {product.image_url ? (
-                        <img src={product.image_url} alt="" className="w-10 h-10 rounded-xl object-cover border border-slate-100" />
+                        <img src={product.image_url} alt="" className="w-10 h-10 rounded-lg object-cover" />
                       ) : (
-                        <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center">
-                          <Package className="w-5 h-5 text-slate-400" />
+                        <div className="w-10 h-10 bg-gray-50 rounded-lg flex items-center justify-center">
+                          <Package className="w-5 h-5 text-gray-300" />
                         </div>
                       )}
                       <div>
-                        <p className="text-sm font-bold text-slate-900 group-hover:text-green-600 transition-colors line-clamp-1">{product.name}</p>
-                        <p className="text-xs text-slate-400 font-medium">Stock disponible: {product.stock}</p>
+                        <p className="text-sm font-bold text-gray-900">{product.name}</p>
+                        <p className="text-xs text-gray-500">Quedan {product.stock} unidades</p>
                       </div>
                     </div>
-                    <Badge color="text-orange-700" bg="bg-orange-50" className="text-[10px] uppercase font-bold">
-                      {product.stock === 0 ? 'Sin stock' : 'Stock bajo'}
+                    <Badge color={product.stock === 0 ? 'text-rose-600' : 'text-amber-600'} bg={product.stock === 0 ? 'bg-rose-50' : 'bg-amber-50'}>
+                      {product.stock === 0 ? 'Agotado' : 'Bajo'}
                     </Badge>
                   </Link>
                 ))
               ) : (
-                <div className="px-6 py-16 flex flex-col items-center justify-center text-center">
-                  <div className="w-16 h-16 bg-orange-50/50 rounded-full flex items-center justify-center mb-4">
-                    <AlertTriangle className="w-8 h-8 text-orange-200" />
-                  </div>
-                  <h3 className="text-slate-900 font-bold">Sin alertas de stock</h3>
-                  <p className="text-slate-400 text-sm mt-1 max-w-[200px]">Aquí aparecerán las alertas de stock bajo.</p>
-                  <Link to="/products" className="mt-6">
-                    <Button variant="primary" size="sm">Ver productos</Button>
-                  </Link>
+                <div className="p-12 text-center">
+                  <Shield className="w-10 h-10 text-gray-200 mx-auto mb-3" />
+                  <p className="text-gray-500 text-sm">Inventario al día</p>
                 </div>
               )}
             </div>

@@ -850,9 +850,22 @@ export const billingApi = {
       .from('subscriptions')
       .select('*')
       .eq('store_id', storeId)
-      .single()
+      .maybeSingle() // Use maybeSingle to avoid 406/PGRST116 errors on UI
 
-    if (error && error.code !== 'PGRST116') throw error // PGRST116 is "no rows returned"
+    if (error) {
+      console.error('Error fetching subscription:', error)
+      throw error
+    }
+
+    // Si no hay suscripción en DB, devolvemos un objeto por defecto (Free) para que la UI no rompa
+    if (!data) {
+      return {
+        plan_type: 'free',
+        status: 'active',
+        current_period_end: null
+      } as any
+    }
+
     return data
   },
 

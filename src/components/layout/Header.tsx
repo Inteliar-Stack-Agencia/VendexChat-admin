@@ -25,19 +25,23 @@ export default function Header({ onMenuClick, storeName, storeSlug }: HeaderProp
       </div>
 
       <div className="flex items-center gap-3">
-        {storeSlug && (
+        {(storeSlug && STOREFRONT_URL) ? (
           <a
             href={`${STOREFRONT_URL}/${storeSlug}`}
             target="_blank"
             rel="noopener noreferrer"
-            className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg transition-colors ${(isSuperadmin && !isImpersonating)
-              ? 'text-indigo-700 bg-indigo-50 hover:bg-indigo-100'
-              : 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100'
+            className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all shadow-sm ${(isSuperadmin && !isImpersonating)
+              ? 'text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-100'
+              : 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-100'
               }`}
           >
-            <ExternalLink className="w-4 h-4" />
+            <ExternalLink className="w-3.5 h-3.5" />
             Ver mi tienda
           </a>
+        ) : (
+          <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-xl bg-slate-50 border border-dashed border-slate-200 text-slate-400 cursor-help" title="Configura tu slug en ajustes">
+            Tienda inactiva
+          </div>
         )}
         <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gray-50">
           <div className={`w-7 h-7 rounded-full flex items-center justify-center ${(isSuperadmin && !isImpersonating) ? 'bg-indigo-600' : 'bg-emerald-600'}`}>
