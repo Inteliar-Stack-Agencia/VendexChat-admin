@@ -46,9 +46,9 @@ export default function SATenantsPage() {
             setShowModal(false)
             setNewTenant({ name: '', slug: '', email: '', country: 'Argentina' })
             loadTenants()
-        } catch (err) {
+        } catch (err: any) {
             console.error('Error creating tenant:', err)
-            alert('Error al crear la tienda. El slug podría estar duplicado.')
+            alert('Error al crear la tienda: ' + (err.message || 'El slug podría estar duplicado o falta la columna "country" en la base de datos.'))
         } finally {
             setSaving(false)
         }
