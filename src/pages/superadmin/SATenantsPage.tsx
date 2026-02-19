@@ -119,28 +119,39 @@ export default function SATenantsPage() {
                     <table className="w-full text-left">
                         <thead>
                             <tr className="bg-slate-50/50 border-b border-slate-100">
-                                <th className="px-8 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Negocio</th>
-                                <th className="px-8 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Slug</th>
-                                <th className="px-8 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Estado</th>
-                                <th className="px-8 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest text-right">Acciones</th>
+                                <th className="px-8 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest">Negocio</th>
+                                <th className="px-8 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest">Slug</th>
+                                <th className="px-8 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest">País</th>
+                                <th className="px-8 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest">Estado</th>
+                                <th className="px-8 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest text-right">Acciones</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-50">
                             {tenants.map((tenant) => (
-                                <tr key={tenant.id} className="hover:bg-slate-50/30 transition-colors group">
-                                    <td className="px-8 py-5">
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center border border-indigo-100 group-hover:bg-indigo-600 group-hover:border-indigo-600 transition-colors">
-                                                <Store className="w-5 h-5 text-indigo-600 group-hover:text-white transition-colors" />
+                                <tr key={tenant.id} className="group hover:bg-slate-50/50 transition-colors">
+                                    <td className="px-8 py-6">
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400 group-hover:bg-indigo-600 group-hover:text-white transition-all">
+                                                <Store className="w-5 h-5" />
                                             </div>
                                             <div>
-                                                <p className="font-bold text-slate-900 leading-none">{tenant.name}</p>
-                                                <p className="text-[10px] font-medium text-slate-400 mt-1 uppercase tracking-wider">{new Date(tenant.created_at).toLocaleDateString()}</p>
+                                                <p className="font-bold text-slate-900">{tenant.name}</p>
+                                                <p className="text-[10px] text-slate-400 font-medium">{new Date(tenant.created_at || '').toLocaleDateString()}</p>
                                             </div>
                                         </div>
                                     </td>
-                                    <td className="px-8 py-5">
-                                        <span className="text-xs font-bold text-slate-400 italic">/{tenant.slug}</span>
+                                    <td className="px-8 py-6">
+                                        <code className="text-[10px] font-bold text-slate-400 italic">/{tenant.slug}</code>
+                                    </td>
+                                    <td className="px-8 py-6">
+                                        <span className="text-xs font-bold text-slate-600 flex items-center gap-1.5">
+                                            {tenant.country === 'Argentina' ? '🇦🇷' :
+                                                tenant.country === 'Chile' ? '🇨🇱' :
+                                                    tenant.country === 'México' ? '🇲🇽' :
+                                                        tenant.country === 'Uruguay' ? '🇺🇾' :
+                                                            tenant.country === 'Colombia' ? '🇨🇴' :
+                                                                tenant.country === 'España' ? '🇪🇸' : '🌐'} {tenant.country || 'N/A'}
+                                        </span>
                                     </td>
                                     <td className="px-8 py-5">
                                         {getStatusBadge(tenant)}
