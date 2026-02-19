@@ -25,6 +25,8 @@ import SchedulePage from './pages/client/SchedulePage'
 import PaymentsPage from './pages/client/PaymentsPage'
 import SubscriptionPage from './pages/client/SubscriptionPage'
 import SettingsPage from './pages/client/SettingsPage'
+import BotConfigPage from './pages/client/BotConfigPage'
+import LogisticsPage from './pages/client/LogisticsPage'
 
 // Superadmin pages (Legacy)
 import SuperadminDashboard from './pages/superadmin/SuperadminDashboard'
@@ -76,6 +78,8 @@ export default function App() {
             <Route path="/payments" element={<PaymentsPage />} />
             <Route path="/subscription" element={<SubscriptionPage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/bot" element={<BotConfigPage />} />
+            <Route path="/logistics" element={<LogisticsPage />} />
           </Route>
 
           {/* Rutas protegidas del superadmin (NUEVA CONSOLA /sa) */}

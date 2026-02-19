@@ -6,8 +6,8 @@ import { Button } from './common'
 
 interface FeatureGuardProps {
     children: ReactNode
-    feature: 'analytics' | 'coupons' | 'white-label'
-    minPlan?: 'pro' | 'premium'
+    feature: 'analytics' | 'coupons' | 'white-label' | 'bot' | 'logistics' | 'pro-tools' | 'marketing'
+    minPlan?: 'advance' | 'pro' | 'premium' | 'vip'
     fallback?: 'blur' | 'hide' | 'message'
 }
 
@@ -26,11 +26,13 @@ export default function FeatureGuard({
 
     const planWeight = {
         'free': 0,
-        'pro': 1,
-        'premium': 2
+        'advance': 1,
+        'pro': 2,
+        'premium': 3,
+        'vip': 4
     }
 
-    const hasAccess = planWeight[currentPlan] >= planWeight[minPlan]
+    const hasAccess = planWeight[currentPlan as keyof typeof planWeight] >= planWeight[minPlan]
 
     if (hasAccess) return <>{children}</>
 

@@ -132,47 +132,71 @@ export default function SubscriptionPage() {
                 </div>
 
                 {(plans.length > 0) && (
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                         {plans.map((plan) => {
                             const isCurrent = currentSub?.plan_type === plan.id
                             const isPopular = plan.is_popular
 
+                            // Configuración de estilos por plan
+                            const planStyles: Record<string, any> = {
+                                free: {
+                                    icon: <Shield className="w-7 h-7" />,
+                                    bg: 'bg-slate-50 text-slate-400',
+                                    border: 'border-slate-50',
+                                    shadow: 'shadow-slate-100'
+                                },
+                                advance: {
+                                    icon: <Zap className="w-7 h-7" />,
+                                    bg: 'bg-emerald-50 text-emerald-600',
+                                    border: 'border-emerald-100',
+                                    shadow: 'shadow-emerald-100'
+                                },
+                                pro: {
+                                    icon: <Zap className="w-7 h-7" />,
+                                    bg: 'bg-indigo-50 text-indigo-600',
+                                    border: 'border-indigo-500',
+                                    shadow: 'shadow-indigo-100'
+                                },
+                                vip: {
+                                    icon: <Crown className="w-7 h-7" />,
+                                    bg: 'bg-amber-50 text-amber-500',
+                                    border: 'border-amber-400',
+                                    shadow: 'shadow-amber-100'
+                                }
+                            }
+
+                            const style = planStyles[plan.id] || planStyles.free
+
                             return (
                                 <Card
                                     key={plan.id}
-                                    className={`group relative flex flex-col p-8 transition-all duration-500 hover:-translate-y-2 border-2 ${isPopular ? 'border-indigo-500 shadow-2xl shadow-indigo-50' : 'border-slate-50'
+                                    className={`group relative flex flex-col p-6 transition-all duration-500 hover:-translate-y-2 border-2 ${isPopular ? style.border + ' shadow-2xl ' + style.shadow : 'border-slate-50'
                                         }`}
                                 >
                                     {isPopular && (
-                                        <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-indigo-600 text-white text-[10px] font-black uppercase px-6 py-2 rounded-full tracking-widest shadow-xl shadow-indigo-200">
-                                            Más Popular
+                                        <div className={`absolute -top-4 left-1/2 -translate-x-1/2 text-white text-[10px] font-black uppercase px-6 py-2 rounded-full tracking-widest shadow-xl ${plan.id === 'pro' ? 'bg-indigo-600 shadow-indigo-200' : 'bg-amber-600 shadow-amber-200'}`}>
+                                            Recomendado
                                         </div>
                                     )}
 
-                                    <div className="mb-8">
-                                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-6 transition-transform group-hover:scale-110 duration-500 ${plan.id === 'premium' ? 'bg-amber-50 text-amber-500 shadow-lg shadow-amber-100' :
-                                            plan.id === 'pro' ? 'bg-indigo-50 text-indigo-600 shadow-lg shadow-indigo-100' :
-                                                'bg-slate-50 text-slate-400 shadow-lg shadow-slate-100'
-                                            }`}>
-                                            {plan.id === 'premium' ? <Crown className="w-7 h-7" /> :
-                                                plan.id === 'pro' ? <Zap className="w-7 h-7" /> :
-                                                    <Shield className="w-7 h-7" />}
+                                    <div className="mb-6">
+                                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-6 transition-transform group-hover:scale-110 duration-500 ${style.bg} ${style.shadow} shadow-lg`}>
+                                            {style.icon}
                                         </div>
-                                        <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">{plan.name}</h3>
+                                        <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">{plan.name}</h3>
                                         <div className="mt-2 flex items-baseline gap-1">
-                                            <span className="text-5xl font-black text-slate-900 tracking-tighter">${plan.price}</span>
-                                            <span className="text-slate-400 text-sm font-bold">/ mes</span>
+                                            <span className="text-4xl font-black text-slate-900 tracking-tighter">${plan.price}</span>
+                                            <span className="text-slate-400 text-xs font-bold">/ mes</span>
                                         </div>
-                                        <p className="text-slate-400 text-xs font-medium mt-2">Para negocios que buscan {plan.id === 'premium' ? 'exclusividad' : plan.id === 'pro' ? 'crecimiento' : 'empezar'}.</p>
                                     </div>
 
-                                    <div className="space-y-4 mb-10 flex-1">
+                                    <div className="space-y-4 mb-8 flex-1">
                                         {plan.features.map((feature, i) => (
                                             <div key={i} className="flex items-start gap-3">
                                                 <div className="mt-1 w-5 h-5 rounded-full bg-emerald-50 flex items-center justify-center shrink-0 border border-emerald-100">
                                                     <Check className="w-3 h-3 text-emerald-600" />
                                                 </div>
-                                                <span className="text-sm text-slate-600 font-bold leading-tight">{feature}</span>
+                                                <span className="text-[11px] text-slate-600 font-bold leading-tight">{feature}</span>
                                             </div>
                                         ))}
                                     </div>
@@ -182,27 +206,18 @@ export default function SubscriptionPage() {
                                             onClick={() => handleSubscribe(plan.id)}
                                             disabled={isCurrent || isProcessing}
                                             loading={isProcessing && selectedPlan?.id === plan.id}
-                                            className={`w-full py-4 rounded-2xl font-black uppercase tracking-widest text-[11px] flex items-center justify-center gap-2 group/btn transition-all ${isCurrent
+                                            className={`w-full py-4 rounded-2xl font-black uppercase tracking-widest text-[10px] flex items-center justify-center gap-2 group/btn transition-all ${isCurrent
                                                 ? 'bg-slate-100 text-slate-400 cursor-not-allowed border-0'
                                                 : isPopular
                                                     ? 'bg-indigo-600 text-white hover:bg-slate-900 shadow-xl shadow-indigo-100 hover:shadow-indigo-200'
-                                                    : 'bg-white text-slate-900 border-2 border-slate-100 hover:border-slate-900'
+                                                    : plan.id === 'vip'
+                                                        ? 'bg-amber-500 text-white hover:bg-slate-900 shadow-xl shadow-amber-100 hover:shadow-amber-200'
+                                                        : 'bg-white text-slate-900 border-2 border-slate-100 hover:border-slate-900'
                                                 }`}
                                         >
                                             {isCurrent ? 'Tu Plan Actual' : 'Suscribirse Ahora'}
                                             {!isCurrent && <ArrowRight className="w-4 h-4 transition-transform group-hover/btn:translate-x-1" />}
                                         </Button>
-
-                                        {!isCurrent && (
-                                            <a
-                                                href={`https://wa.me/5491100000000?text=Hola! Quiero subir al plan ${plan.name} para mi tienda.`}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="block text-center text-[10px] font-black text-slate-400 hover:text-indigo-600 uppercase tracking-widest transition-colors py-2"
-                                            >
-                                                O pagar con link directo
-                                            </a>
-                                        )}
                                     </div>
                                 </Card>
                             )

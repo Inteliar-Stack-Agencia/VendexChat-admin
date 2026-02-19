@@ -161,7 +161,7 @@ export interface SuperadminUser {
 export interface Subscription {
   id: string
   store_id: string
-  plan_type: 'free' | 'pro' | 'premium'
+  plan_type: 'free' | 'advance' | 'pro' | 'premium' | 'vip'
   status: 'active' | 'past_due' | 'canceled' | 'trial'
   current_period_end: string | null
   cancel_at_period_end: boolean

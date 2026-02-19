@@ -15,7 +15,9 @@ import {
   CreditCard,
   Clock,
   Zap,
-  DollarSign
+  DollarSign,
+  Bot,
+  Truck
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -147,6 +149,16 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                 <NavLink to="/payments" className={linkClass} onClick={onClose}>
                   <CreditCard className="w-5 h-5" />
                   Pagos
+                </NavLink>
+                <NavLink to="/bot" className={linkClass} onClick={onClose}>
+                  <Bot className="w-5 h-5" />
+                  VENDEx Bot
+                  <span className="ml-auto text-[8px] bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded font-black uppercase">VIP</span>
+                </NavLink>
+                <NavLink to="/logistics" className={linkClass} onClick={onClose}>
+                  <Truck className="w-5 h-5" />
+                  Logística
+                  <span className="ml-auto text-[8px] bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded font-black uppercase">VIP</span>
                 </NavLink>
               </div>
             </>

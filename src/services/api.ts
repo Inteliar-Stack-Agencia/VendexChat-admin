@@ -838,9 +838,10 @@ export const billingApi = {
   getPlans: async (): Promise<any[]> => {
     // Mock de planes (estos podrían venir de una tabla 'plans' en el futuro)
     return [
-      { id: 'free', name: 'Free', price: 0, features: ['Hasta 50 productos', 'Pedidos ilimitados', 'Dashboard básico'] },
-      { id: 'pro', name: 'Pro', price: 15, features: ['Productos ilimitados', 'Estadísticas avanzadas', 'Soporte prioritario'], is_popular: true },
-      { id: 'premium', name: 'Premium', price: 35, features: ['Marca blanca', 'Dominio personalizado', 'Integraciones VIP'] },
+      { id: 'free', name: 'Free', price: 0, interval: 'month', features: ['2 Categorías', '10 Productos por cat.', 'Módulos Principales', 'Menú QR'] },
+      { id: 'advance', name: 'Advance', price: 4.99, interval: 'month', features: ['4 Categorías', '20 Productos por cat.', 'Estadísticas', 'Control de Horarios', 'Costo envío por zonas'] },
+      { id: 'pro', name: 'Premium', price: 9.99, interval: 'month', features: ['Categorías Ilimitadas', 'Productos Ilimitados', 'Seguimiento de Pedido', 'Campos Personalizados', 'Exportar a Excel'], is_popular: true },
+      { id: 'vip', name: 'VIP', price: 14.99, interval: 'month', features: ['Todo lo anterior', 'VENDEx Bot (En desarrollo)', 'Cabify Logistics (En desarrollo)', 'Facebook Pixel', 'Google Analytics'] },
     ]
   },
 
