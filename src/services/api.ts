@@ -553,10 +553,62 @@ export const superadminApi = {
     if (error) throw error
   },
 
-  createTenant: async (data: any) => {
-    const { data: newTenant, error } = await supabase.from('stores').insert(data).select().single()
-    if (error) throw error
-    return newTenant as Tenant
+  createTenant: async (data: { name: string; slug: string; email: string; country?: string; is_active?: boolean }) => {
+    // 1. Create the Auth User (Invitation) using a temp client to avoid logout
+    const { createTempClient } = await import('../supabaseClient')
+    const tempClient = createTempClient()
+
+    const { data: authData, error: authError } = await tempClient.auth.signUp({
+      email: data.email,
+      password: Math.random().toString(36).slice(-12), // Temporary random password
+      options: {
+        data: {
+          name: data.name,
+          slug: data.slug,
+          role: 'client'
+        }
+      }
+    })
+
+    if (authError) throw authError
+    if (!authData.user) throw new Error('Failed to create auth user')
+
+    // 2. We wait a bit for the trigger to create the store or update it manually
+    // Since we want to ensure 'country' is saved, we update the store by slug
+    // It's safer to insert the store FIRST and then let the user register, 
+    // OR create the user and then update the store created by the trigger.
+
+    // Let's assume the trigger is fast. We search for the store by slug.
+    let storeId: string | null = null
+    for (let i = 0; i < 5; i++) {
+      await new Promise(r => setTimeout(r, 500))
+      const { data: store } = await supabase.from('stores').select('id').eq('slug', data.slug).single()
+      if (store) {
+        storeId = store.id
+        break
+      }
+    }
+
+    if (storeId) {
+      // Update with extra info
+      await supabase.from('stores').update({
+        country: data.country,
+        is_active: data.is_active ?? true
+      }).eq('id', storeId)
+    } else {
+      // Backup: Create the store manually if trigger failed or doesn't exist
+      const { data: newStore, error: insertError } = await supabase.from('stores').insert({
+        name: data.name,
+        slug: data.slug,
+        country: data.country,
+        is_active: data.is_active ?? true
+      }).select().single()
+      if (insertError) throw insertError
+      return newStore as Tenant
+    }
+
+    const { data: finalStore } = await supabase.from('stores').select('*').eq('id', storeId).single()
+    return finalStore as Tenant
   },
 
   listUsers: async () => {

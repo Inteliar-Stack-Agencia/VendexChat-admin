@@ -8,3 +8,11 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+
+/**
+ * Creates a non-persisting Supabase client.
+ * Useful for auth operations that shouldn't affect the main app session (e.g. inviting users).
+ */
+export const createTempClient = () => createClient(supabaseUrl, supabaseAnonKey, {
+    auth: { persistSession: false }
+})
