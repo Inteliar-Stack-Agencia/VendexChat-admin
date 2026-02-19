@@ -208,6 +208,16 @@ export default function SATenantsPage() {
                                 </div>
                             </div>
                             <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Email del Propietario</label>
+                                <input
+                                    type="email"
+                                    className="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 font-medium text-slate-900 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
+                                    placeholder="pepe@email.com"
+                                    value={newTenant.email}
+                                    onChange={(e) => setNewTenant(t => ({ ...t, email: e.target.value }))}
+                                />
+                            </div>
+                            <div>
                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">País</label>
                                 <select
                                     className="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
