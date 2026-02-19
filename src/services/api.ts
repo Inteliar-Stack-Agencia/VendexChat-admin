@@ -553,18 +553,19 @@ export const superadminApi = {
     if (error) throw error
   },
 
-  createTenant: async (data: { name: string; slug: string; email: string; country?: string; is_active?: boolean }) => {
+  createTenant: async (data: { name: string; slug: string; email: string; country?: string; is_active?: boolean; password?: string; whatsapp?: string }) => {
     // 1. Create the Auth User (Invitation) using a temp client to avoid logout
     const { createTempClient } = await import('../supabaseClient')
     const tempClient = createTempClient()
 
     const { data: authData, error: authError } = await tempClient.auth.signUp({
       email: data.email,
-      password: Math.random().toString(36).slice(-12), // Temporary random password
+      password: data.password || Math.random().toString(36).slice(-12),
       options: {
         data: {
           name: data.name,
           slug: data.slug,
+          whatsapp: data.whatsapp || '',
           role: 'client'
         }
       }
