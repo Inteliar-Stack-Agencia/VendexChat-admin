@@ -13,7 +13,6 @@ const TABS = [
   { id: 'contact', label: 'Información', icon: MessageSquare },
   { id: 'orders', label: 'Pedidos', icon: LayoutGrid },
   { id: 'customization', label: 'Diseño', icon: Palette },
-  { id: 'payments', label: 'Pagos', icon: CreditCard },
   { id: 'account', label: 'Cuenta', icon: ShieldCheck },
 ]
 
