@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Card, Button, Modal } from '../../components/common'
-import { HelpCircle, MessageSquare, Book, Video, ExternalLink, Phone, Truck, CreditCard, Globe } from 'lucide-react'
+import { HelpCircle, MessageSquare, Book, Video, ExternalLink, Phone, Truck, Globe } from 'lucide-react'
 
 const GUIDES_CONTENT = {
     logistics: {
@@ -31,40 +31,6 @@ const GUIDES_CONTENT = {
                         <div>
                             <h4 className="font-bold text-slate-900 text-sm">Tiempos de Entrega</h4>
                             <p className="text-xs text-slate-500">Informa a tus clientes cuánto demora el envío aproximandamente según la zona.</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        )
-    },
-    payments: {
-        title: "Pasarelas de Pago",
-        icon: <CreditCard className="w-8 h-8 text-indigo-600" />,
-        content: (
-            <div className="space-y-6">
-                <div className="p-4 bg-indigo-50 rounded-2xl border border-indigo-100">
-                    <p className="text-sm text-indigo-900 font-medium">Ofrece múltiples formas de pago para aumentar tus ventas.</p>
-                </div>
-                <div className="space-y-4">
-                    <div className="flex gap-4">
-                        <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center shrink-0">💳</div>
-                        <div>
-                            <h4 className="font-bold text-slate-900 text-sm">Mercado Pago</h4>
-                            <p className="text-xs text-slate-500">Vinculación directa. Tus clientes pagan con tarjeta o dinero en cuenta y tú recibes el dinero al instante.</p>
-                        </div>
-                    </div>
-                    <div className="flex gap-4">
-                        <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center shrink-0">🏦</div>
-                        <div>
-                            <h4 className="font-bold text-slate-900 text-sm">Transferencia Bancaria</h4>
-                            <p className="text-xs text-slate-500">Configura tu CBU/Alias. El pedido queda "pendiente" hasta que valides el comprobante.</p>
-                        </div>
-                    </div>
-                    <div className="flex gap-4">
-                        <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center shrink-0">💵</div>
-                        <div>
-                            <h4 className="font-bold text-slate-900 text-sm">Efectivo</h4>
-                            <p className="text-xs text-slate-500">Ideal para retiros en local o delivery propio "paga al recibir".</p>
                         </div>
                     </div>
                 </div>
@@ -131,7 +97,6 @@ export default function HelpPage() {
                         <div className="flex flex-col gap-2 mb-6">
                             {[
                                 { id: 'logistics', label: "Logística y Envíos", icon: "🚚" },
-                                { id: 'payments', label: "Pasarelas de Pago", icon: "💳" },
                                 { id: 'domains', label: "Dominios Propios", icon: "🌐" }
                             ].map((guide, i) => (
                                 <div
