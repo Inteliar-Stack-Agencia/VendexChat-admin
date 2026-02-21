@@ -13,7 +13,6 @@ import {
   Zap,
   Shield,
   LayoutGrid,
-  FolderOpen,
   Image as ImageIcon,
   MessageSquare,
   Clock as ClockIcon,
@@ -27,7 +26,6 @@ import {
   Bell,
   HelpCircle,
   Globe,
-  Users,
   Wand2
 } from 'lucide-react'
 import { Card, LoadingSpinner, Badge, Button } from '../../components/common'
@@ -40,9 +38,7 @@ const modules = [
   { id: 'mi-tienda', label: 'Mi Tienda', icon: Globe, path: '/settings#general' },
   { id: 'ayuda', label: 'Ayuda', icon: HelpCircle, path: '/ayuda' },
   { id: 'sliders', label: 'Sliders', icon: ImageIcon, path: '/sliders' },
-  { id: 'productos', label: 'Productos', icon: Package, path: '/products' },
-  { id: 'categorias', label: 'Categorías', icon: FolderOpen, path: '/categories' },
-  { id: 'clientes', label: 'Clientes', icon: Users, path: '/customers' },
+
   { id: 'horarios', label: 'Horarios', icon: ClockIcon, path: '/horarios' },
   { id: 'metodos-cobro', label: 'Métodos de Cobro', icon: CreditCard, path: '/settings#payments' },
   { id: 'envio-retiro', label: 'Envío / Retiro', icon: Truck, path: '/settings#orders' },
