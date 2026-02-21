@@ -53,7 +53,7 @@ export default function SASettingsPage() {
             <header className="flex items-center justify-between">
                 <div>
                     <h2 className="text-3xl font-bold text-slate-900 tracking-tight">Configuración Global</h2>
-                    <p className="text-slate-500 mt-1">Controla los parámetros maestros de toda la red VendexChat.</p>
+                    <p className="text-slate-500 mt-1">Controla los parámetros maestros de toda la red VENDExChat.</p>
                 </div>
                 <button
                     onClick={handleSave}

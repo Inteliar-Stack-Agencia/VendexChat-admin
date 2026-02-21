@@ -21,12 +21,18 @@ import OrdersPage from './pages/client/OrdersPage'
 import OrderDetailPage from './pages/client/OrderDetailPage'
 import CustomersPage from './pages/client/CustomersPage'
 import CouponsPage from './pages/client/CouponsPage'
+import CouponFormPage from './pages/client/CouponFormPage'
 import SchedulePage from './pages/client/SchedulePage'
-import PaymentsPage from './pages/client/PaymentsPage'
+
 import SubscriptionPage from './pages/client/SubscriptionPage'
 import SettingsPage from './pages/client/SettingsPage'
 import BotConfigPage from './pages/client/BotConfigPage'
 import LogisticsPage from './pages/client/LogisticsPage'
+import QRPage from './pages/client/QRPage'
+import SlidersPage from './pages/client/SlidersPage'
+import PopupsPage from './pages/client/PopupsPage'
+import HelpPage from './pages/client/HelpPage'
+import AIImporterPage from './pages/client/AIImporterPage'
 
 // Superadmin pages (Legacy)
 import SuperadminDashboard from './pages/superadmin/SuperadminDashboard'
@@ -74,12 +80,21 @@ export default function App() {
             <Route path="/orders/:id" element={<OrderDetailPage />} />
             <Route path="/customers" element={<CustomersPage />} />
             <Route path="/coupons" element={<CouponsPage />} />
+            <Route path="/coupons/new" element={<CouponFormPage />} />
+            <Route path="/coupons/edit/:id" element={<CouponFormPage />} />
             <Route path="/horarios" element={<SchedulePage />} />
-            <Route path="/payments" element={<PaymentsPage />} />
             <Route path="/subscription" element={<SubscriptionPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/bot" element={<BotConfigPage />} />
             <Route path="/logistics" element={<LogisticsPage />} />
+            <Route path="/qr" element={<QRPage />} />
+            <Route path="/sliders" element={<SlidersPage />} />
+            <Route path="/popups" element={<PopupsPage />} />
+            <Route path="/ayuda" element={<HelpPage />} />
+            <Route path="/ai-importer" element={<AIImporterPage />} />
+
+            {/* Redirigir root del merchant a dashboard */}
+            <Route index element={<Navigate to="/dashboard" replace />} />
           </Route>
 
           {/* Rutas protegidas del superadmin (NUEVA CONSOLA /sa) */}

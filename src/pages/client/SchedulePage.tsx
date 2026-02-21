@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Clock, Save, Plus, Trash2 } from 'lucide-react'
+import { Clock, Save, Plus, Trash2, Store, Globe } from 'lucide-react'
 import { Card, Button, LoadingSpinner } from '../../components/common'
 import { showToast } from '../../components/common/Toast'
 import { tenantApi } from '../../services/api'
@@ -18,20 +18,30 @@ const DAYS = [
 export default function SchedulePage() {
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
-    const [schedule, setSchedule] = useState<Record<string, ScheduleDay>>({})
+    const [activeType, setActiveType] = useState<'physical' | 'online'>('physical')
+    const [physicalSchedule, setPhysicalSchedule] = useState<Record<string, ScheduleDay>>({})
+    const [onlineSchedule, setOnlineSchedule] = useState<Record<string, ScheduleDay>>({})
 
     useEffect(() => {
         tenantApi.getMe()
             .then(data => {
-                const initialSchedule: Record<string, ScheduleDay> = {}
+                const initPhysical: Record<string, ScheduleDay> = {}
+                const initOnline: Record<string, ScheduleDay> = {}
+
                 DAYS.forEach(day => {
-                    initialSchedule[day.id] = data.schedule?.[day.id] || { open: false, intervals: [{ start: '09:00', end: '18:00' }] }
+                    initPhysical[day.id] = data.physical_schedule?.[day.id] || data.schedule?.[day.id] || { open: false, intervals: [{ start: '09:00', end: '18:00' }] }
+                    initOnline[day.id] = data.online_schedule?.[day.id] || data.schedule?.[day.id] || { open: true, intervals: [{ start: '00:00', end: '23:59' }] }
                 })
-                setSchedule(initialSchedule)
+
+                setPhysicalSchedule(initPhysical)
+                setOnlineSchedule(initOnline)
             })
             .catch(console.error)
             .finally(() => setLoading(false))
     }, [])
+
+    const schedule = activeType === 'physical' ? physicalSchedule : onlineSchedule
+    const setSchedule = activeType === 'physical' ? setPhysicalSchedule : setOnlineSchedule
 
     const handleToggle = (dayId: string) => {
         setSchedule(prev => ({
@@ -71,10 +81,22 @@ export default function SchedulePage() {
         }))
     }
 
+    const set24Hours = () => {
+        const fullDay: Record<string, ScheduleDay> = {}
+        DAYS.forEach(day => {
+            fullDay[day.id] = { open: true, intervals: [{ start: '00:00', end: '23:59' }] }
+        })
+        setSchedule(fullDay)
+        showToast('success', 'Horario configurado como 24 horas')
+    }
+
     const handleSubmit = async () => {
         setSaving(true)
         try {
-            await tenantApi.updateMe({ schedule })
+            await tenantApi.updateMe({
+                physical_schedule: physicalSchedule,
+                online_schedule: onlineSchedule
+            })
             showToast('success', 'Horarios actualizados correctamente')
         } catch {
             showToast('error', 'Error al guardar los horarios')
@@ -86,27 +108,54 @@ export default function SchedulePage() {
     if (loading) return <LoadingSpinner text="Cargando horarios..." />
 
     return (
-        <div className="space-y-6">
-            <div className="flex items-center justify-between">
+        <div className="space-y-6 animate-fade-in pb-20">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900">Horarios de Atención</h1>
-                    <p className="text-sm text-gray-500">Configura cuándo está abierta tu tienda para recibir pedidos.</p>
+                    <h1 className="text-3xl font-black text-slate-900 tracking-tight uppercase">Horarios de Atención</h1>
+                    <p className="text-slate-400 font-bold uppercase text-[10px] tracking-widest mt-1">Configura cuándo está abierta tu tienda para cada canal</p>
                 </div>
-                <Button onClick={handleSubmit} loading={saving}>
-                    <Save className="w-4 h-4" />
-                    Guardar Cambios
-                </Button>
+                <div className="flex gap-2">
+                    <Button variant="outline" onClick={set24Hours} className="text-[10px] font-black uppercase tracking-widest">
+                        Configurar 24 Horas
+                    </Button>
+                    <Button onClick={handleSubmit} loading={saving} className="bg-slate-900 shadow-lg shadow-slate-100">
+                        <Save className="w-4 h-4 mr-2" />
+                        Guardar Cambios
+                    </Button>
+                </div>
             </div>
 
-            <div className="space-y-4">
+            {/* Tabs */}
+            <div className="flex gap-2 p-1 bg-slate-100 rounded-2xl w-fit">
+                <button
+                    onClick={() => setActiveType('physical')}
+                    className={`flex items-center gap-2 px-6 py-3 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${activeType === 'physical'
+                        ? 'bg-white text-indigo-600 shadow-sm'
+                        : 'text-slate-400 hover:text-slate-600'}`}
+                >
+                    <Store className="w-4 h-4" />
+                    Local Físico
+                </button>
+                <button
+                    onClick={() => setActiveType('online')}
+                    className={`flex items-center gap-2 px-6 py-3 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${activeType === 'online'
+                        ? 'bg-white text-emerald-600 shadow-sm'
+                        : 'text-slate-400 hover:text-slate-600'}`}
+                >
+                    <Globe className="w-4 h-4" />
+                    Tienda Online
+                </button>
+            </div>
+
+            <div className="space-y-3">
                 {DAYS.map((day) => {
                     const config = schedule[day.id] || { open: false, intervals: [] }
                     const intervals = config.intervals || []
 
                     return (
-                        <Card key={day.id}>
+                        <Card key={day.id} className={`p-6 transition-all border ${config.open ? 'border-indigo-100 bg-white' : 'border-slate-100 bg-slate-50/50 opacity-60'}`}>
                             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                                <div className="flex items-center gap-4 min-w-[120px]">
+                                <div className="flex items-center gap-6 min-w-[150px]">
                                     <label className="relative inline-flex items-center cursor-pointer">
                                         <input
                                             type="checkbox"
@@ -114,64 +163,59 @@ export default function SchedulePage() {
                                             checked={config.open}
                                             onChange={() => handleToggle(day.id)}
                                         />
-                                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-emerald-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                                        <div className="w-12 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-6 peer-checked:after:border-white after:content-[''] after:absolute after:top-[4px] after:left-[4px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-500"></div>
                                     </label>
-                                    <span className={`font-semibold ${config.open ? 'text-gray-900' : 'text-gray-400'}`}>
+                                    <span className={`font-black uppercase text-xs tracking-wider ${config.open ? 'text-slate-900' : 'text-slate-400'}`}>
                                         {day.label}
                                     </span>
                                 </div>
 
-                                <div className="flex-1 space-y-2">
+                                <div className="flex-1">
                                     {config.open ? (
-                                        intervals.length > 0 ? (
-                                            intervals.map((interval, idx) => (
-                                                <div key={idx} className="flex items-center gap-2">
+                                        <div className="flex flex-wrap gap-3">
+                                            {intervals.map((interval, idx) => (
+                                                <div key={idx} className="flex items-center gap-2 p-2 bg-slate-50 rounded-xl border border-slate-100">
                                                     <input
                                                         type="time"
                                                         value={interval.start}
                                                         onChange={(e) => handleIntervalChange(day.id, idx, 'start', e.target.value)}
-                                                        className="px-2 py-1 border border-gray-300 rounded text-sm focus:ring-emerald-500"
+                                                        className="bg-transparent border-none text-sm font-bold text-slate-700 focus:ring-0 p-0 w-14"
                                                     />
-                                                    <span className="text-gray-400">—</span>
+                                                    <span className="text-slate-300">—</span>
                                                     <input
                                                         type="time"
                                                         value={interval.end}
                                                         onChange={(e) => handleIntervalChange(day.id, idx, 'end', e.target.value)}
-                                                        className="px-2 py-1 border border-gray-300 rounded text-sm focus:ring-emerald-500"
+                                                        className="bg-transparent border-none text-sm font-bold text-slate-700 focus:ring-0 p-0 w-14"
                                                     />
-                                                    {intervals.length > 1 && (
-                                                        <button
-                                                            onClick={() => removeInterval(day.id, idx)}
-                                                            className="p-1 text-red-500 hover:bg-red-50 rounded"
-                                                        >
-                                                            <Trash2 className="w-4 h-4" />
-                                                        </button>
-                                                    )}
-                                                    {idx === intervals.length - 1 && intervals.length < 2 && (
-                                                        <button
-                                                            onClick={() => addInterval(day.id)}
-                                                            className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"
-                                                        >
-                                                            <Plus className="w-4 h-4" />
-                                                        </button>
-                                                    )}
+                                                    <div className="flex gap-1 ml-2 border-l border-slate-200 pl-2">
+                                                        {intervals.length > 1 && (
+                                                            <button
+                                                                onClick={() => removeInterval(day.id, idx)}
+                                                                className="p-1 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
+                                                            >
+                                                                <Trash2 className="w-3.5 h-3.5" />
+                                                            </button>
+                                                        )}
+                                                        {idx === intervals.length - 1 && intervals.length < 2 && (
+                                                            <button
+                                                                onClick={() => addInterval(day.id)}
+                                                                className="p-1 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                                                            >
+                                                                <Plus className="w-3.5 h-3.5" />
+                                                            </button>
+                                                        )}
+                                                    </div>
                                                 </div>
-                                            ))
-                                        ) : (
-                                            <button
-                                                onClick={() => addInterval(day.id)}
-                                                className="text-sm text-emerald-600 hover:underline flex items-center gap-1"
-                                            >
-                                                <Plus className="w-4 h-4" /> Agregar horario
-                                            </button>
-                                        )
+                                            ))}
+                                        </div>
                                     ) : (
-                                        <span className="text-sm text-gray-400 italic">Cerrado</span>
+                                        <span className="text-[10px] font-black uppercase text-slate-300 tracking-[0.2em]">Cerrado</span>
                                     )}
                                 </div>
 
                                 <div className="hidden sm:block">
-                                    <Clock className={`w-5 h-5 ${config.open ? 'text-emerald-500' : 'text-gray-300'}`} />
+                                    <Clock className={`w-5 h-5 ${config.open ? (activeType === 'physical' ? 'text-indigo-400' : 'text-emerald-400') : 'text-slate-200'}`} />
                                 </div>
                             </div>
                         </Card>

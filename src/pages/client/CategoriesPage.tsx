@@ -1,5 +1,5 @@
 import { useState, useEffect, FormEvent } from 'react'
-import { Plus, Pencil, Trash2, FolderOpen } from 'lucide-react'
+import { Plus, Pencil, Trash2, FolderOpen, ArrowUp, ArrowDown } from 'lucide-react'
 import { Card, Button, Input, Modal, LoadingSpinner, EmptyState, ConfirmDialog } from '../../components/common'
 import { showToast } from '../../components/common/Toast'
 import { categoriesApi } from '../../services/api'
@@ -89,6 +89,36 @@ export default function CategoriesPage() {
     }
   }
 
+  const handleMove = async (index: number, direction: 'up' | 'down') => {
+    const newIndex = direction === 'up' ? index - 1 : index + 1
+    if (newIndex < 0 || newIndex >= categories.length) return
+
+    const newCategories = [...categories]
+    const current = { ...newCategories[index] }
+    const target = { ...newCategories[newIndex] }
+
+    // Swap sort_order
+    const tempOrder = current.sort_order
+    current.sort_order = target.sort_order
+    target.sort_order = tempOrder
+
+    newCategories[index] = target
+    newCategories[newIndex] = current
+
+    setCategories(newCategories)
+
+    try {
+      await Promise.all([
+        categoriesApi.update(current.id, { sort_order: current.sort_order }),
+        categoriesApi.update(target.id, { sort_order: target.sort_order })
+      ])
+      showToast('success', 'Orden actualizado')
+    } catch (err) {
+      showToast('error', 'Error al guardar el orden')
+      loadCategories() // Revertir
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -117,19 +147,36 @@ export default function CategoriesPage() {
         <Card padding={false}>
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-200 bg-gray-50">
-                <th className="text-left px-4 py-3 font-medium text-gray-500">Nombre</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-500 hidden sm:table-cell">Productos</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-500 hidden sm:table-cell">Orden</th>
-                <th className="text-right px-4 py-3 font-medium text-gray-500">Acciones</th>
+              <tr className="border-b border-gray-200 bg-gray-50 text-[10px] font-black uppercase tracking-widest text-gray-400">
+                <th className="px-4 py-3 text-center w-24">Orden</th>
+                <th className="text-left px-4 py-3">Nombre</th>
+                <th className="text-left px-4 py-3 hidden sm:table-cell">Productos</th>
+                <th className="text-right px-4 py-3">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {categories.map((cat) => (
-                <tr key={cat.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 font-medium text-gray-900">{cat.name}</td>
-                  <td className="px-4 py-3 text-gray-600 hidden sm:table-cell">{cat.product_count ?? 0}</td>
-                  <td className="px-4 py-3 text-gray-600 hidden sm:table-cell">{cat.sort_order}</td>
+              {categories.map((cat, idx) => (
+                <tr key={cat.id} className="group hover:bg-gray-50/50 transition-colors">
+                  <td className="px-4 py-3">
+                    <div className="flex flex-col items-center gap-1 group-hover:opacity-100 transition-opacity">
+                      <button
+                        disabled={idx === 0}
+                        onClick={() => handleMove(idx, 'up')}
+                        className={`p-1 rounded-lg hover:bg-indigo-50 text-gray-400 hover:text-indigo-600 transition-all ${idx === 0 ? 'invisible' : ''}`}
+                      >
+                        <ArrowUp className="w-4 h-4" />
+                      </button>
+                      <button
+                        disabled={idx === categories.length - 1}
+                        onClick={() => handleMove(idx, 'down')}
+                        className={`p-1 rounded-lg hover:bg-indigo-50 text-gray-400 hover:text-indigo-600 transition-all ${idx === categories.length - 1 ? 'invisible' : ''}`}
+                      >
+                        <ArrowDown className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 font-black text-gray-900 tracking-tight leading-none mb-1">{cat.name}</td>
+                  <td className="px-4 py-3 text-gray-600 font-bold text-[10px] uppercase hidden sm:table-cell">{cat.product_count ?? 0}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-2">
                       <button

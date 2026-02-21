@@ -1,7 +1,8 @@
 import { useState, useEffect, FormEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Upload, X } from 'lucide-react'
+import { ArrowLeft, Upload, X, Sparkles, Trash2 } from 'lucide-react'
 import { Button, Input, Select, Card, LoadingSpinner } from '../../components/common'
+import ImageSuggestionModal from '../../components/products/ImageSuggestionModal'
 import { showToast } from '../../components/common/Toast'
 import { productsApi, categoriesApi } from '../../services/api'
 import { Category, ProductFormData } from '../../types'
@@ -15,6 +16,7 @@ export default function ProductFormPage() {
   const [saving, setSaving] = useState(false)
   const [categories, setCategories] = useState<Category[]>([])
   const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [isImageModalOpen, setIsImageModalOpen] = useState(false)
 
   const [form, setForm] = useState<ProductFormData>({
     name: '',
@@ -130,6 +132,18 @@ export default function ProductFormPage() {
     }
   }
 
+  const handleDelete = async () => {
+    if (!id || !window.confirm('¿Estás seguro de que deseas eliminar este producto?')) return
+
+    try {
+      await productsApi.delete(id)
+      showToast('success', 'Producto eliminado')
+      navigate('/products')
+    } catch (err) {
+      showToast('error', 'Error al eliminar el producto')
+    }
+  }
+
   if (loading) return <LoadingSpinner text="Cargando producto..." />
 
   return (
@@ -220,26 +234,48 @@ export default function ProductFormPage() {
 
         {/* Imagen */}
         <Card>
-          <h2 className="text-sm font-semibold text-gray-500 uppercase mb-4">Imagen</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-sm font-semibold text-gray-500 uppercase">Imagen</h2>
+            <button
+              type="button"
+              onClick={() => setIsImageModalOpen(true)}
+              className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-indigo-600 hover:text-indigo-700 transition-colors bg-indigo-50 px-3 py-1.5 rounded-full"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              Sugerir con IA
+            </button>
+          </div>
+
           {imagePreview ? (
             <div className="relative inline-block">
-              <img src={imagePreview} alt="Preview" className="w-40 h-40 object-cover rounded-xl" />
+              <img src={imagePreview} alt="Preview" className="w-40 h-40 object-cover rounded-xl shadow-lg border-2 border-slate-100" />
               <button
                 type="button"
                 onClick={removeImage}
-                className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600"
+                className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 shadow-md"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
           ) : (
-            <label className="flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-gray-300 rounded-xl cursor-pointer hover:border-emerald-400 hover:bg-emerald-50/30 transition-colors">
-              <Upload className="w-8 h-8 text-gray-400 mb-2" />
-              <span className="text-sm text-gray-500">Haz clic para subir imagen</span>
-              <span className="text-xs text-gray-400 mt-1">Recomendado: 800x800px, máximo 2MB</span>
+            <label className="flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-gray-300 rounded-xl cursor-pointer hover:border-indigo-400 hover:bg-indigo-50/30 transition-all group">
+              <Upload className="w-8 h-8 text-gray-400 mb-2 group-hover:text-indigo-500 transition-colors" />
+              <span className="text-sm text-gray-500 font-medium">Haz clic para subir imagen</span>
+              <span className="text-xs text-gray-400 mt-1 font-bold uppercase tracking-widest text-[9px]">Recomendado: 800x800px, máximo 2MB</span>
               <input type="file" accept="image/*" onChange={handleImageChange} className="hidden" />
             </label>
           )}
+
+          <ImageSuggestionModal
+            isOpen={isImageModalOpen}
+            onClose={() => setIsImageModalOpen(false)}
+            onSelect={(url) => {
+              setImagePreview(url)
+              updateField('image_url', url)
+              setIsImageModalOpen(false)
+            }}
+            initialQuery={form.name}
+          />
         </Card>
 
         {/* Visibilidad */}
@@ -268,13 +304,26 @@ export default function ProductFormPage() {
         </Card>
 
         {/* Botones */}
-        <div className="flex justify-end gap-3">
-          <Button type="button" variant="secondary" onClick={() => navigate('/products')}>
-            Cancelar
-          </Button>
-          <Button type="submit" loading={saving}>
-            {isEditing ? 'Guardar cambios' : 'Crear producto'}
-          </Button>
+        <div className="flex justify-between items-center gap-3">
+          {isEditing ? (
+            <button
+              type="button"
+              onClick={handleDelete}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+            >
+              <Trash2 className="w-4 h-4" />
+              Eliminar producto
+            </button>
+          ) : <div />}
+
+          <div className="flex gap-3">
+            <Button type="button" variant="secondary" onClick={() => navigate('/products')}>
+              Cancelar
+            </Button>
+            <Button type="submit" loading={saving}>
+              {isEditing ? 'Guardar cambios' : 'Crear producto'}
+            </Button>
+          </div>
         </div>
       </form>
     </div>

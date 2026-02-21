@@ -2,6 +2,7 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import {
   LayoutDashboard,
+  LayoutGrid,
   Package,
   FolderOpen,
   ShoppingCart,
@@ -17,7 +18,8 @@ import {
   Zap,
   DollarSign,
   Bot,
-  Truck
+  Truck,
+  Wand2
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -63,7 +65,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${(isSuperadmin && !isImpersonating) ? 'bg-indigo-600' : 'bg-emerald-600'}`}>
               <Store className="w-5 h-5 text-white" />
             </div>
-            <span className="font-bold text-gray-900">VENDExChat</span>
+            <span className="font-bold text-gray-900">VendexChat</span>
           </div>
           <button onClick={onClose} className="lg:hidden p-1 rounded hover:bg-gray-100">
             <X className="w-5 h-5 text-gray-500" />
@@ -97,7 +99,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
           ) : (
             <>
               <div className="pb-2">
-                <p className="px-4 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest">General</p>
+                <p className="px-4 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Operación</p>
                 <NavLink to="/dashboard" className={linkClass} onClick={onClose}>
                   <LayoutDashboard className="w-5 h-5" />
                   Dashboard
@@ -106,10 +108,6 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                   <ShoppingCart className="w-5 h-5" />
                   Pedidos
                 </NavLink>
-              </div>
-
-              <div className="pt-2 pb-2">
-                <p className="px-4 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Catálogo</p>
                 <NavLink to="/products" className={linkClass} onClick={onClose}>
                   <Package className="w-5 h-5" />
                   Productos
@@ -118,38 +116,14 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                   <FolderOpen className="w-5 h-5" />
                   Categorías
                 </NavLink>
-              </div>
-
-              <div className="pt-2 pb-2">
-                <p className="px-4 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Clientes y Marketing</p>
                 <NavLink to="/customers" className={linkClass} onClick={onClose}>
                   <Users className="w-5 h-5" />
                   Clientes
                 </NavLink>
-                <NavLink to="/coupons" className={linkClass} onClick={onClose}>
-                  <Percent className="w-5 h-5" />
-                  Cupones
-                </NavLink>
               </div>
 
               <div className="pt-2 pb-2">
-                <p className="px-4 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Configuración</p>
-                <NavLink to="/settings" className={linkClass} onClick={onClose}>
-                  <Settings className="w-5 h-5" />
-                  Tienda
-                </NavLink>
-                <NavLink to="/horarios" className={linkClass} onClick={onClose}>
-                  <Clock className="w-5 h-5" />
-                  Horarios
-                </NavLink>
-                <NavLink to="/subscription" className={linkClass} onClick={onClose}>
-                  <Zap className="w-5 h-5" />
-                  Mi Plan
-                </NavLink>
-                <NavLink to="/payments" className={linkClass} onClick={onClose}>
-                  <CreditCard className="w-5 h-5" />
-                  Pagos
-                </NavLink>
+                <p className="px-4 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Módulos PRO</p>
                 <NavLink to="/bot" className={linkClass} onClick={onClose}>
                   <Bot className="w-5 h-5" />
                   VENDEx Bot
@@ -158,6 +132,11 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                 <NavLink to="/logistics" className={linkClass} onClick={onClose}>
                   <Truck className="w-5 h-5" />
                   Logística
+                  <span className="ml-auto text-[8px] bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded font-black uppercase">VIP</span>
+                </NavLink>
+                <NavLink to="/ai-importer" className={linkClass} onClick={onClose}>
+                  <Wand2 className="w-5 h-5" />
+                  Importador IA
                   <span className="ml-auto text-[8px] bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded font-black uppercase">VIP</span>
                 </NavLink>
               </div>
@@ -169,11 +148,16 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         <div className="p-4 border-t border-gray-200">
           <button
             onClick={handleLogout}
-            className="flex items-center gap-3 px-4 py-2.5 w-full rounded-lg text-sm font-medium text-gray-600 hover:bg-red-50 hover:text-red-700 transition-colors"
+            className="flex items-center gap-3 px-4 py-2.5 w-full rounded-lg text-sm font-medium text-gray-600 hover:bg-red-50 hover:text-red-700 transition-colors mb-2"
           >
             <LogOut className="w-5 h-5" />
             Cerrar sesión
           </button>
+          <div className="px-4 py-2 border-t border-gray-50 mt-2">
+            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest text-center">
+              Desarrollado por <span className="text-emerald-600/60">@InteliarStack</span>
+            </p>
+          </div>
         </div>
       </aside>
     </>

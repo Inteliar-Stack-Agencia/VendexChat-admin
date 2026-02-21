@@ -10,7 +10,9 @@ import type {
   Order,
   OrderStatus,
   Tenant,
-  User
+  User,
+  Coupon,
+  CouponFormData
 } from '../types'
 
 /**
@@ -194,12 +196,21 @@ export const dashboardApi = {
       .order('created_at', { ascending: false })
       .limit(5)
 
-    // 5. Alertas de stock bajo (< 5 unidades)
+    // 5. Umbral de stock (de la tienda)
+    const { data: storeData } = await supabase
+      .from('stores')
+      .select('low_stock_threshold')
+      .eq('id', storeId)
+      .single()
+
+    const threshold = storeData?.low_stock_threshold ?? 5
+
+    // 6. Alertas de stock bajo (usando el umbral)
     const { data: lowStock } = await supabase
       .from('products')
       .select('*')
       .eq('store_id', storeId)
-      .lt('stock', 5)
+      .lte('stock', threshold) // Si es igual o menor al umbral, avisar
       .order('stock', { ascending: true })
 
     return {
@@ -225,7 +236,12 @@ export const productsApi = {
     const from = ((params?.page || 1) - 1) * (params?.limit || 10)
     const to = from + (params?.limit || 10) - 1
 
-    const { data, error, count } = await query.range(from, to).order('created_at', { ascending: false })
+    // Ordenamos por sort_order (ascendente) y luego por fecha (descendente)
+    const { data, error, count } = await query
+      .range(from, to)
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: false })
+
     if (error) throw error
 
     return {
@@ -249,12 +265,24 @@ export const productsApi = {
   create: async (data: ProductFormData) => {
     const storeId = await getStoreId()
 
+    // Obtener el último sort_order para agregar al final
+    const { data: lastProd } = await supabase
+      .from('products')
+      .select('sort_order')
+      .eq('store_id', storeId)
+      .order('sort_order', { ascending: false })
+      .limit(1)
+      .single()
+
+    const nextOrder = (lastProd?.sort_order || 0) + 10
+
     const { data: newProd, error } = await supabase.from('products').insert({
       ...data,
       store_id: storeId,
       price: Number(data.price),
       stock: Number(data.stock),
-      category_id: data.category_id || null
+      category_id: data.category_id || null,
+      sort_order: nextOrder
     }).select('*, categories(name)').single()
 
     if (error) {
@@ -294,12 +322,15 @@ export const categoriesApi = {
 
     const { data, error } = await supabase
       .from('categories')
-      .select('*')
+      .select('*, products(count)')
       .eq('store_id', storeId)
-      .order('name')
+      .order('sort_order', { ascending: true })
 
     if (error) throw error
-    return data as Category[]
+    return (data || []).map(cat => ({
+      ...cat,
+      product_count: (cat as any).products?.[0]?.count || 0
+    })) as Category[]
   },
 
   create: async (data: { name: string; sort_order?: number }) => {
@@ -462,6 +493,87 @@ export const tenantApi = {
     if (error) throw error
     return data
   },
+}
+
+// --- Cupones ---
+export const couponsApi = {
+  list: async () => {
+    const storeId = await getStoreId()
+    const { data, error } = await supabase
+      .from('coupons')
+      .select('*')
+      .eq('store_id', storeId)
+      .order('created_at', { ascending: false })
+
+    if (error) throw error
+    return data as Coupon[]
+  },
+
+  get: async (id: string) => {
+    const { data, error } = await supabase
+      .from('coupons')
+      .select('*')
+      .eq('id', id)
+      .single()
+
+    if (error) throw error
+    return data as Coupon
+  },
+
+  create: async (data: CouponFormData) => {
+    const storeId = await getStoreId()
+    const { data: newCoupon, error } = await supabase
+      .from('coupons')
+      .insert({
+        ...data,
+        store_id: storeId,
+        value: Number(data.value),
+        min_purchase_amount: Number(data.min_purchase_amount || 0),
+        usage_limit: data.usage_limit ? Number(data.usage_limit) : null,
+        end_date: data.end_date || null
+      })
+      .select()
+      .single()
+
+    if (error) throw error
+    return newCoupon as Coupon
+  },
+
+  update: async (id: string, data: Partial<CouponFormData>) => {
+    const updateData: any = { ...data }
+    if (data.value) updateData.value = Number(data.value)
+    if (data.min_purchase_amount !== undefined) updateData.min_purchase_amount = Number(data.min_purchase_amount)
+    if (data.usage_limit !== undefined) updateData.usage_limit = data.usage_limit ? Number(data.usage_limit) : null
+
+    const { data: updated, error } = await supabase
+      .from('coupons')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (error) throw error
+    return updated as Coupon
+  },
+
+  delete: async (id: string) => {
+    const { error } = await supabase
+      .from('coupons')
+      .delete()
+      .eq('id', id)
+
+    if (error) throw error
+  },
+
+  toggleGlobal: async (enabled: boolean) => {
+    const storeId = await getStoreId()
+    const { error } = await supabase
+      .from('stores')
+      .update({ coupons_enabled: enabled })
+      .eq('id', storeId)
+
+    if (error) throw error
+  }
 }
 
 // --- Superadmin ---
@@ -878,5 +990,28 @@ export const billingApi = {
     // Simulamos una respuesta exitosa.
     console.log(`Iniciando checkout para el plan ${planId} en la tienda ${storeId}`)
     return { checkout_url: 'https://checkout.vendexchat.app/mock-session' }
+  }
+}
+// --- Storage (Imágenes) ---
+export const storageApi = {
+  uploadImage: async (file: File, bucket: string, path: string) => {
+    const { data, error } = await supabase.storage
+      .from(bucket)
+      .upload(path, file, {
+        upsert: true,
+        cacheControl: '3600'
+      })
+
+    if (error) {
+      console.error('storageApi.uploadImage error:', error)
+      throw error
+    }
+
+    // Obtener URL pública
+    const { data: { publicUrl } } = supabase.storage
+      .from(bucket)
+      .getPublicUrl(path)
+
+    return publicUrl
   }
 }

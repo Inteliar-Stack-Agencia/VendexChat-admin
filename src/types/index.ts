@@ -47,11 +47,27 @@ export interface Tenant {
   welcome_message: string | null
   footer_message: string | null
   min_order: number
+  banner_url: string | null
   delivery_cost: number
-  schedule: Record<string, ScheduleDay> | null
+  delivery_info: string | null
+  custom_domain: string | null
+  schedule: Record<string, ScheduleDay> | null // Legacy
+  physical_schedule: Record<string, ScheduleDay> | null
+  online_schedule: Record<string, ScheduleDay> | null
+  sliders: Slider[]
   country: string | null
-  is_active: boolean
-  created_at: string
+  is_active: boolean;
+  coupons_enabled: boolean;
+  metadata?: any;
+  low_stock_threshold: number;
+  created_at: string;
+}
+
+export interface Slider {
+  id: string | number
+  url: string
+  link: string
+  active: boolean
 }
 
 export interface ScheduleDay {
@@ -73,6 +89,7 @@ export interface Product {
   category_name?: string
   is_active: boolean
   is_featured: boolean
+  sort_order: number
   created_at: string
 }
 
@@ -86,6 +103,7 @@ export interface ProductFormData {
   category_id: string
   is_active: boolean
   is_featured: boolean
+  sort_order?: number
 }
 
 // --- Categoría ---
@@ -96,6 +114,37 @@ export interface Category {
   sort_order: number
   product_count?: number
   created_at: string
+}
+
+// --- Cupón ---
+export interface Coupon {
+  id: string
+  store_id: string
+  code: string
+  type: 1 | 2 | 3 | 4 | 5 | 6 // 1: % All, 2: $ All, 3: % Selected, 4: $ Selected, 5: % Cat, 6: $ Cat
+  value: number
+  start_date: string
+  end_date: string | null
+  usage_limit: number | null
+  usage_count: number
+  min_purchase_amount: number
+  is_active: boolean
+  applicable_products: string[] // List of product IDs
+  applicable_categories: string[] // List of category IDs
+  created_at: string
+}
+
+export interface CouponFormData {
+  code: string
+  type: number
+  value: number | string
+  start_date: string
+  end_date: string
+  usage_limit: number | string
+  min_purchase_amount: number | string
+  is_active: boolean
+  applicable_products: string[]
+  applicable_categories: string[]
 }
 
 // --- Pedido ---
