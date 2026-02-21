@@ -486,7 +486,7 @@ export const tenantApi = {
         provider,
         config,
         is_master: false
-      })
+      }, { onConflict: 'store_id,provider,is_master' })
       .select()
       .single()
 
