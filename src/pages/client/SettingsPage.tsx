@@ -13,6 +13,7 @@ const TABS = [
   { id: 'contact', label: 'Información', icon: MessageSquare },
   { id: 'orders', label: 'Pedidos', icon: LayoutGrid },
   { id: 'customization', label: 'Diseño', icon: Palette },
+  { id: 'payments', label: 'Pagos', icon: CreditCard, hidden: true },
   { id: 'account', label: 'Cuenta', icon: ShieldCheck },
 ]
 
@@ -347,7 +348,7 @@ export default function SettingsPage() {
 
       {/* Tabs */}
       <div className="flex gap-2 overflow-x-auto border-b border-slate-100 px-1 pb-px scrollbar-hide">
-        {TABS.map((tab) => (
+        {TABS.filter(tab => !(tab as any).hidden).map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
