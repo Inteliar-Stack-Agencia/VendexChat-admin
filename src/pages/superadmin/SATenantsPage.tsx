@@ -12,7 +12,7 @@ export default function SATenantsPage() {
     const [loading, setLoading] = useState(true)
     const [showModal, setShowModal] = useState(false)
     const [saving, setSaving] = useState(false)
-    const [newTenant, setNewTenant] = useState({ name: '', slug: '', email: '', country: 'Argentina' })
+    const [newTenant, setNewTenant] = useState({ name: '', slug: '', email: '', country: 'Argentina', plan_type: 'free' })
 
     const loadTenants = () => {
         setLoading(true)
@@ -41,10 +41,11 @@ export default function SATenantsPage() {
                 slug: newTenant.slug.toLowerCase().replace(/\s+/g, '-'),
                 email: newTenant.email,
                 country: newTenant.country,
+                plan_type: newTenant.plan_type,
                 is_active: true
             })
             setShowModal(false)
-            setNewTenant({ name: '', slug: '', email: '', country: 'Argentina' })
+            setNewTenant({ name: '', slug: '', email: '', country: 'Argentina', plan_type: 'free' })
             loadTenants()
         } catch (err: any) {
             console.error('Error creating tenant:', err)
@@ -242,6 +243,18 @@ export default function SATenantsPage() {
                                     <option value="Colombia">🇨🇴 Colombia</option>
                                     <option value="España">🇪🇸 España</option>
                                     <option value="Otros">Otro / Internacional</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Plan de Suscripción</label>
+                                <select
+                                    className="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
+                                    value={newTenant.plan_type}
+                                    onChange={(e) => setNewTenant(t => ({ ...t, plan_type: e.target.value }))}
+                                >
+                                    <option value="free">🆓 Free</option>
+                                    <option value="pro">⚡ Pro</option>
+                                    <option value="business">🏢 Business</option>
                                 </select>
                             </div>
                             <div className="bg-amber-50 p-4 rounded-xl border border-amber-100 flex gap-3">

@@ -665,7 +665,7 @@ export const superadminApi = {
     if (error) throw error
   },
 
-  createTenant: async (data: { name: string; slug: string; email: string; country?: string; is_active?: boolean; password?: string; whatsapp?: string }) => {
+  createTenant: async (data: { name: string; slug: string; email: string; country?: string; is_active?: boolean; password?: string; whatsapp?: string; plan_type?: string }) => {
     // 1. Create the Auth User (Invitation) using a temp client to avoid logout
     const { createTempClient } = await import('../supabaseClient')
     const tempClient = createTempClient()
@@ -721,6 +721,16 @@ export const superadminApi = {
     }
 
     const { data: finalStore } = await supabase.from('stores').select('*').eq('id', storeId).single()
+
+    // 3. Create subscription for the chosen plan
+    if (storeId && data.plan_type && data.plan_type !== 'free') {
+      await supabase.from('subscriptions').upsert({
+        store_id: storeId,
+        plan_type: data.plan_type,
+        status: 'active',
+      }, { onConflict: 'store_id' })
+    }
+
     return finalStore as Tenant
   },
 
