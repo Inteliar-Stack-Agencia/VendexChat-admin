@@ -231,7 +231,7 @@ export const productsApi = {
 
     // Seleccionamos campos específicos para evitar traer datos pesados (como base64) si no son necesarios
     // Si ya migramos a Storage, image_url será corto, pero por ahora somos precavidos
-    let query = supabase.from('products').select('id, name, description, price, image_url, stock, is_active, category_id, unlimited_stock, sort_order, categories(name)', { count: 'exact' }).eq('store_id', storeId)
+    let query = supabase.from('products').select('id, name, description, price, image_url, stock, is_active, category_id, unlimited_stock, sort_order, store_id, is_featured, created_at, categories(name)', { count: 'exact' }).eq('store_id', storeId)
 
     if (params?.search) query = query.ilike('name', `%${params.search}%`)
     if (params?.category_id) query = query.eq('category_id', params.category_id)
