@@ -14,6 +14,7 @@ import type {
   Coupon,
   CouponFormData
 } from '../types'
+import { normalizeProductData } from '../utils/helpers'
 
 /**
  * Utilidad para obtener el store_id del usuario actual con lógica de "Auto-reparación"
@@ -236,9 +237,10 @@ export const productsApi = {
     const from = ((params?.page || 1) - 1) * (params?.limit || 10)
     const to = from + (params?.limit || 10) - 1
 
-    // Ordenamos por sort_order (ascendente) y luego por fecha (descendente)
+    // Ordenamos por is_active (activos primero), luego por sort_order (ascendente) y luego por fecha (descendente)
     const { data, error, count } = await query
       .range(from, to)
+      .order('is_active', { ascending: false })
       .order('sort_order', { ascending: true })
       .order('created_at', { ascending: false })
 
@@ -276,8 +278,12 @@ export const productsApi = {
 
     const nextOrder = (lastProd?.sort_order || 0) + 10
 
+    const { name, description } = normalizeProductData(data.name, data.description || '')
+
     const { data: newProd, error } = await supabase.from('products').insert({
       ...data,
+      name,
+      description,
       store_id: storeId,
       price: Number(data.price),
       stock: Number(data.stock),
@@ -298,8 +304,19 @@ export const productsApi = {
 
   update: async (id: string | number, data: Partial<ProductFormData>) => {
     const updateData: any = { ...data }
-    if (data.price) updateData.price = typeof data.price === 'string' ? parseFloat(data.price) : data.price
-    if (data.stock) updateData.stock = typeof data.stock === 'string' ? parseInt(data.stock) : data.stock
+
+    // Normalizar si vienen nombre o descripción
+    if (data.name !== undefined || data.description !== undefined) {
+      const normalized = normalizeProductData(
+        data.name ?? '',
+        data.description ?? ''
+      )
+      if (data.name !== undefined) updateData.name = normalized.name
+      if (data.description !== undefined) updateData.description = normalized.description
+    }
+
+    if (data.price !== undefined) updateData.price = typeof data.price === 'string' ? parseFloat(data.price) : data.price
+    if (data.stock !== undefined) updateData.stock = typeof data.stock === 'string' ? parseInt(data.stock) : data.stock
 
     const { data: updatedProd, error } = await supabase.from('products').update(updateData).eq('id', id).select('*, categories(name)').single()
     if (error) throw error
@@ -430,6 +447,67 @@ export const customersApi = {
       .single()
     if (error) throw error
     return data
+  }
+}
+
+// --- Estadísticas ---
+export const statsApi = {
+  getOverview: async (range: '7d' | '30d' | 'all' = '30d') => {
+    const storeId = await getStoreId()
+    const query = supabase.from('orders').select('total, created_at, status').eq('store_id', storeId)
+
+    if (range !== 'all') {
+      const days = range === '7d' ? 7 : 30
+      const date = new Date()
+      date.setDate(date.getDate() - days)
+      query.gte('created_at', date.toISOString())
+    }
+
+    const { data, error } = await query
+    if (error) throw error
+
+    const totalSales = (data || [])
+      .filter(o => o.status === 'completed' || o.status === 'paid' || o.status === 'delivered')
+      .reduce((acc, curr) => acc + (curr.total || 0), 0)
+
+    const totalOrders = (data || []).length
+    const avgTicket = totalOrders > 0 ? totalSales / totalOrders : 0
+
+    return { totalSales, totalOrders, avgTicket, orders: data || [] }
+  },
+
+  getOrdersByZone: async () => {
+    const storeId = await getStoreId()
+    const { data, error } = await supabase
+      .from('orders')
+      .select('delivery_address, total, status, created_at')
+      .eq('store_id', storeId)
+      .not('delivery_address', 'is', null)
+
+    if (error) throw error
+    return data || []
+  },
+
+  getTopProducts: async () => {
+    const storeId = await getStoreId()
+    const { data, error } = await supabase
+      .from('order_items')
+      .select('quantity, unit_price, product_id, products(name), orders!inner(store_id)')
+      .eq('orders.store_id', storeId)
+
+    if (error) throw error
+    return data || []
+  },
+
+  getTopCustomers: async () => {
+    const storeId = await getStoreId()
+    const { data, error } = await supabase
+      .from('orders')
+      .select('customer_name, customer_whatsapp, total, created_at')
+      .eq('store_id', storeId)
+
+    if (error) throw error
+    return data || []
   }
 }
 
@@ -952,6 +1030,16 @@ export const superadminApi = {
   stopImpersonation: async () => {
     localStorage.removeItem('vendexchat_impersonated_store')
     window.location.href = '/sa/overview'
+  },
+
+  updateSubscription: async (storeId: string, data: any) => {
+    const { data: updated, error } = await supabase
+      .from('subscriptions')
+      .upsert({ store_id: storeId, ...data }, { onConflict: 'store_id' })
+      .select()
+      .single()
+    if (error) throw error
+    return updated
   }
 }
 
@@ -960,10 +1048,10 @@ export const billingApi = {
   getPlans: async (): Promise<any[]> => {
     // Mock de planes (estos podrían venir de una tabla 'plans' en el futuro)
     return [
-      { id: 'free', name: 'Free', price: 0, interval: 'month', features: ['2 Categorías', '10 Productos por cat.', 'Módulos Principales', 'Menú QR'] },
-      { id: 'advance', name: 'Advance', price: 4.99, interval: 'month', features: ['4 Categorías', '20 Productos por cat.', 'Estadísticas', 'Control de Horarios', 'Costo envío por zonas'] },
-      { id: 'pro', name: 'Premium', price: 9.99, interval: 'month', features: ['Categorías Ilimitadas', 'Productos Ilimitados', 'Seguimiento de Pedido', 'Campos Personalizados', 'Exportar a Excel'], is_popular: true },
-      { id: 'vip', name: 'VIP', price: 14.99, interval: 'month', features: ['Todo lo anterior', 'VENDEx Bot (En desarrollo)', 'Cabify Logistics (En desarrollo)', 'Facebook Pixel', 'Google Analytics'] },
+      { id: 'free', name: 'Free', price: 0, annual_price: 0, features: ['2 Categorías', '10 Productos por cat.', 'Módulos Principales', 'Menú QR'] },
+      { id: 'advance', name: 'Advance', price: 4.99, annual_price: 49.90, features: ['4 Categorías', '20 Productos por cat.', 'Estadísticas', 'Control de Horarios', 'Costo envío por zonas'] },
+      { id: 'pro', name: 'Premium', price: 9.99, annual_price: 99.90, features: ['Categorías Ilimitadas', 'Productos Ilimitados', 'Seguimiento de Pedido', 'Campos Personalizados', 'Exportar a Excel'], is_popular: true },
+      { id: 'vip', name: 'VIP', price: 14.99, annual_price: 149.90, features: ['Todo lo anterior', 'VENDEx Bot (En desarrollo)', 'Cabify Logistics (En desarrollo)', 'Facebook Pixel', 'Google Analytics'] },
     ]
   },
 
@@ -985,6 +1073,7 @@ export const billingApi = {
       return {
         plan_type: 'free',
         status: 'active',
+        billing_cycle: 'monthly',
         current_period_end: null
       } as any
     }

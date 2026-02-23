@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Card, Button, Modal } from '../../components/common'
-import { HelpCircle, MessageSquare, Book, Video, ExternalLink, Phone, Truck, CreditCard, Globe } from 'lucide-react'
+import { HelpCircle, MessageSquare, Book, Video, ExternalLink, Phone, Truck, CreditCard, Globe, Sparkles, Image as ImageIcon } from 'lucide-react'
 
 const GUIDES_CONTENT = {
     logistics: {
@@ -92,6 +92,50 @@ const GUIDES_CONTENT = {
                 </div>
             </div>
         )
+    },
+    ai_suggestions: {
+        title: "Sugerencias de IA",
+        icon: <Sparkles className="w-8 h-8 text-amber-500" />,
+        content: (
+            <div className="space-y-6">
+                <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100 flex items-center gap-3">
+                    <Sparkles className="w-5 h-5 text-amber-600" />
+                    <p className="text-sm text-amber-900 font-medium italic">Ilustra tus productos en segundos con fotos profesionales.</p>
+                </div>
+
+                <div className="space-y-6">
+                    <div>
+                        <h4 className="font-black text-slate-900 text-sm uppercase mb-3 px-1">¿Cómo funciona?</h4>
+                        <div className="grid grid-cols-1 gap-3">
+                            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex gap-4">
+                                <span className="text-xl">🔍</span>
+                                <div>
+                                    <p className="text-xs font-bold text-slate-800">Stable Diffusion</p>
+                                    <p className="text-[11px] text-slate-500">Generamos imágenes únicas y profesionales para tus productos usando el poder de Stable Diffusion de forma gratuita e ilimitada.</p>
+                                </div>
+                            </div>
+                            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex gap-4">
+                                <span className="text-xl">✨</span>
+                                <div>
+                                    <p className="text-xs font-bold text-slate-800">Selección Directa</p>
+                                    <p className="text-[11px] text-slate-500">Al elegir una foto, se aplica instantáneamente a tu producto. Sin descargas ni subidas manuales.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="p-5 bg-indigo-50 rounded-3xl border border-indigo-100 flex items-center gap-4">
+                        <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shrink-0 shadow-sm border border-indigo-100">
+                            <ImageIcon className="w-6 h-6 text-indigo-500" />
+                        </div>
+                        <div>
+                            <h4 className="text-xs font-black text-indigo-900 uppercase tracking-widest mb-1">IA de Vanguardia</h4>
+                            <p className="text-[11px] text-indigo-800/70 font-medium">Generá fotos de catálogo, estilo de vida y alta resolución en segundos. Olvidate de buscar en bancos de imágenes genéricos.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )
     }
 }
 
@@ -132,7 +176,8 @@ export default function HelpPage() {
                             {[
                                 { id: 'logistics', label: "Logística y Envíos", icon: "🚚" },
                                 { id: 'payments', label: "Pasarelas de Pago", icon: "💳" },
-                                { id: 'domains', label: "Dominios Propios", icon: "🌐" }
+                                { id: 'domains', label: "Dominios Propios", icon: "🌐" },
+                                { id: 'ai_suggestions', label: "Sugerencias de IA", icon: "✨" }
                             ].map((guide, i) => (
                                 <div
                                     key={i}

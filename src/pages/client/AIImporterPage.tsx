@@ -22,6 +22,7 @@ import FeatureGuard from '../../components/FeatureGuard'
 import { supabase } from '../../supabaseClient'
 import { getStoreId } from '../../services/api'
 import Tesseract from 'tesseract.js'
+import { normalizeProductData } from '../../utils/helpers'
 
 interface TempProduct {
     id: string
@@ -190,11 +191,12 @@ export default function AIImporterPage() {
                 const [catName, prodName, price, desc] = parts
                 if (prodName) {
                     const category = categories.find(c => c.name.toLowerCase() === catName?.toLowerCase())
+                    const normalized = normalizeProductData(prodName, desc || `Importado vía Excel: ${catName}`)
                     extracted.push({
                         id: crypto.randomUUID(),
-                        name: prodName,
+                        name: normalized.name,
                         price: price ? parseFloat(price.replace('$', '').replace(/\./g, '').replace(',', '.')) : 0,
-                        description: desc || `Importado vía Excel: ${catName}`,
+                        description: normalized.description,
                         category_id: category?.id || selectedCategoryId,
                         category_name: category?.name || 'Genérica'
                     })
@@ -223,68 +225,116 @@ export default function AIImporterPage() {
         }
 
         setIsProcessing(true)
-        await new Promise(resolve => setTimeout(resolve, 1500))
 
         try {
-            const lines = textToUse.split('\n').filter(l => l.trim().length > 3)
-            const extracted: TempProduct[] = []
+            const systemPrompt = `Actúa como un experto en extracción de datos de menús y catálogos comerciales.
+            Tu objetivo es convertir texto desordenado en una lista estructurada de productos de ecommerce.
+            
+            REGLAS CRÍTICAS:
+            1. Devuelve EXCLUSIVAMENTE un array de objetos JSON válido.
+            2. Cada objeto debe tener: "name" (string, máx 70 chars), "price" (number), "description" (string).
+            3. Si el texto tiene saltos de línea (ej: el nombre arriba y el precio abajo como "Nombre \\n 1500"), únelos como un solo producto.
+            4. Si detectas ingredientes o detalles después del nombre, ponlos en "description".
+            5. Si no hay precio, usa 0.
+            6. Limpia viñetas (- • *) y espacios innecesarios.
+            7. Responde SOLO el JSON, sin texto adicional, sin bloques de código markdown, solo el array [{},{}].
+            
+            TEXTO PARA PROCESAR:
+            ${textToUse}`;
 
-            lines.forEach((line) => {
-                const priceMatch = line.match(/(?:\$?|USD?|AR?\$?)\s?(\d+(?:[.,]\d{3})*(?:[.,]\d{1,2})?)/i)
-                const priceStr = priceMatch ? priceMatch[1] : '0'
-                const price = parseFloat(priceStr.replace(/\./g, '').replace(',', '.'))
+            const response = await fetch('https://text.pollinations.ai/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    messages: [
+                        { role: 'system', content: systemPrompt },
+                        { role: 'user', content: 'Procesa esta lista ahora. Devuelve solo un array JSON [].' }
+                    ],
+                    model: 'openai',
+                    seed: 42
+                })
+            });
 
-                let remaining = line.replace(priceMatch ? priceMatch[0] : '', '').trim()
-                let description = ''
+            if (!response.ok) throw new Error('Error en el servicio de IA');
 
-                const descKeywords = ['desc:', 'descripci[oó]n:', 'detalle:']
-                for (const kw of descKeywords) {
-                    const regex = new RegExp(`${kw}\\s*(.*)`, 'i')
-                    const match = remaining.match(regex)
-                    if (match) {
-                        description = match[1].trim()
-                        remaining = remaining.replace(match[0], '').trim()
-                        break
-                    }
+            const resultText = await response.text();
+
+            // Limpieza robusta de JSON
+            let cleanJson = resultText.trim();
+            if (cleanJson.includes('```')) {
+                const match = cleanJson.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+                if (match) cleanJson = match[1];
+            }
+
+            const jsonMatch = cleanJson.match(/\[\s*\{[\s\S]*\}\s*\]/);
+            if (jsonMatch) cleanJson = jsonMatch[0];
+
+            let extractedRaw = [];
+            try {
+                extractedRaw = JSON.parse(cleanJson);
+            } catch (e) {
+                console.error("Failed to parse AI JSON:", cleanJson);
+                throw new Error('Formato JSON inválido de la IA');
+            }
+
+            if (!Array.isArray(extractedRaw)) throw new Error('La IA no devolvió una lista');
+
+            const extracted: TempProduct[] = extractedRaw.map((item: any) => {
+                const normalized = normalizeProductData(item.name || 'Sin nombre', item.description || '')
+                return {
+                    id: crypto.randomUUID(),
+                    name: normalized.name.substring(0, 70),
+                    price: typeof item.price === 'number' ? item.price : 0,
+                    description: normalized.description || 'Procesado con IA de alta precisión',
+                    category_id: selectedCategoryId || null
                 }
-
-                if (!description) {
-                    const separators = [' - ', ' – ', ' — ', ' | ', ' desc: ']
-                    for (const sep of separators) {
-                        if (remaining.toLowerCase().includes(sep.toLowerCase())) {
-                            const splitIndex = remaining.toLowerCase().indexOf(sep.toLowerCase())
-                            description = remaining.substring(splitIndex + sep.length).trim()
-                            remaining = remaining.substring(0, splitIndex).trim()
-                            break
-                        }
-                    }
-                }
-
-                const name = remaining
-                    .replace(/^[-•*]\s?/, '')
-                    .replace(/^[,;.\s]+|[,;.\s]+$/g, '')
-                    .trim()
-
-                if (name && name.length > 2 && price > 0) {
-                    extracted.push({
-                        id: crypto.randomUUID(),
-                        name: name.substring(0, 70),
-                        price: price,
-                        description: description || `Escaneado e identificado con IA`,
-                        category_id: selectedCategoryId || null
-                    })
-                }
-            })
+            });
 
             if (extracted.length === 0) {
-                showToast('info', 'No se detectaron productos claros. Podes pegar texto manualmente si es necesario.')
+                // Si la IA devolvió lista vacía, forzar fallback heuristic
+                throw new Error('IA no detectó productos');
             } else {
                 setResults(extracted)
                 setStep(2)
-                showToast('success', `¡Detectamos ${extracted.length} productos!`)
+                showToast('success', `¡IA Mágica detectó ${extracted.length} productos!`)
             }
         } catch (err) {
-            showToast('error', 'Error al procesar los datos.')
+            console.error('AI Processing Error:', err);
+            showToast('info', 'IA ocupada o formato difícil. Usando extracción de emergencia...')
+
+            const lines = textToUse.split('\n').map(l => l.trim()).filter(l => l.length > 2);
+            const fallbackResults: TempProduct[] = [];
+            let lastProduct: TempProduct | null = null;
+
+            lines.forEach(line => {
+                const priceRegex = /(?:\$|ARS|AR\$|USD)?\s?(\d+(?:\.\d{3})*(?:,\d{2})?)/i;
+                const match = line.match(priceRegex);
+                const priceValue = match ? parseFloat(match[1].replace(/\./g, '').replace(',', '.')) : null;
+                const nameOnly = line.replace(priceRegex, '').replace(/^[-•*+]\s?/, '').trim();
+
+                if (priceValue !== null && nameOnly.length < 2 && lastProduct) {
+                    // Es probablemente el precio del producto anterior
+                    lastProduct.price = priceValue;
+                } else if (nameOnly.length > 2) {
+                    const normalized = normalizeProductData(nameOnly, '');
+                    lastProduct = {
+                        id: crypto.randomUUID(),
+                        name: normalized.name.substring(0, 70),
+                        price: priceValue || 0,
+                        description: 'Extracción de emergencia',
+                        category_id: selectedCategoryId || null
+                    };
+                    fallbackResults.push(lastProduct);
+                }
+            });
+
+            if (fallbackResults.length > 0) {
+                setResults(fallbackResults);
+                setStep(2);
+                showToast('success', `Extracción de emergencia: ${fallbackResults.length} productos`);
+            } else {
+                showToast('error', 'No se pudo detectar nada. Intentá con un texto más claro.');
+            }
         } finally {
             setIsProcessing(false)
         }
@@ -303,17 +353,20 @@ export default function AIImporterPage() {
         setIsSaving(true)
         try {
             const storeId = await getStoreId()
-            const productsToInsert = results.map(item => ({
-                store_id: storeId,
-                category_id: item.category_id || selectedCategoryId,
-                name: item.name,
-                price: item.price,
-                description: item.description,
-                image_url: item.image_url || null,
-                is_active: true,
-                stock: 0,
-                unlimited_stock: true
-            }))
+            const productsToInsert = results.map(item => {
+                const { name, description } = normalizeProductData(item.name, item.description)
+                return {
+                    store_id: storeId,
+                    category_id: item.category_id || selectedCategoryId,
+                    name,
+                    price: item.price,
+                    description,
+                    image_url: item.image_url || null,
+                    is_active: true,
+                    stock: 0,
+                    unlimited_stock: true
+                }
+            })
 
             const { error } = await supabase.from('products').insert(productsToInsert)
             if (error) throw error
@@ -384,7 +437,7 @@ export default function AIImporterPage() {
                                         <textarea
                                             value={rawText}
                                             onChange={(e) => setRawText(e.target.value)}
-                                            placeholder="Ejemplo:&#10;Hamburguesa Clásica - $2500 - Con lechuga y tomate&#10;Pizza Margarita, 5000, Mucho queso y albahaca&#10;Limonada desc: Sin azúcar, muy fresca"
+                                            placeholder="REGLA: PRODUCTO - PRECIO - DESCRIPCIÓN&#10;&#10;Ejemplos:&#10;Hamburguesa Clásica - $2500 - Con lechuga y tomate&#10;Pizza Margarita - 5000 - Mucho queso y albahaca&#10;Limonada fresca | 1200 | Jengibre y menta"
                                             className="w-full h-64 p-6 rounded-3xl bg-slate-50 border-2 border-slate-100 text-slate-700 font-medium focus:border-indigo-500 focus:ring-0 transition-all resize-none placeholder:text-slate-300 text-sm"
                                         />
                                     </div>
@@ -553,7 +606,7 @@ export default function AIImporterPage() {
                                                     <input
                                                         type="text"
                                                         value={item.name}
-                                                        onChange={(e) => setResults(prev => prev.map(i => i.id === item.id ? { ...i, name: e.target.value } : i))}
+                                                        onChange={(e) => setResults(prev => prev.map(i => i.id === item.id ? { ...i, name: e.target.value.toUpperCase() } : i))}
                                                         className="bg-transparent border-0 font-bold text-slate-900 focus:ring-1 focus:ring-indigo-500 rounded px-2 -ml-2 text-sm w-full"
                                                     />
                                                 </td>
@@ -572,7 +625,7 @@ export default function AIImporterPage() {
                                                     <input
                                                         type="text"
                                                         value={item.description}
-                                                        onChange={(e) => setResults(prev => prev.map(i => i.id === item.id ? { ...i, description: e.target.value } : i))}
+                                                        onChange={(e) => setResults(prev => prev.map(i => i.id === item.id ? { ...i, description: e.target.value.toLowerCase() } : i))}
                                                         className="bg-transparent border-0 text-slate-400 font-medium italic focus:ring-1 focus:ring-indigo-500 rounded px-2 -ml-2 text-xs w-full"
                                                     />
                                                 </td>

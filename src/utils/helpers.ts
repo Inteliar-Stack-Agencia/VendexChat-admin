@@ -69,3 +69,15 @@ export function truncate(text: string, maxLength: number): string {
 export function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
 }
+
+/**
+ * Normaliza los datos de un producto siguiendo la regla:
+ * - Nombre: SIEMPRE EN MAYÚSCULAS
+ * - Descripción: siempre en minúsculas
+ */
+export function normalizeProductData(name: string, description: string = '') {
+  return {
+    name: name.toUpperCase().trim(),
+    description: (description || '').toLowerCase().trim()
+  }
+}

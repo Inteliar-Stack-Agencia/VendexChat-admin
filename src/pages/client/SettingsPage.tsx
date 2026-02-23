@@ -171,9 +171,16 @@ export default function SettingsPage() {
   const handleSaveContact = async (e: FormEvent) => {
     e.preventDefault()
     setSaving(true)
+
+    // Sanitize social handles
+    const cleanInstagram = instagram.trim().replace(/^@/, '').replace(/^(https?:\/\/)?(www\.)?instagram\.com\//i, '').replace(/\/$/, '')
+    const cleanFacebook = facebook.trim().replace(/^(https?:\/\/)?(www\.)?facebook\.com\//i, '').replace(/\/$/, '')
+
     try {
-      await tenantApi.updateMe({ whatsapp, email, address, instagram, facebook })
-      handleUpdateTenantState({ whatsapp, email, address, instagram, facebook })
+      await tenantApi.updateMe({ whatsapp, email, address, instagram: cleanInstagram, facebook: cleanFacebook })
+      handleUpdateTenantState({ whatsapp, email, address, instagram: cleanInstagram, facebook: cleanFacebook })
+      setInstagram(cleanInstagram)
+      setFacebook(cleanFacebook)
       showToast('success', 'Contacto actualizado')
     } catch {
       showToast('error', 'Error al guardar')

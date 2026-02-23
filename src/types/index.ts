@@ -60,6 +60,7 @@ export interface Tenant {
   coupons_enabled: boolean;
   metadata?: any;
   low_stock_threshold: number;
+  popups: Popup[];
   created_at: string;
 }
 
@@ -73,6 +74,13 @@ export interface Slider {
 export interface ScheduleDay {
   open: boolean
   intervals: { start: string; end: string }[]
+}
+
+export interface Popup {
+  id: string | number
+  title: string
+  message: string
+  active: boolean
 }
 
 // --- Producto ---
@@ -212,6 +220,10 @@ export interface Subscription {
   store_id: string
   plan_type: 'free' | 'advance' | 'pro' | 'premium' | 'vip'
   status: 'active' | 'past_due' | 'canceled' | 'trial'
+  billing_cycle: 'monthly' | 'annual'
+  discount_percentage: number
+  is_manual: boolean
+  internal_notes: string | null
   current_period_end: string | null
   cancel_at_period_end: boolean
   stripe_subscription_id?: string
@@ -223,6 +235,7 @@ export interface SubscriptionPlan {
   id: string
   name: string
   price: number
+  annual_price: number
   interval: 'month' | 'year'
   features: string[]
   is_popular?: boolean

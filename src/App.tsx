@@ -33,6 +33,7 @@ import SlidersPage from './pages/client/SlidersPage'
 import PopupsPage from './pages/client/PopupsPage'
 import HelpPage from './pages/client/HelpPage'
 import AIImporterPage from './pages/client/AIImporterPage'
+import StatsPage from './pages/client/StatsPage'
 
 // Superadmin pages (Legacy)
 import SuperadminDashboard from './pages/superadmin/SuperadminDashboard'
@@ -92,6 +93,7 @@ export default function App() {
             <Route path="/popups" element={<PopupsPage />} />
             <Route path="/ayuda" element={<HelpPage />} />
             <Route path="/ai-importer" element={<AIImporterPage />} />
+            <Route path="/stats" element={<StatsPage />} />
 
             {/* Redirigir root del merchant a dashboard */}
             <Route index element={<Navigate to="/dashboard" replace />} />

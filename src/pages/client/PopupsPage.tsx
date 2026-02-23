@@ -1,16 +1,51 @@
-import { useState } from 'react'
-import { Card, Button, Input } from '../../components/common'
-import { Bell, Save, Trash2, Plus, Layout, MessageSquare } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Card, Button, Input, LoadingSpinner } from '../../components/common'
+import { Bell, Save, Trash2, Plus, Layout } from 'lucide-react'
 import { showToast } from '../../components/common/Toast'
+import { tenantApi } from '../../services/api'
+import { Popup } from '../../types'
 
 export default function PopupsPage() {
-    const [popups, setPopups] = useState([
-        { id: 1, title: '¡Envío Gratis!', message: 'Aprovecha envío gratis en compras mayores a $5000', active: true },
-    ])
+    const [popups, setPopups] = useState<Popup[]>([])
+    const [loading, setLoading] = useState(true)
+    const [saving, setSaving] = useState(false)
 
-    const handleSave = () => {
-        showToast('success', 'Mensajes emergentes actualizados')
+    useEffect(() => {
+        loadPopups()
+    }, [])
+
+    const loadPopups = async () => {
+        try {
+            const tenant = await tenantApi.getMe()
+            setPopups(tenant.popups || [])
+        } catch (err) {
+            showToast('error', 'Error al cargar los popups')
+        } finally {
+            setLoading(false)
+        }
     }
+
+    const handleAdd = () => {
+        setPopups([...popups, { id: Date.now(), title: 'Nuevo Popup', message: '', active: true }])
+    }
+
+    const handleDelete = (id: string | number) => {
+        setPopups(popups.filter(p => p.id !== id))
+    }
+
+    const handleSave = async () => {
+        setSaving(true)
+        try {
+            await tenantApi.updateMe({ popups })
+            showToast('success', 'Mensajes emergentes actualizados')
+        } catch (err) {
+            showToast('error', 'Error al guardar los popups')
+        } finally {
+            setSaving(false)
+        }
+    }
+
+    if (loading) return <LoadingSpinner text="Cargando popups..." />
 
     return (
         <div className="space-y-8 animate-fade-in pb-20">
@@ -19,7 +54,7 @@ export default function PopupsPage() {
                     <h1 className="text-3xl font-black text-slate-900 tracking-tight">Popups</h1>
                     <p className="text-slate-400 font-bold uppercase text-[10px] tracking-widest mt-1">Mensajes automáticos para tus clientes</p>
                 </div>
-                <Button size="sm" className="bg-indigo-600">
+                <Button onClick={handleAdd} size="sm" className="bg-indigo-600">
                     <Plus className="w-4 h-4 mr-2" />
                     Nuevo Popup
                 </Button>
@@ -36,32 +71,64 @@ export default function PopupsPage() {
                                 <h3 className="font-black text-slate-900 uppercase text-xs">Configuración de Alerta</h3>
                                 <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest">Se mostrará al cargar la página</p>
                             </div>
-                            <button className="text-slate-300 hover:text-rose-500 transition-colors">
+                            <button
+                                onClick={() => handleDelete(popup.id)}
+                                className="text-slate-300 hover:text-rose-500 transition-colors"
+                            >
                                 <Trash2 className="w-5 h-5" />
                             </button>
                         </div>
 
                         <div className="space-y-4">
-                            <Input label="Título del mensaje" value={popup.title} />
+                            <Input
+                                label="Título del mensaje"
+                                value={popup.title}
+                                onChange={(e) => {
+                                    const newPopups = popups.map(p => p.id === popup.id ? { ...p, title: e.target.value } : p)
+                                    setPopups(newPopups)
+                                }}
+                            />
                             <div>
                                 <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Contenido</label>
                                 <textarea
                                     className="w-full px-4 py-3 bg-slate-50 border-none rounded-2xl text-sm font-medium focus:ring-2 focus:ring-indigo-600 transition-all"
                                     rows={3}
                                     value={popup.message}
+                                    onChange={(e) => {
+                                        const newPopups = popups.map(p => p.id === popup.id ? { ...p, message: e.target.value } : p)
+                                        setPopups(newPopups)
+                                    }}
                                 />
                             </div>
                             <label className="flex items-center gap-3 cursor-pointer p-2 hover:bg-slate-50 rounded-xl transition-colors">
-                                <input type="checkbox" checked={popup.active} className="w-5 h-5 rounded-lg border-none bg-slate-200 text-indigo-600 focus:ring-0" />
+                                <input
+                                    type="checkbox"
+                                    checked={popup.active}
+                                    onChange={(e) => {
+                                        const newPopups = popups.map(p => p.id === popup.id ? { ...p, active: e.target.checked } : p)
+                                        setPopups(newPopups)
+                                    }}
+                                    className="w-5 h-5 rounded-lg border-none bg-slate-200 text-indigo-600 focus:ring-0"
+                                />
                                 <span className="text-xs font-bold text-slate-600 uppercase">Activar este mensaje</span>
                             </label>
                         </div>
                     </Card>
                 ))}
+
+                {popups.length === 0 && (
+                    <div className="md:col-span-2 py-20 flex flex-col items-center justify-center text-slate-400">
+                        <Bell className="w-12 h-12 mb-4 opacity-20" />
+                        <p className="font-bold uppercase text-[10px] tracking-widest">No tienes mensajes configurados</p>
+                        <Button onClick={handleAdd} variant="outline" className="mt-4 border-dashed border-2">
+                            Crear mi primer popup
+                        </Button>
+                    </div>
+                )}
             </div>
 
             <div className="flex justify-end pt-4">
-                <Button onClick={handleSave} className="bg-indigo-600 px-10 h-14 rounded-2xl font-black uppercase tracking-widest text-xs shadow-lg shadow-indigo-100">
+                <Button onClick={handleSave} loading={saving} className="bg-indigo-600 px-10 h-14 rounded-2xl font-black uppercase tracking-widest text-xs shadow-lg shadow-indigo-100">
                     <Save className="w-4 h-4 mr-2" />
                     Guardar Cambios
                 </Button>

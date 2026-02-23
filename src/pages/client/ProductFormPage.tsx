@@ -32,10 +32,14 @@ export default function ProductFormPage() {
 
   const [errors, setErrors] = useState<Record<string, string>>({})
 
-  // Cargar categorías
   useEffect(() => {
-    categoriesApi.list().then(setCategories).catch(console.error)
-  }, [])
+    categoriesApi.list().then(res => {
+      setCategories(res)
+      if (!isEditing && res.length > 0) {
+        setForm(prev => ({ ...prev, category_id: res[0].id }))
+      }
+    }).catch(console.error)
+  }, [isEditing])
 
   // Cargar producto si estamos editando
   useEffect(() => {
@@ -65,7 +69,14 @@ export default function ProductFormPage() {
   }, [id, isEditing, navigate])
 
   const updateField = (field: keyof ProductFormData, value: unknown) => {
-    setForm((prev) => ({ ...prev, [field]: value }))
+    let finalValue = value
+    if (field === 'name' && typeof value === 'string') {
+      finalValue = value.toUpperCase()
+    } else if (field === 'description' && typeof value === 'string') {
+      finalValue = value.toLowerCase()
+    }
+
+    setForm((prev) => ({ ...prev, [field]: finalValue }))
     setErrors((prev) => ({ ...prev, [field]: '' }))
   }
 

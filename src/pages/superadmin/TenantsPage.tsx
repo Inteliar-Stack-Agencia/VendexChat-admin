@@ -1,5 +1,5 @@
 import { useState, useEffect, FormEvent } from 'react'
-import { Plus, Pencil, Trash2, ExternalLink, Store } from 'lucide-react'
+import { Plus, Pencil, Trash2, ExternalLink, Store, CreditCard } from 'lucide-react'
 import { Card, Button, Input, Modal, Badge, LoadingSpinner, EmptyState, ConfirmDialog } from '../../components/common'
 import { showToast } from '../../components/common/Toast'
 import { superadminApi } from '../../services/api'
@@ -24,6 +24,16 @@ export default function TenantsPage() {
   const [formPassword, setFormPassword] = useState('')
   const [formWhatsapp, setFormWhatsapp] = useState('')
   const [formActive, setFormActive] = useState(true)
+
+  // Subscription management
+  const [subModalOpen, setSubModalOpen] = useState(false)
+  const [selectedStoreForSub, setSelectedStoreForSub] = useState<Tenant | null>(null)
+  const [subFormPlan, setSubFormPlan] = useState('free')
+  const [subFormStatus, setSubFormStatus] = useState('active')
+  const [subFormCycle, setSubFormCycle] = useState('monthly')
+  const [subFormEnd, setSubFormEnd] = useState('')
+  const [subFormNotes, setSubFormNotes] = useState('')
+  const [subSaving, setSubSaving] = useState(false)
 
   const loadStores = async () => {
     try {
@@ -60,6 +70,58 @@ export default function TenantsPage() {
     setFormWhatsapp(tenant.whatsapp || '')
     setFormActive(tenant.is_active)
     setModalOpen(true)
+  }
+
+  const openSubscription = async (tenant: Tenant) => {
+    setSelectedStoreForSub(tenant)
+    setSubModalOpen(true)
+    setSubSaving(true) // Show loading state inside modal while fetching
+    try {
+      const { data: sub } = await superadminApi.listSubscriptions().then(subs => ({
+        data: subs.find((s: any) => s.store_id === tenant.id)
+      }))
+
+      if (sub) {
+        setSubFormPlan(sub.plan_type)
+        setSubFormStatus(sub.status)
+        setSubFormCycle(sub.billing_cycle || 'monthly')
+        setSubFormEnd(sub.current_period_end ? new Date(sub.current_period_end).toISOString().split('T')[0] : '')
+        setSubFormNotes(sub.internal_notes || '')
+      } else {
+        setSubFormPlan('free')
+        setSubFormStatus('active')
+        setSubFormCycle('monthly')
+        setSubFormEnd('')
+        setSubFormNotes('')
+      }
+    } catch (err) {
+      console.error('Error fetching sub:', err)
+      showToast('error', 'Error al cargar suscripción')
+    } finally {
+      setSubSaving(false)
+    }
+  }
+
+  const handleSubSubmit = async (e: FormEvent) => {
+    e.preventDefault()
+    if (!selectedStoreForSub) return
+    setSubSaving(true)
+    try {
+      await superadminApi.updateSubscription(selectedStoreForSub.id, {
+        plan_type: subFormPlan,
+        status: subFormStatus,
+        billing_cycle: subFormCycle,
+        current_period_end: subFormEnd || null,
+        internal_notes: subFormNotes,
+        is_manual: true
+      })
+      showToast('success', 'Suscripción actualizada')
+      setSubModalOpen(false)
+    } catch (err) {
+      showToast('error', 'Error al actualizar suscripción')
+    } finally {
+      setSubSaving(false)
+    }
   }
 
   const handleSubmit = async (e: FormEvent) => {
@@ -180,6 +242,9 @@ export default function TenantsPage() {
                         <button onClick={() => openEdit(tenant)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500">
                           <Pencil className="w-4 h-4" />
                         </button>
+                        <button onClick={() => openSubscription(tenant)} className="p-1.5 rounded-lg hover:bg-indigo-50 text-indigo-600" title="Gestionar Suscripción">
+                          <CreditCard className="w-4 h-4" />
+                        </button>
                         <button onClick={() => setDeleteId(tenant.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-500 hover:text-red-600">
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -225,6 +290,75 @@ export default function TenantsPage() {
         confirmText="Eliminar"
         loading={deleting}
       />
+
+      {/* Modal Suscripción */}
+      <Modal isOpen={subModalOpen} onClose={() => setSubModalOpen(false)} title={`Suscripción: ${selectedStoreForSub?.name}`}>
+        <form onSubmit={handleSubSubmit} className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Plan</label>
+              <select
+                value={subFormPlan}
+                onChange={(e) => setSubFormPlan(e.target.value)}
+                className="w-full rounded-lg border-gray-300 text-sm focus:ring-emerald-500 focus:border-emerald-500"
+              >
+                <option value="free">Free</option>
+                <option value="pro">Pro</option>
+                <option value="premium">Premium</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Estado</label>
+              <select
+                value={subFormStatus}
+                onChange={(e) => setSubFormStatus(e.target.value)}
+                className="w-full rounded-lg border-gray-300 text-sm focus:ring-emerald-500 focus:border-emerald-500"
+              >
+                <option value="active">Activo</option>
+                <option value="trial">Prueba</option>
+                <option value="past_due">Vencido</option>
+                <option value="canceled">Cancelado</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Ciclo</label>
+              <select
+                value={subFormCycle}
+                onChange={(e) => setSubFormCycle(e.target.value)}
+                className="w-full rounded-lg border-gray-300 text-sm focus:ring-emerald-500 focus:border-emerald-500"
+              >
+                <option value="monthly">Mensual</option>
+                <option value="annual">Anual</option>
+              </select>
+            </div>
+            <Input
+              label="Vence el"
+              type="date"
+              value={subFormEnd}
+              onChange={(e) => setSubFormEnd(e.target.value)}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Notas internas (Admin)</label>
+            <textarea
+              value={subFormNotes}
+              onChange={(e) => setSubFormNotes(e.target.value)}
+              className="w-full rounded-lg border-gray-300 text-sm focus:ring-emerald-500 focus:border-emerald-500"
+              rows={3}
+              placeholder="Ej: Pago recibido por transferencia bancaria..."
+            />
+          </div>
+
+          <div className="flex justify-end gap-3 pt-2">
+            <Button variant="secondary" type="button" onClick={() => setSubModalOpen(false)}>Cancelar</Button>
+            <Button type="submit" loading={subSaving}>Guardar Suscripción</Button>
+          </div>
+        </form>
+      </Modal>
     </div>
   )
 }

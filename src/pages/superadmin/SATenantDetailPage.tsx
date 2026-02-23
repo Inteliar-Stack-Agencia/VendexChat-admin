@@ -25,11 +25,17 @@ export default function SATenantDetailPage() {
     const { id } = useParams()
     const [tenant, setTenant] = useState<Tenant | null>(null)
     const [loading, setLoading] = useState(true)
+    const [editingSlug, setEditingSlug] = useState(false)
+    const [newSlug, setNewSlug] = useState('')
+    const [savingSlug, setSavingSlug] = useState(false)
 
     useEffect(() => {
         if (id) {
             superadminApi.getTenant(id)
-                .then(setTenant)
+                .then(t => {
+                    setTenant(t)
+                    setNewSlug(t.slug)
+                })
                 .finally(() => setLoading(false))
         }
     }, [id])
@@ -43,6 +49,22 @@ export default function SATenantDetailPage() {
             showToast('success', `Tienda ${newStatus ? 'activada' : 'suspendida'} con éxito.`)
         } catch (err) {
             showToast('error', 'Error al cambiar el estado de la tienda.')
+        }
+    }
+
+    const handleUpdateSlug = async () => {
+        if (!tenant || !id || !newSlug.trim()) return
+        setSavingSlug(true)
+        try {
+            const sanitizedSlug = newSlug.trim().toLowerCase().replace(/\s+/g, '-')
+            await superadminApi.updateTenant(id, { slug: sanitizedSlug })
+            setTenant({ ...tenant, slug: sanitizedSlug })
+            setEditingSlug(false)
+            showToast('success', 'Slug actualizado correctamente.')
+        } catch (err) {
+            showToast('error', 'Error al actualizar el slug. Podría estar duplicado.')
+        } finally {
+            setSavingSlug(false)
         }
     }
 
@@ -98,11 +120,42 @@ export default function SATenantDetailPage() {
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
                                 <div>
                                     <label className="block text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2">Slug del Negocio</label>
-                                    <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
-                                        <span className="font-bold text-slate-900">/{tenant.slug}</span>
-                                        <a href={`https://${tenant.slug}.vendexchat.app`} target="_blank" rel="noreferrer">
-                                            <ExternalLink className="w-4 h-4 text-slate-400 hover:text-indigo-600 cursor-pointer transition-colors" />
-                                        </a>
+                                    <div className="flex items-center gap-2">
+                                        {editingSlug ? (
+                                            <div className="flex-1 flex gap-2">
+                                                <input
+                                                    type="text"
+                                                    value={newSlug}
+                                                    onChange={(e) => setNewSlug(e.target.value)}
+                                                    className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500/20 outline-none"
+                                                />
+                                                <button
+                                                    onClick={handleUpdateSlug}
+                                                    disabled={savingSlug}
+                                                    className="px-3 py-2 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+                                                >
+                                                    {savingSlug ? '...' : 'OK'}
+                                                </button>
+                                                <button
+                                                    onClick={() => { setEditingSlug(false); setNewSlug(tenant.slug); }}
+                                                    className="px-3 py-2 bg-slate-200 text-slate-600 text-xs font-bold rounded-lg hover:bg-slate-300"
+                                                >
+                                                    X
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <div className="flex-1 flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
+                                                <span className="font-bold text-slate-900">/{tenant.slug}</span>
+                                                <div className="flex items-center gap-3">
+                                                    <button onClick={() => setEditingSlug(true)} className="text-[10px] font-black text-indigo-600 hover:text-indigo-800 uppercase tracking-widest">
+                                                        Editar
+                                                    </button>
+                                                    <a href={`https://${tenant.slug}.vendexchat.app`} target="_blank" rel="noreferrer">
+                                                        <ExternalLink className="w-4 h-4 text-slate-400 hover:text-indigo-600 cursor-pointer transition-colors" />
+                                                    </a>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                                 <div>

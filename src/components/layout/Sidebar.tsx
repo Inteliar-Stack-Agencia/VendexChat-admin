@@ -19,7 +19,8 @@ import {
   DollarSign,
   Bot,
   Truck,
-  Wand2
+  Wand2,
+  BarChart3
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -138,6 +139,11 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                   <Wand2 className="w-5 h-5" />
                   Importador IA
                   <span className="ml-auto text-[8px] bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded font-black uppercase">VIP</span>
+                </NavLink>
+                <NavLink to="/stats" className={linkClass} onClick={onClose}>
+                  <BarChart3 className="w-5 h-5" />
+                  Estadísticas
+                  <span className="ml-auto text-[8px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded font-black uppercase">PRO</span>
                 </NavLink>
               </div>
             </>

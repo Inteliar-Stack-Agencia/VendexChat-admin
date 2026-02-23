@@ -7,14 +7,16 @@ initMercadoPago(import.meta.env.VITE_MP_PUBLIC_KEY)
 
 interface MPPaymentBrickProps {
     plan: SubscriptionPlan
+    billingCycle: 'monthly' | 'annual'
     storeId: string
     onSuccess: (paymentId: string) => void
     onCancel: () => void
 }
 
-export default function MPPaymentBrick({ plan, storeId, onSuccess, onCancel }: MPPaymentBrickProps) {
+export default function MPPaymentBrick({ plan, billingCycle, storeId, onSuccess, onCancel }: MPPaymentBrickProps) {
+    const amount = billingCycle === 'annual' ? plan.annual_price : plan.price;
     const initialization = {
-        amount: plan.price,
+        amount,
     }
 
     const customization: any = {
@@ -38,6 +40,8 @@ export default function MPPaymentBrick({ plan, storeId, onSuccess, onCancel }: M
                 body: JSON.stringify({
                     formData,
                     planId: plan.id,
+                    billingCycle,
+                    amount,
                     storeId: storeId
                 }),
             })
@@ -71,8 +75,8 @@ export default function MPPaymentBrick({ plan, storeId, onSuccess, onCancel }: M
     return (
         <div className="space-y-4">
             <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 flex justify-between items-center mb-4">
-                <span className="text-sm font-bold text-slate-600">Plan: {plan.name}</span>
-                <span className="text-lg font-black text-indigo-600">${plan.price}</span>
+                <span className="text-sm font-bold text-slate-600">Plan: {plan.name} ({billingCycle === 'monthly' ? 'Mensual' : 'Anual'})</span>
+                <span className="text-lg font-black text-indigo-600">${amount}</span>
             </div>
 
             <Payment

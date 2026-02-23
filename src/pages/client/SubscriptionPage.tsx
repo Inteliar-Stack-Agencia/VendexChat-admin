@@ -24,6 +24,7 @@ export default function SubscriptionPage() {
     const [showCheckoutModal, setShowCheckoutModal] = useState(false)
     const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(null)
     const [isProcessing, setIsProcessing] = useState(false)
+    const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('monthly')
 
     useEffect(() => {
         const loadData = async () => {
@@ -40,6 +41,9 @@ export default function SubscriptionPage() {
             try {
                 const subData = await billingApi.getCurrentSubscription()
                 setCurrentSub(subData)
+                if (subData?.billing_cycle) {
+                    setBillingCycle(subData.billing_cycle)
+                }
             } catch (err) {
                 console.error('Error loading current subscription:', err)
                 // No mostramos toast aquí porque ya devolvemos un estado por defecto en el API, 
@@ -105,7 +109,9 @@ export default function SubscriptionPage() {
                                 <p className="text-indigo-200 text-[10px] font-black uppercase tracking-widest">Plan Actual</p>
                                 <div className="flex items-center gap-2">
                                     <h3 className="text-2xl font-black uppercase tracking-tight">VENDEx {currentSub.plan_type}</h3>
-                                    <div className="px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/30 text-[10px] font-black uppercase text-emerald-400">Activo</div>
+                                    <div className="px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/30 text-[10px] font-black uppercase text-emerald-400">
+                                        {currentSub.status === 'active' ? `Activo (${currentSub.billing_cycle === 'annual' ? 'Anual' : 'Mensual'})` : currentSub.status}
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -125,16 +131,38 @@ export default function SubscriptionPage() {
 
             {/* Pricing / Upgrade Options */}
             <div>
-                <div className="flex items-center gap-3 mb-8 px-1">
-                    <div className="h-px flex-1 bg-slate-100" />
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Opciones de Mejora</span>
-                    <div className="h-px flex-1 bg-slate-100" />
+                <div className="flex flex-col items-center mb-12">
+                    <div className="flex items-center gap-3 mb-8 px-1 w-full">
+                        <div className="h-px flex-1 bg-slate-100" />
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Opciones de Mejora</span>
+                        <div className="h-px flex-1 bg-slate-100" />
+                    </div>
+
+                    <div className="bg-slate-100 p-1 rounded-2xl flex items-center gap-1 shadow-inner">
+                        <button
+                            onClick={() => setBillingCycle('monthly')}
+                            className={`px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${billingCycle === 'monthly' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'
+                                }`}
+                        >
+                            Mensual
+                        </button>
+                        <button
+                            onClick={() => setBillingCycle('annual')}
+                            className={`px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all relative ${billingCycle === 'annual' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'
+                                }`}
+                        >
+                            Anual
+                            <span className="absolute -top-2 -right-2 bg-emerald-500 text-white text-[8px] px-2 py-0.5 rounded-full shadow-lg animate-bounce">
+                                -15%
+                            </span>
+                        </button>
+                    </div>
                 </div>
 
                 {(plans.length > 0) && (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                         {plans.map((plan) => {
-                            const isCurrent = currentSub?.plan_type === plan.id
+                            const isCurrent = currentSub?.plan_type === plan.id && (currentSub?.billing_cycle === billingCycle || (plan.id === 'free'))
                             const isPopular = plan.is_popular
 
                             // Configuración de estilos por plan
@@ -185,9 +213,16 @@ export default function SubscriptionPage() {
                                         </div>
                                         <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">{plan.name}</h3>
                                         <div className="mt-2 flex items-baseline gap-1">
-                                            <span className="text-4xl font-black text-slate-900 tracking-tighter">${plan.price}</span>
+                                            <span className="text-4xl font-black text-slate-900 tracking-tighter">
+                                                ${billingCycle === 'monthly' ? plan.price : (plan.annual_price / 12).toFixed(2)}
+                                            </span>
                                             <span className="text-slate-400 text-xs font-bold">/ mes</span>
                                         </div>
+                                        {billingCycle === 'annual' && plan.annual_price > 0 && (
+                                            <p className="text-[10px] font-bold text-emerald-600 mt-1 uppercase tracking-tighter">
+                                                Facturado anualmente (${plan.annual_price})
+                                            </p>
+                                        )}
                                     </div>
 
                                     <div className="space-y-4 mb-8 flex-1">
@@ -307,12 +342,20 @@ export default function SubscriptionPage() {
                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Plan Seleccionado</p>
                             <div className="flex items-center justify-between">
                                 <h4 className="font-black text-xl text-slate-900 uppercase tracking-tight">{selectedPlan.name}</h4>
-                                <span className="text-xl font-black text-indigo-600">${selectedPlan.price} <span className="text-xs text-slate-400">/ mes</span></span>
+                                <div className="text-right">
+                                    <span className="text-xl font-black text-indigo-600">
+                                        ${billingCycle === 'monthly' ? selectedPlan.price : selectedPlan.annual_price}
+                                    </span>
+                                    <span className="text-xs text-slate-400 block uppercase font-bold tracking-tighter">
+                                        / {billingCycle === 'monthly' ? 'mes' : 'año'}
+                                    </span>
+                                </div>
                             </div>
                         </div>
 
                         <MPPaymentBrick
                             plan={selectedPlan}
+                            billingCycle={billingCycle}
                             storeId={useAuth().user?.store_id || ''}
                             onSuccess={handlePaymentSuccess}
                             onCancel={() => setShowCheckoutModal(false)}
