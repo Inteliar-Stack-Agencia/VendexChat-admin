@@ -186,13 +186,13 @@ export const dashboardApi = {
     // 3. Productos activos totales
     const { count: productsCount } = await supabase
       .from('products')
-      .select('*', { count: 'exact', head: true })
+      .select('id', { count: 'exact', head: true }) // Only need ID for count
       .eq('store_id', storeId)
 
-    // 4. Últimos 5 pedidos (con detalles)
+    // 4. Últimos 5 pedidos (con detalles seleccionados)
     const { data: recentOrders } = await supabase
       .from('orders')
-      .select('*')
+      .select('id, total, status, customer_name, created_at') // Avoid *
       .eq('store_id', storeId)
       .order('created_at', { ascending: false })
       .limit(5)
@@ -206,12 +206,12 @@ export const dashboardApi = {
 
     const threshold = storeData?.low_stock_threshold ?? 5
 
-    // 6. Alertas de stock bajo (usando el umbral)
+    // 6. Alertas de stock bajo (usando el umbral y campos específicos)
     const { data: lowStock } = await supabase
       .from('products')
-      .select('*')
+      .select('id, name, stock, image_url') // Avoid * to skip large base64 if still present
       .eq('store_id', storeId)
-      .lte('stock', threshold) // Si es igual o menor al umbral, avisar
+      .lte('stock', threshold)
       .order('stock', { ascending: true })
 
     return {
@@ -229,7 +229,9 @@ export const productsApi = {
   list: async (params?: { page?: number; limit?: number; search?: string; category_id?: number | string }) => {
     const storeId = await getStoreId()
 
-    let query = supabase.from('products').select('*, categories(name)', { count: 'exact' }).eq('store_id', storeId)
+    // Seleccionamos campos específicos para evitar traer datos pesados (como base64) si no son necesarios
+    // Si ya migramos a Storage, image_url será corto, pero por ahora somos precavidos
+    let query = supabase.from('products').select('id, name, description, price, image_url, stock, is_active, category_id, unlimited_stock, sort_order, categories(name)', { count: 'exact' }).eq('store_id', storeId)
 
     if (params?.search) query = query.ilike('name', `%${params.search}%`)
     if (params?.category_id) query = query.eq('category_id', params.category_id)
@@ -237,7 +239,6 @@ export const productsApi = {
     const from = ((params?.page || 1) - 1) * (params?.limit || 10)
     const to = from + (params?.limit || 10) - 1
 
-    // Ordenamos por is_active (activos primero), luego por sort_order (ascendente) y luego por fecha (descendente)
     const { data, error, count } = await query
       .range(from, to)
       .order('is_active', { ascending: false })
@@ -329,6 +330,25 @@ export const productsApi = {
   delete: async (id: string | number) => {
     const { error } = await supabase.from('products').delete().eq('id', id)
     if (error) throw error
+  },
+
+  uploadProductImage: async (productId: string, file: File) => {
+    const fileExt = file.name.split('.').pop()
+    const fileName = `${productId}-${Math.random()}.${fileExt}`
+    const filePath = `products/${fileName}`
+
+    const { error: uploadError } = await supabase.storage
+      .from('product-images')
+      .upload(filePath, file)
+
+    if (uploadError) throw uploadError
+
+    const { data: { publicUrl } } = supabase.storage
+      .from('product-images')
+      .getPublicUrl(filePath)
+
+    await productsApi.update(productId, { image_url: publicUrl })
+    return publicUrl
   },
 }
 

@@ -374,20 +374,16 @@ export default function ProductsPage() {
     }
 
     setUploadingId(productId)
-    const reader = new FileReader()
-    reader.onload = async () => {
-      const base64 = reader.result as string
-      try {
-        await productsApi.update(productId, { image_url: base64 })
-        setProducts(prev => prev.map(p => p.id === productId ? { ...p, image_url: base64 } : p))
-        showToast('success', 'Imagen actualizada')
-      } catch (err) {
-        showToast('error', 'Error al subir imagen')
-      } finally {
-        setUploadingId(null)
-      }
+    try {
+      const publicUrl = await productsApi.uploadProductImage(productId, file)
+      setProducts(prev => prev.map(p => p.id === productId ? { ...p, image_url: publicUrl } : p))
+      showToast('success', 'Imagen actualizada')
+    } catch (err) {
+      console.error('Error uploading image:', err)
+      showToast('error', 'Error al subir imagen')
+    } finally {
+      setUploadingId(null)
     }
-    reader.readAsDataURL(file)
   }
 
   // Filtrar y Ordenar en el cliente (Estrategia de doble seguridad e instantaneidad)

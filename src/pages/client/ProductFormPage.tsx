@@ -16,6 +16,7 @@ export default function ProductFormPage() {
   const [saving, setSaving] = useState(false)
   const [categories, setCategories] = useState<Category[]>([])
   const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [imageFile, setImageFile] = useState<File | null>(null)
   const [isImageModalOpen, setIsImageModalOpen] = useState(false)
 
   const [form, setForm] = useState<ProductFormData>({
@@ -80,7 +81,7 @@ export default function ProductFormPage() {
     setErrors((prev) => ({ ...prev, [field]: '' }))
   }
 
-  // Manejar imagen: convertir a base64
+  // Manejar imagen: previsualizar y guardar archivo
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -90,17 +91,17 @@ export default function ProductFormPage() {
       return
     }
 
+    setImageFile(file)
     const reader = new FileReader()
     reader.onload = () => {
-      const base64 = reader.result as string
-      setImagePreview(base64)
-      updateField('image_url', base64)
+      setImagePreview(reader.result as string)
     }
     reader.readAsDataURL(file)
   }
 
   const removeImage = () => {
     setImagePreview(null)
+    setImageFile(null)
     updateField('image_url', '')
   }
 
@@ -126,13 +127,25 @@ export default function ProductFormPage() {
         category_id: form.category_id,
       }
 
+      let savedProduct;
       if (isEditing) {
-        await productsApi.update(id, data)
+        savedProduct = await productsApi.update(id, data)
         showToast('success', 'Producto actualizado')
       } else {
-        await productsApi.create(data)
+        savedProduct = await productsApi.create(data)
         showToast('success', 'Producto creado')
       }
+
+      // Si hay un archivo de imagen, subirlo ahora que tenemos el ID
+      if (imageFile && savedProduct?.id) {
+        try {
+          await productsApi.uploadProductImage(String(savedProduct.id), imageFile)
+        } catch (uploadErr) {
+          console.error('Error uploading image after save:', uploadErr)
+          showToast('error', 'Producto guardado, pero la imagen falló al subirse')
+        }
+      }
+
       navigate('/products')
     } catch (err: any) {
       console.error('Error al guardar producto:', err)
