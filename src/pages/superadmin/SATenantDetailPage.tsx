@@ -105,30 +105,30 @@ export default function SATenantDetailPage() {
         }
     }
 
-    const handleUpgradePlan = async () => {
+    const handleChangePlan = async (targetPlan: 'free' | 'pro' | 'vip' | 'ultra') => {
         if (!tenant || !id) return
         setSavingPlan(true)
         try {
             const updatedMetadata = {
                 ...(tenant.metadata || {}),
-                plan_type: 'VIP'
+                plan_type: targetPlan
             }
             // 1. Update store metadata
             await superadminApi.updateTenant(id, { metadata: updatedMetadata })
 
             // 2. Update/Create subscription record
             await superadminApi.updateSubscription(id, {
-                plan_type: 'vip',
+                plan_type: targetPlan,
                 status: 'active',
-                current_period_end: new Date(new Date().setFullYear(new Date().getFullYear() + 10)).toISOString(), // 10 years for testing
+                current_period_end: new Date(new Date().setFullYear(new Date().getFullYear() + 10)).toISOString(), // 10 years for manual admin upgrades
                 billing_cycle: 'annual'
             })
 
             setTenant({ ...tenant, metadata: updatedMetadata })
-            showToast('success', '¡Plan mejorado a VIP con éxito!')
+            showToast('success', `Plan actualizado a ${targetPlan.toUpperCase()} con éxito!`)
         } catch (err: any) {
-            console.error('Upgrade Plan Error:', err)
-            showToast('error', `Error al mejorar el plan: ${err.message || 'Error desconocido'}`)
+            console.error('Change Plan Error:', err)
+            showToast('error', `Error al cambiar el plan: ${err.message || 'Error desconocido'}`)
         } finally {
             setSavingPlan(false)
         }
@@ -274,13 +274,20 @@ export default function SATenantDetailPage() {
                                             <div className="flex-1">
                                                 <div className="flex items-center justify-between">
                                                     <span className="text-xs font-black text-slate-700 uppercase tracking-widest">{tenant.metadata?.plan_type || 'Free'}</span>
-                                                    <button
-                                                        onClick={handleUpgradePlan}
+                                                    {tenant.metadata?.plan_type === 'pro' && (
+                                                        <span className="text-[8px] font-black text-amber-500 uppercase tracking-tighter">Prueba Activa</span>
+                                                    )}
+                                                    <select
+                                                        value={tenant.metadata?.plan_type || 'free'}
+                                                        onChange={(e) => handleChangePlan(e.target.value as any)}
                                                         disabled={savingPlan}
-                                                        className="text-[9px] font-black text-indigo-600 hover:text-indigo-800 uppercase tracking-widest bg-indigo-50 px-2 py-1 rounded-md transition-all active:scale-95"
+                                                        className="text-[9px] font-black text-indigo-600 outline-none hover:text-indigo-800 uppercase tracking-widest bg-indigo-50 px-2 py-1 rounded-md transition-all active:scale-95"
                                                     >
-                                                        {savingPlan ? '...' : 'Subir a VIP'}
-                                                    </button>
+                                                        <option value="free">FREE</option>
+                                                        <option value="pro">PRO</option>
+                                                        <option value="vip">VIP</option>
+                                                        <option value="ultra">ULTRA</option>
+                                                    </select>
                                                 </div>
                                             </div>
                                         </div>

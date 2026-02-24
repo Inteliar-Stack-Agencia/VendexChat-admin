@@ -220,7 +220,7 @@ export interface SuperadminUser {
 export interface Subscription {
   id: string
   store_id: string
-  plan_type: 'free' | 'advance' | 'pro' | 'premium' | 'vip'
+  plan_type: 'free' | 'pro' | 'vip' | 'ultra'
   status: 'active' | 'past_due' | 'canceled' | 'trial'
   billing_cycle: 'monthly' | 'annual'
   discount_percentage: number

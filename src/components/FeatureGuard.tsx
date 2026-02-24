@@ -7,7 +7,7 @@ import { Button } from './common'
 interface FeatureGuardProps {
     children: ReactNode
     feature: 'analytics' | 'coupons' | 'white-label' | 'bot' | 'logistics' | 'pro-tools' | 'marketing' | 'custom-domain' | 'ai-importer' | 'ai-analyst'
-    minPlan?: 'advance' | 'pro' | 'premium' | 'vip'
+    minPlan?: 'pro' | 'vip' | 'ultra'
     fallback?: 'blur' | 'hide' | 'message'
 }
 
@@ -23,16 +23,20 @@ export default function FeatureGuard({
     if (isSuperadmin) return <>{children}</>
 
     const currentPlan = subscription?.plan_type || 'free'
+    const status = subscription?.status || 'active'
+    const trialEnd = subscription?.current_period_end ? new Date(subscription.current_period_end) : null
+    const isTrialExpired = status === 'trial' && trialEnd && trialEnd < new Date()
 
     const planWeight = {
         'free': 0,
-        'advance': 1,
-        'pro': 2,
-        'premium': 3,
-        'vip': 4
+        'pro': 1,
+        'vip': 2,
+        'ultra': 3
     }
 
-    const hasAccess = planWeight[currentPlan as keyof typeof planWeight] >= planWeight[minPlan]
+    // If trial is expired, they effectively have the 'free' plan weight
+    const effectivePlanWeight = isTrialExpired ? 0 : (planWeight[currentPlan as keyof typeof planWeight] ?? 0)
+    const hasAccess = effectivePlanWeight >= (planWeight[minPlan as keyof typeof planWeight] ?? 1)
 
     if (hasAccess) return <>{children}</>
 

@@ -57,9 +57,24 @@ export default function SATenantsPage() {
 
     const getStatusBadge = (tenant: Tenant) => {
         if (tenant.is_active) {
-            return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-600 border border-emerald-100"><CheckCircle className="w-3 h-3" /> Activo</span>
+            return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-600 border border-emerald-100"><CheckCircle className="w-3 h-3" /> Online</span>
         }
-        return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-600 border border-amber-100"><Clock className="w-3 h-3" /> Inactivo</span>
+        return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-600 border border-rose-100"><X className="w-3 h-3" /> Offline</span>
+    }
+
+    const getPlanBadge = (tenant: Tenant) => {
+        const plan = (tenant.metadata?.plan_type || 'free').toLowerCase();
+        const styles: Record<string, string> = {
+            free: 'bg-slate-100 text-slate-500 border-slate-200',
+            pro: 'bg-indigo-50 text-indigo-600 border-indigo-100',
+            vip: 'bg-amber-50 text-amber-600 border-amber-100',
+            ultra: 'bg-purple-50 text-purple-600 border-purple-100'
+        };
+        return (
+            <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-widest border ${styles[plan] || styles.free}`}>
+                {plan}
+            </span>
+        );
     }
 
     return (
@@ -124,6 +139,7 @@ export default function SATenantsPage() {
                                 <th className="px-8 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest">Slug</th>
                                 <th className="px-8 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest">País</th>
                                 <th className="px-8 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest">Estado</th>
+                                <th className="px-8 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest">Plan</th>
                                 <th className="px-8 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest text-right">Acciones</th>
                             </tr>
                         </thead>
@@ -156,6 +172,9 @@ export default function SATenantsPage() {
                                     </td>
                                     <td className="px-8 py-5">
                                         {getStatusBadge(tenant)}
+                                    </td>
+                                    <td className="px-8 py-5 text-center">
+                                        {getPlanBadge(tenant)}
                                     </td>
                                     <td className="px-8 py-5 text-right">
                                         <Link
@@ -248,13 +267,14 @@ export default function SATenantsPage() {
                             <div>
                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Plan de Suscripción</label>
                                 <select
-                                    className="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
+                                    className="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-100 transition-all outline-none uppercase"
                                     value={newTenant.plan_type}
                                     onChange={(e) => setNewTenant(t => ({ ...t, plan_type: e.target.value }))}
                                 >
-                                    <option value="free">🆓 Free</option>
-                                    <option value="pro">⚡ Pro</option>
-                                    <option value="business">🏢 Business</option>
+                                    <option value="free">FREE</option>
+                                    <option value="pro">PRO (Trial 15d)</option>
+                                    <option value="vip">VIP</option>
+                                    <option value="ultra">ULTRA (Bespoke)</option>
                                 </select>
                             </div>
                             <div className="bg-amber-50 p-4 rounded-xl border border-amber-100 flex gap-3">

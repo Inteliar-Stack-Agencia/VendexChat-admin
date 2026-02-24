@@ -820,16 +820,27 @@ export const superadminApi = {
 
     const { data: finalStore } = await supabase.from('stores').select('*').eq('id', storeId).single()
 
-    // 3. Create subscription for the chosen plan
-    if (storeId && data.plan_type && data.plan_type !== 'free') {
-      await supabase.from('subscriptions').upsert({
-        store_id: storeId,
-        plan_type: data.plan_type,
-        status: 'active',
-      }, { onConflict: 'store_id' })
-    }
+    // 3. Create subscription: Default 15-day PRO trial
+    const trialEndDate = new Date()
+    trialEndDate.setDate(trialEndDate.getDate() + 15)
 
-    return finalStore as Tenant
+    await supabase.from('subscriptions').upsert({
+      store_id: storeId,
+      plan_type: data.plan_type || 'pro',
+      status: data.plan_type ? 'active' : 'trial',
+      current_period_end: trialEndDate.toISOString(),
+      billing_cycle: 'monthly'
+    }, { onConflict: 'store_id' })
+
+    // Also update the store metadata to reflect the plan
+    await supabase.from('stores').update({
+      metadata: {
+        ...(finalStore?.metadata || {}),
+        plan_type: data.plan_type || 'pro'
+      }
+    }).eq('id', storeId)
+
+    return { ...finalStore, metadata: { ...finalStore?.metadata, plan_type: data.plan_type || 'pro' } } as Tenant
   },
 
   listUsers: async () => {
