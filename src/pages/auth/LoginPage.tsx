@@ -16,10 +16,13 @@ export default function LoginPage() {
   const navigate = useNavigate()
 
   useEffect(() => {
+    console.log('[LOGIN PAGE] useEffect user check:', user?.role, 'loading:', loading)
     if (!user) return
     if (user.role === 'superadmin') {
+      console.log('[LOGIN PAGE] Redirecting to /sa/overview')
       navigate('/sa/overview', { replace: true })
     } else {
+      console.log('[LOGIN PAGE] Redirecting to /dashboard')
       navigate('/dashboard', { replace: true })
     }
   }, [user, navigate])
@@ -38,14 +41,16 @@ export default function LoginPage() {
 
     setLoading(true)
     try {
+      console.log('[LOGIN PAGE] Calling login()...')
       await login(email, password)
+      console.log('[LOGIN PAGE] login() completed!')
       showToast('success', 'Bienvenido de vuelta')
-      // La redirección se hace según el rol del usuario
-      // El AuthContext actualiza el user, y el useEffect de abajo redirige
     } catch (err) {
+      console.error('[LOGIN PAGE] login() FAILED:', err)
       const message = err instanceof Error ? err.message : 'Error de conexión, intenta nuevamente'
       showToast('error', message)
     } finally {
+      console.log('[LOGIN PAGE] finally block, setting loading=false')
       setLoading(false)
     }
   }

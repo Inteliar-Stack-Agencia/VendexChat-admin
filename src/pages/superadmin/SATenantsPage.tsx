@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { Search, Filter, MoreHorizontal, Store, CheckCircle, Clock, ChevronLeft, ChevronRight, X, RefreshCw, Send } from 'lucide-react'
+import { Search, Filter, MoreHorizontal, Store, CheckCircle, Clock, ChevronLeft, ChevronRight, X, RefreshCw, Send, Trash2 } from 'lucide-react'
 import { superadminApi } from '../../services/api'
 import { Tenant } from '../../types'
+import SADeleteTenantModal from './SADeleteTenantModal'
+import { showToast } from '../../components/common/Toast'
 
 export default function SATenantsPage() {
     const [searchTerm, setSearchTerm] = useState('')
@@ -13,6 +15,7 @@ export default function SATenantsPage() {
     const [showModal, setShowModal] = useState(false)
     const [saving, setSaving] = useState(false)
     const [newTenant, setNewTenant] = useState({ name: '', slug: '', email: '', country: 'Argentina', plan_type: 'free' })
+    const [selectedTenantForDelete, setSelectedTenantForDelete] = useState<Tenant | null>(null)
 
     const loadTenants = () => {
         setLoading(true)
@@ -177,12 +180,21 @@ export default function SATenantsPage() {
                                         {getPlanBadge(tenant)}
                                     </td>
                                     <td className="px-8 py-5 text-right">
-                                        <Link
-                                            to={`/sa/tenants/${tenant.id}`}
-                                            className="inline-block p-2 rounded-lg hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors"
-                                        >
-                                            <MoreHorizontal className="w-5 h-5" />
-                                        </Link>
+                                        <div className="flex items-center justify-end gap-2">
+                                            <button
+                                                onClick={() => setSelectedTenantForDelete(tenant)}
+                                                className="p-2 rounded-lg hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-colors"
+                                                title="Eliminar Tienda"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                            <Link
+                                                to={`/sa/tenants/${tenant.id}`}
+                                                className="inline-block p-2 rounded-lg hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors"
+                                            >
+                                                <MoreHorizontal className="w-5 h-5" />
+                                            </Link>
+                                        </div>
                                     </td>
                                 </tr>
                             ))}
@@ -297,6 +309,24 @@ export default function SATenantsPage() {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {/* Delete Modal */}
+            {selectedTenantForDelete && (
+                <SADeleteTenantModal
+                    tenant={selectedTenantForDelete}
+                    onClose={() => setSelectedTenantForDelete(null)}
+                    onConfirm={async () => {
+                        try {
+                            await superadminApi.deleteTenant(selectedTenantForDelete.id)
+                            showToast('success', 'Tienda eliminada permanentemente')
+                            setSelectedTenantForDelete(null)
+                            loadTenants()
+                        } catch (err) {
+                            throw err // Pass to modal for error handling
+                        }
+                    }}
+                />
             )}
         </div>
     )

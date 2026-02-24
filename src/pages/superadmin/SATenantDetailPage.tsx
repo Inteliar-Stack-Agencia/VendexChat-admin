@@ -401,19 +401,26 @@ export default function SATenantDetailPage() {
                             <Activity className="w-4 h-4" /> {tenant.is_active ? 'Suspender Merchant' : 'Activar Merchant'}
                         </button>
 
-                        {/* Danger Zone nested in Sidebar */}
-                        <div className="pt-6 mt-6 border-t border-slate-100 space-y-4">
-                            <div>
-                                <h4 className="text-[10px] font-black text-rose-600 uppercase tracking-widest mb-1">Zona de Peligro</h4>
-                                <p className="text-[9px] text-slate-400 font-medium leading-tight mb-4">Esta acción es irreversible y destruye todos los productos de esta sede.</p>
+                    </div>
+
+                    {/* Danger Zone */}
+                    <div className="bg-white rounded-[2rem] p-8 border border-rose-100 shadow-sm shadow-rose-50/50">
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="w-10 h-10 rounded-xl bg-rose-50 flex items-center justify-center border border-rose-100 text-rose-600">
+                                <Trash2 className="w-5 h-5" />
                             </div>
-                            <button
-                                onClick={() => setShowDeleteModal(true)}
-                                className="w-full py-4 bg-white border-2 border-rose-100 text-rose-600 text-xs font-black uppercase tracking-widest rounded-xl hover:bg-rose-600 hover:text-white transition-all shadow-sm active:scale-95 flex items-center justify-center gap-2"
-                            >
-                                <Trash2 className="w-4 h-4" /> Eliminar Tienda
-                            </button>
+                            <div>
+                                <h4 className="text-xs font-black text-rose-600 uppercase tracking-widest mb-0.5">Zona de Peligro</h4>
+                                <p className="text-[10px] text-slate-400 font-medium leading-tight">Acciones irreversibles de gestión.</p>
+                            </div>
                         </div>
+                        <p className="text-xs text-slate-500 font-medium mb-6">Eliminar una tienda borrará permanentemente todos sus productos, categorías y pedidos vinculados. Esta acción no se puede deshacer.</p>
+                        <button
+                            onClick={() => setShowDeleteModal(true)}
+                            className="w-full py-4 bg-white border-2 border-rose-100 text-rose-600 text-xs font-black uppercase tracking-widest rounded-xl hover:bg-rose-600 hover:text-white transition-all shadow-sm active:scale-95 flex items-center justify-center gap-2"
+                        >
+                            <Trash2 className="w-4 h-4" /> Eliminar Tienda
+                        </button>
                     </div>
 
                     {/* Contact Details */}
