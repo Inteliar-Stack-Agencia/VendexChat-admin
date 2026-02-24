@@ -21,9 +21,11 @@ import { normalizeProductData } from '../utils/helpers'
  * Si el perfil no tiene store_id, intenta encontrar la tienda por el slug en los metadatos de auth.
  */
 export const getStoreId = async (): Promise<string> => {
+  console.log('[getStoreId] START')
   // 1. Prioridad Absoluta: Selección Manual o Suplantación (Sin esperas de red si es posible)
   const impersonatedId = localStorage.getItem('vendexchat_impersonated_store')
   const selectedStoreId = localStorage.getItem('vendexchat_selected_store')
+  console.log('[getStoreId] Storage - Impersonated:', impersonatedId, 'Selected:', selectedStoreId)
   const activeStoreId = impersonatedId || selectedStoreId
 
   if (activeStoreId) {
@@ -107,6 +109,8 @@ export const authApi = {
       .from('stores')
       .select('*')
       .eq('email', user.email)
+
+    console.log('[getMyStores] Stores found for', user.email, ':', stores?.length, stores?.map(s => s.name))
 
     if (error) throw error
     return stores as Tenant[]
