@@ -64,7 +64,7 @@ export default function SelectStorePage() {
                 {/* Legacy Headers */}
                 <div className="bg-[#337ab7] px-8 py-2 text-left">
                     <span className="text-white font-black italic text-xl uppercase tracking-wider">
-                        SELECCIONE SU SUCURSALES
+                        SELECCIONE SUS SUCURSALES
                     </span>
                 </div>
                 <div className="bg-[#5A616B] px-8 py-2 text-left">
@@ -104,9 +104,14 @@ export default function SelectStorePage() {
                                         </div>
                                     </div>
 
-                                    <h3 className="flex-1 text-2xl font-bold text-slate-700 px-4">
-                                        {store.name}
-                                    </h3>
+                                    <div className="flex-1 px-4">
+                                        <h3 className="text-2xl font-bold text-slate-700">
+                                            {store.name}
+                                        </h3>
+                                        <p className="text-sm font-bold text-indigo-600 uppercase tracking-widest mt-1">
+                                            📍 {store.city || 'Sucursal Principal'}
+                                        </p>
+                                    </div>
 
                                     <div className="w-32 flex justify-end">
                                         <button

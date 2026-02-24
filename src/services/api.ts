@@ -105,15 +105,26 @@ export const authApi = {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return []
 
+    // 1. Intentar por email (Case-insensitive)
     const { data: stores, error } = await supabase
       .from('stores')
       .select('*')
-      .eq('email', user.email)
+      .ilike('email', user.email || '')
 
-    console.log('[getMyStores] Stores found for', user.email, ':', stores?.length, stores?.map(s => s.name))
+    console.log('[getMyStores] Found by email:', user.email, '->', stores?.length)
+
+    // 2. Si es superadmin o el email no devolvió nada, intentar buscar si hay perfiles vinculados
+    // O si es Superadmin, simplemente mostrar todo para que pueda elegir (FLEXIBILIDAD TOTAL)
+    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+
+    if (profile?.role === 'superadmin' && (!stores || stores.length < 2)) {
+      console.log('[getMyStores] User is SA and needs more stores, fetching ALL as fallback')
+      const { data: allStores } = await supabase.from('stores').select('*').limit(50)
+      return allStores as Tenant[]
+    }
 
     if (error) throw error
-    return stores as Tenant[]
+    return (stores || []) as Tenant[]
   },
 
   register: async (data: { store_name: string; email: string; password: string; slug: string; country: string; city: string }) => {
