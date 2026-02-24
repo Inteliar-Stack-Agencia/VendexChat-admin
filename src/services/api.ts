@@ -725,13 +725,23 @@ export const superadminApi = {
       .order('created_at', { ascending: false })
       .limit(5)
 
+    // 6. pending_actions (Trials expiring in less than 3 days)
+    const threeDaysFromNow = new Date()
+    threeDaysFromNow.setDate(threeDaysFromNow.getDate() + 3)
+    const { count: pendingTrials } = await supabase
+      .from('subscriptions')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'trial')
+      .lte('current_period_end', threeDaysFromNow.toISOString())
+
     return {
       total_stores: totalStores || 0,
       active_stores: activeStores || 0,
       new_stores_7d: newStores || 0,
       mrr_estimated: mrr,
       recent_activity: recentStores || [],
-      failed_payments: 0 // Placeholder hasta tener logs de errores de pago
+      failed_payments: 0, // Placeholder hasta tener logs de errores de pago
+      pending_actions: pendingTrials || 0
     }
   },
 

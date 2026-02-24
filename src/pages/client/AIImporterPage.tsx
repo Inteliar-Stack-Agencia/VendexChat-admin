@@ -191,7 +191,7 @@ export default function AIImporterPage() {
                 const [catName, prodName, price, desc] = parts
                 if (prodName) {
                     const category = categories.find(c => c.name.toLowerCase() === catName?.toLowerCase())
-                    const normalized = normalizeProductData(prodName, desc || `Importado vía Excel: ${catName}`)
+                    const normalized = normalizeProductData(prodName, desc || '')
                     extracted.push({
                         id: crypto.randomUUID(),
                         name: normalized.name,
@@ -285,7 +285,7 @@ export default function AIImporterPage() {
                     id: crypto.randomUUID(),
                     name: normalized.name.substring(0, 70),
                     price: typeof item.price === 'number' ? item.price : 0,
-                    description: normalized.description || 'Procesado con IA de alta precisión',
+                    description: normalized.description || '',
                     category_id: selectedCategoryId || null
                 }
             });
@@ -321,7 +321,7 @@ export default function AIImporterPage() {
                         id: crypto.randomUUID(),
                         name: normalized.name.substring(0, 70),
                         price: priceValue || 0,
-                        description: 'Extracción de emergencia',
+                        description: '',
                         category_id: selectedCategoryId || null
                     };
                     fallbackResults.push(lastProduct);

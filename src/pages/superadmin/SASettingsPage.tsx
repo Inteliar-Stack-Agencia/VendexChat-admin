@@ -7,7 +7,9 @@ export default function SASettingsPage() {
         maintenance_mode: false,
         allow_registrations: true,
         master_approval: false,
-        email_notifications: true
+        email_notifications: true,
+        global_announcement_active: false,
+        global_announcement_text: ''
     })
     const [gateways, setGateways] = useState<any[]>([])
     const [showModal, setShowModal] = useState(false)
@@ -125,6 +127,33 @@ export default function SASettingsPage() {
                         <button className="w-full border border-slate-200 text-slate-600 font-bold py-3 rounded-xl hover:bg-slate-50 transition-colors">
                             Descargar Logs de Auditoría (CSV)
                         </button>
+                    </div>
+                </div>
+
+                {/* Global Announcement Section */}
+                <div className="lg:col-span-2 bg-white rounded-[2rem] border border-indigo-100 shadow-sm overflow-hidden">
+                    <div className="p-8 border-b border-indigo-50 bg-indigo-50/30 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 bg-indigo-100 rounded-xl text-indigo-600">
+                                <AlertCircle className="w-5 h-5" />
+                            </div>
+                            <h3 className="font-bold text-lg text-slate-900">Anuncio Global VENDEx</h3>
+                        </div>
+                        <button
+                            onClick={() => setSettings(s => ({ ...s, global_announcement_active: !s.global_announcement_active }))}
+                            className={`w-12 h-6 rounded-full transition-colors relative ${settings.global_announcement_active ? 'bg-indigo-600' : 'bg-slate-200'}`}
+                        >
+                            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${settings.global_announcement_active ? 'left-7' : 'left-1'}`} />
+                        </button>
+                    </div>
+                    <div className="p-8 space-y-4">
+                        <p className="text-xs text-slate-400 font-medium leading-relaxed">Este mensaje aparecerá en la parte superior de TODAS las tiendas activas en la red. Úsalo para mantenimientos, promociones globales o avisos importantes.</p>
+                        <textarea
+                            value={settings.global_announcement_text || ''}
+                            onChange={(e) => setSettings(s => ({ ...s, global_announcement_text: e.target.value }))}
+                            className="w-full h-24 px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all placeholder:text-slate-300"
+                            placeholder="Escribe el mensaje del anuncio aquí..."
+                        />
                     </div>
                 </div>
             </div>

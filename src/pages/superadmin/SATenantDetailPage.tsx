@@ -16,12 +16,16 @@ import {
     Settings,
     Activity,
     Bot,
-    Copy
+    Copy,
+    UserPlus,
+    DollarSign,
+    Users
 } from 'lucide-react'
 import { superadminApi } from '../../services/api'
 import { Tenant } from '../../types'
 import { showToast } from '../../components/common/Toast'
 import SACloneTenantModal from './SACloneTenantModal'
+import SADeleteTenantModal from './SADeleteTenantModal'
 
 export default function SATenantDetailPage() {
     const { id } = useParams()
@@ -34,6 +38,7 @@ export default function SATenantDetailPage() {
     const [savingPrompt, setSavingPrompt] = useState(false)
     const [savingPlan, setSavingPlan] = useState(false)
     const [showCloneModal, setShowCloneModal] = useState(false)
+    const [showDeleteModal, setShowDeleteModal] = useState(false)
 
     useEffect(() => {
         if (id) {
@@ -134,6 +139,19 @@ export default function SATenantDetailPage() {
         }
     }
 
+    const handleDeleteTenant = async () => {
+        if (!tenant || !id) return
+        try {
+            await superadminApi.deleteTenant(id)
+            showToast('success', 'Tienda eliminada permanentemente.')
+            window.location.href = '/sa/tenants'
+        } catch (err: any) {
+            console.error('Delete Tenant Error:', err)
+            showToast('error', `Error al eliminar: ${err.message}`)
+            setShowDeleteModal(false)
+        }
+    }
+
     if (loading) {
         return <div className="p-20 text-center font-bold text-slate-400 animate-pulse uppercase tracking-widest text-xs">Cargando ficha técnica del tenant...</div>
     }
@@ -143,29 +161,69 @@ export default function SATenantDetailPage() {
     }
 
     return (
-        <div className="space-y-8 pb-10">
-            <header className="flex items-center gap-4">
-                <Link to="/sa/tenants" className="p-2 rounded-xl bg-white border border-slate-200 text-slate-500 hover:text-slate-900 transition-colors">
-                    <ChevronLeft className="w-5 h-5" />
-                </Link>
-                <div>
-                    <div className="flex items-center gap-2">
-                        <h2 className="text-3xl font-bold text-slate-900 tracking-tight">{tenant.name}</h2>
-                        <span className={`px-3 py-1 text-xs font-black rounded-full border uppercase tracking-widest ${tenant.is_active ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-amber-50 text-amber-600 border-amber-100'}`}>
-                            {tenant.is_active ? 'Activo' : 'Inactivo'}
-                        </span>
+        <div className="max-w-7xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+            <header className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                <div className="flex items-center gap-6">
+                    <div
+                        onClick={() => window.history.back()}
+                        className="w-12 h-12 rounded-2xl bg-white border border-slate-100 flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:border-indigo-100 transition-all cursor-pointer group"
+                    >
+                        <ChevronLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
                     </div>
-                    <p className="text-slate-500 mt-1 flex items-center gap-2">
-                        ID: {tenant.id} • {tenant.email || 'Sin email'}
-                    </p>
+                    <div>
+                        <div className="flex items-center gap-3 mb-1">
+                            <h2 className="text-3xl font-black text-slate-900 tracking-tight">{tenant.name}</h2>
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest border ${tenant.is_active ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-rose-50 text-rose-600 border-rose-100'}`}>
+                                {tenant.is_active ? 'Online' : 'Offline'}
+                            </span>
+                        </div>
+                        <p className="text-slate-400 font-medium flex items-center gap-2">
+                            <code className="bg-slate-50 px-2 py-0.5 rounded text-indigo-600 font-bold">/{tenant.slug}</code>
+                            <span>•</span>
+                            <span className="text-xs">ID: {tenant.id}</span>
+                        </p>
+                    </div>
+                </div>
+                <div className="flex items-center gap-3">
+                    <button
+                        onClick={() => setShowCloneModal(true)}
+                        className="bg-white text-slate-700 font-black px-6 py-3 rounded-xl border border-slate-200 hover:bg-slate-50 transition-all flex items-center gap-2 shadow-sm active:scale-95"
+                    >
+                        <Copy className="w-4 h-4" /> Clonar Tienda
+                    </button>
+                    <button className="bg-indigo-600 text-white font-black px-6 py-3 rounded-xl hover:bg-indigo-700 transition-all flex items-center gap-2 shadow-lg shadow-indigo-100 active:scale-95">
+                        <UserPlus className="w-4 h-4" /> Gestionar Accesos
+                    </button>
                 </div>
             </header>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 {/* Main Info */}
-                <div className="lg:col-span-2 space-y-8 min-h-screen">
+                <div className="lg:col-span-2 space-y-8">
+                    {/* Dashboard Stats */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                        <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-6 group hover:border-indigo-100 transition-all cursor-default">
+                            <div className="w-14 h-14 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                <Users className="w-6 h-6" />
+                            </div>
+                            <div>
+                                <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Total Usuarios</p>
+                                <p className="text-2xl font-black text-slate-900">1</p>
+                            </div>
+                        </div>
+                        <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-6 group hover:border-indigo-100 transition-all cursor-default">
+                            <div className="w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                <DollarSign className="w-6 h-6" />
+                            </div>
+                            <div>
+                                <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Facturación Estimada</p>
+                                <p className="text-2xl font-black text-slate-900">$0.00</p>
+                            </div>
+                        </div>
+                    </div>
+
                     {/* AI Prompt Restriction Section */}
-                    <div key={`ai-prompt-${tenant.id}-${aiPrompt ? 'filled' : 'empty'}`} className="bg-white rounded-[2rem] border border-indigo-100 shadow-sm overflow-hidden animate-in fade-in slide-in-from-top-4 duration-700">
+                    <div key={`ai-prompt-${tenant.id}-${aiPrompt ? 'filled' : 'empty'}`} className="bg-white rounded-[2rem] border border-indigo-100 shadow-sm overflow-hidden">
                         <div className="p-8 border-b border-indigo-50 bg-indigo-50/30 flex items-center justify-between">
                             <div className="flex items-center gap-3">
                                 <div className="p-2 bg-indigo-100 rounded-xl text-indigo-600">
@@ -320,67 +378,74 @@ export default function SATenantDetailPage() {
                     </div>
 
                 </div>
-            </div>
+                {/* Sidebar Info */}
+                <div className="space-y-8">
+                    {/* Quick Actions */}
+                    <div className="bg-white rounded-[2rem] p-8 border border-slate-100 shadow-sm space-y-4">
+                        <h3 className="font-bold text-slate-900 mb-4">Acciones Críticas</h3>
+                        <button
+                            onClick={handleImpersonate}
+                            className="w-full bg-slate-50 text-slate-900 font-bold py-3 rounded-xl hover:bg-slate-100 transition-colors"
+                        >
+                            Iniciar Sesión como Merchant
+                        </button>
+                        <button
+                            onClick={handleToggleStatus}
+                            className={`w-full border font-bold py-3 rounded-xl transition-colors ${tenant.is_active ? 'border-rose-100 text-rose-600 hover:bg-rose-50' : 'border-emerald-100 text-emerald-600 hover:bg-emerald-50'}`}
+                        >
+                            {tenant.is_active ? 'Suspender Tienda' : 'Activar Tienda'}
+                        </button>
+                    </div>
 
-            {/* Sidebar Info */}
-            <div className="space-y-8">
-                {/* Quick Actions */}
-                <div className="bg-white rounded-[2rem] p-8 border border-slate-100 shadow-sm space-y-4">
-                    <h3 className="font-bold text-slate-900 mb-4">Acciones Críticas</h3>
-                    <button
-                        onClick={() => setShowCloneModal(true)}
-                        className="w-full bg-indigo-600 text-white font-bold py-3 rounded-xl hover:bg-slate-900 transition-colors shadow-lg shadow-indigo-100 flex items-center justify-center gap-2"
-                    >
-                        <Copy className="w-4 h-4" /> Clonar Tienda (Multi-Sede)
-                    </button>
-                    <button
-                        onClick={handleImpersonate}
-                        className="w-full bg-slate-100 text-slate-900 font-bold py-3 rounded-xl hover:bg-slate-200 transition-colors"
-                    >
-                        Iniciar Sesión como Merchant
-                    </button>
-                    <button
-                        onClick={handleToggleStatus}
-                        className={`w-full border font-bold py-3 rounded-xl transition-colors ${tenant.is_active ? 'border-rose-200 text-rose-600 hover:bg-rose-50' : 'border-emerald-200 text-emerald-600 hover:bg-emerald-50'}`}
-                    >
-                        {tenant.is_active ? 'Suspender Tienda' : 'Activar Tienda'}
-                    </button>
-                </div>
-
-                {/* Contact Details */}
-                <div className="bg-white rounded-[2rem] p-8 border border-slate-100 shadow-sm">
-                    <h3 className="font-bold text-slate-900 mb-6">Datos de Contacto</h3>
-                    <div className="space-y-6">
-                        <div className="flex items-center gap-4">
-                            <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center border border-slate-100 text-slate-400">
-                                <Mail className="w-5 h-5" />
+                    {/* Contact Details */}
+                    <div className="bg-white rounded-[2rem] p-8 border border-slate-100 shadow-sm">
+                        <h3 className="font-bold text-slate-900 mb-6">Datos de Contacto</h3>
+                        <div className="space-y-6">
+                            <div className="flex items-center gap-4">
+                                <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center border border-slate-100 text-slate-400">
+                                    <Mail className="w-5 h-5" />
+                                </div>
+                                <div className="min-w-0">
+                                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Email</p>
+                                    <p className="text-sm font-bold text-slate-900 truncate">{tenant.email || 'N/A'}</p>
+                                </div>
                             </div>
-                            <div className="min-w-0">
-                                <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Email</p>
-                                <p className="text-sm font-bold text-slate-900 truncate">{tenant.email || 'N/A'}</p>
+                            <div className="flex items-center gap-4">
+                                <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center border border-emerald-100 text-emerald-600">
+                                    <Smartphone className="w-5 h-5" />
+                                </div>
+                                <div className="min-w-0">
+                                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">WhatsApp</p>
+                                    <p className="text-sm font-bold text-slate-900">+{tenant.whatsapp || 'N/A'}</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-4">
+                                <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center border border-slate-100 text-slate-400">
+                                    <Calendar className="w-5 h-5" />
+                                </div>
+                                <div className="min-w-0">
+                                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Miembro desde</p>
+                                    <p className="text-sm font-bold text-slate-900">{new Date(tenant.created_at).toLocaleDateString()}</p>
+                                </div>
                             </div>
                         </div>
-                        <div className="flex items-center gap-4">
-                            <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center border border-emerald-100 text-emerald-600">
-                                <Smartphone className="w-5 h-5" />
-                            </div>
-                            <div className="min-w-0">
-                                <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">WhatsApp</p>
-                                <p className="text-sm font-bold text-slate-900">+{tenant.whatsapp || 'N/A'}</p>
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-4">
-                            <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center border border-slate-100 text-slate-400">
-                                <Calendar className="w-5 h-5" />
-                            </div>
-                            <div className="min-w-0">
-                                <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Miembro desde</p>
-                                <p className="text-sm font-bold text-slate-900">{new Date(tenant.created_at).toLocaleDateString()}</p>
-                            </div>
+
+                        <hr className="my-8 border-slate-100" />
+
+                        <div className="rounded-2xl bg-rose-50/50 p-6 border border-rose-100">
+                            <h4 className="text-xs font-black text-rose-600 uppercase tracking-widest mb-1">Zona de Peligro</h4>
+                            <p className="text-[10px] text-slate-500 font-medium mb-4">Eliminar una tienda borrará permanentemente todos sus productos, categorías y pedidos vinculados.</p>
+                            <button
+                                onClick={() => setShowDeleteModal(true)}
+                                className="w-full py-3 bg-white border border-rose-200 text-rose-600 text-xs font-black uppercase tracking-widest rounded-xl hover:bg-rose-600 hover:text-white transition-all shadow-sm active:scale-95"
+                            >
+                                Eliminar Tienda
+                            </button>
                         </div>
                     </div>
                 </div>
             </div>
+
             {showCloneModal && (
                 <SACloneTenantModal
                     sourceTenant={tenant}
@@ -391,6 +456,13 @@ export default function SATenantDetailPage() {
                         showToast('success', '¡Tienda clonada con éxito! Redirigiendo...')
                         window.location.href = `/sa/tenants/${newId}`
                     }}
+                />
+            )}
+            {showDeleteModal && (
+                <SADeleteTenantModal
+                    tenant={tenant}
+                    onClose={() => setShowDeleteModal(false)}
+                    onConfirm={handleDeleteTenant}
                 />
             )}
         </div>
