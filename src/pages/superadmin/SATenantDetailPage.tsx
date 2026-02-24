@@ -89,8 +89,9 @@ export default function SATenantDetailPage() {
             await superadminApi.updateTenant(id, { ai_prompt: aiPrompt || null })
             setTenant({ ...tenant, ai_prompt: aiPrompt || null })
             showToast('success', 'Prompt de IA actualizado correctamente.')
-        } catch (err) {
-            showToast('error', 'Error al actualizar el prompt de IA.')
+        } catch (err: any) {
+            console.error('Update Prompt Error:', err)
+            showToast('error', `Error al actualizar el prompt de IA: ${err.message || 'Error desconocido'}`)
         } finally {
             setSavingPrompt(false)
         }
