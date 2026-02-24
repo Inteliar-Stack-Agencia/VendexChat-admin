@@ -34,44 +34,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [selectedStoreId, setSelectedStoreId] = useState<string | null>(localStorage.getItem('vendexchat_selected_store'))
   const [loading, setLoading] = useState(true)
 
-  // 1. Restauración inicial de sesión (Una sola vez al montar)
+  // 1. Restauración inicial y Sincronización en tiempo real
   useEffect(() => {
     let isMounted = true
 
-    async function restoreSession() {
-      if (!token) {
-        // Limpiar cualquier sesión interna de Supabase residual
-        await supabase.auth.signOut().catch(() => { })
-        setLoading(false)
-        return
-      }
+    // Sincronizar con el estado interno de Supabase
+    const { data: { subscription: authListener } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('[AuthContext] Auth Event:', event, !!session)
 
-      try {
-        const res = await authApi.me()
+      if (session?.user && session?.access_token) {
         if (isMounted) {
-          setUser(res.user)
+          setToken(session.access_token)
+          localStorage.setItem('vendexchat_token', session.access_token)
         }
-      } catch (err: any) {
-        console.error('Session restoration failed:', err)
-        // SOLO desloguear si es un error de sesión expirada (401)
-        if (err?.status === 401 || err?.message?.includes('No auth user')) {
-          await supabase.auth.signOut().catch(() => { })
-          if (isMounted) {
-            localStorage.removeItem('vendexchat_token')
-            setToken(null)
-            setUser(null)
+
+        // Cargar perfil completo si el usuario cambió o no existe
+        if (!user || user.id !== session.user.id) {
+          try {
+            const res = await authApi.me()
+            if (isMounted) setUser(res.user)
+          } catch (err) {
+            console.error('[AuthContext] Error loading user info:', err)
           }
         }
-      } finally {
+      } else if (event === 'SIGNED_OUT') {
         if (isMounted) {
-          setLoading(false)
+          setUser(null)
+          setToken(null)
+          setSelectedStoreId(null)
+          localStorage.removeItem('vendexchat_token')
+          localStorage.removeItem('vendexchat_selected_store')
         }
       }
-    }
 
-    restoreSession()
-    return () => { isMounted = false }
-  }, []) // Solo al montar
+      if (isMounted) setLoading(false)
+    })
+
+    return () => {
+      isMounted = false
+      authListener.unsubscribe()
+    }
+  }, [user]) // Re-correr si el user cambia para asegurar consistencia
 
   const selectStore = useCallback((storeId: string) => {
     console.log('[AuthContext] Selecting store:', storeId)

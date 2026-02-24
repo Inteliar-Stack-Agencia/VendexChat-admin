@@ -23,12 +23,7 @@ export default function SelectStorePage() {
             try {
                 const myStores = await authApi.getMyStores()
                 setStores(myStores)
-
-                // Si solo tiene una tienda, seleccionarla automáticamente
-                if (myStores.length === 1) {
-                    selectStore(myStores[0].id)
-                    navigate('/dashboard')
-                }
+                // ELIMINADO: Auto-selección removida para evitar confusiones y loops
             } catch (err) {
                 console.error('Error loading stores:', err)
             } finally {
