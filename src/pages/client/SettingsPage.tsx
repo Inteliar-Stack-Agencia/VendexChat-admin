@@ -49,6 +49,8 @@ export default function SettingsPage() {
   const [logoUrl, setLogoUrl] = useState('')
   const [bannerUrl, setBannerUrl] = useState('')
   const [highlights, setHighlights] = useState<{ icon: string, label: string, description: string }[]>([])
+  const [aboutTitle, setAboutTitle] = useState('Nosotros')
+  const [historyTitle, setHistoryTitle] = useState('Nuestra Historia')
 
   // Form para contacto
   const [whatsapp, setWhatsapp] = useState('')
@@ -115,6 +117,8 @@ export default function SettingsPage() {
         const metadata = (data as any).metadata || {}
         setDescriptionLong(metadata.description_long || '')
         setHighlights(metadata.highlights || [])
+        setAboutTitle(metadata.about_title || 'Nosotros')
+        setHistoryTitle(metadata.history_title || 'Nuestra Historia')
 
         const gws = await tenantApi.listGateways()
         setGateways(gws)
@@ -160,7 +164,9 @@ export default function SettingsPage() {
         metadata: {
           ...((tenant as any)?.metadata || {}),
           description_long: descriptionLong,
-          highlights: highlights
+          highlights: highlights,
+          about_title: aboutTitle,
+          history_title: historyTitle
         }
       })
       handleUpdateTenantState({
@@ -172,7 +178,9 @@ export default function SettingsPage() {
         metadata: {
           ...((tenant as any)?.metadata || {}),
           description_long: descriptionLong,
-          highlights: highlights
+          highlights: highlights,
+          about_title: aboutTitle,
+          history_title: historyTitle
         }
       } as any)
       showToast('success', 'Información actualizada')
@@ -469,24 +477,28 @@ export default function SettingsPage() {
               />
             </FeatureGuard>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Descripción breve</label>
-              <textarea
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                rows={3}
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Nuestra Historia (Descripción detallada)</label>
-              <textarea
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                rows={5}
-                value={descriptionLong}
-                onChange={(e) => setDescriptionLong(e.target.value)}
-                placeholder="Cuenta más sobre tu negocio, valores o historia aquí..."
-              />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <Input label="Título Sección Nosotros" value={aboutTitle} onChange={(e) => setAboutTitle(e.target.value)} />
+                <label className="block text-sm font-medium text-gray-700 mt-2 mb-1">Descripción breve / Observaciones</label>
+                <textarea
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  rows={3}
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                />
+              </div>
+              <div>
+                <Input label="Título Sección Historia" value={historyTitle} onChange={(e) => setHistoryTitle(e.target.value)} />
+                <label className="block text-sm font-medium text-gray-700 mt-2 mb-1">Nuestra Historia (Descripción detallada)</label>
+                <textarea
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  rows={3}
+                  value={descriptionLong}
+                  onChange={(e) => setDescriptionLong(e.target.value)}
+                  placeholder="Cuenta más sobre tu negocio, valores o historia aquí..."
+                />
+              </div>
             </div>
 
             {/* Highlights Section */}
