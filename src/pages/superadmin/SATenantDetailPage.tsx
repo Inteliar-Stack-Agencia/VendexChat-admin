@@ -31,6 +31,7 @@ export default function SATenantDetailPage() {
     const [savingSlug, setSavingSlug] = useState(false)
     const [aiPrompt, setAiPrompt] = useState('')
     const [savingPrompt, setSavingPrompt] = useState(false)
+    const [savingPlan, setSavingPlan] = useState(false)
 
     useEffect(() => {
         if (id) {
@@ -99,6 +100,35 @@ export default function SATenantDetailPage() {
             showToast('error', `Error al actualizar el prompt de IA: ${err.message || 'Error desconocido'}`)
         } finally {
             setSavingPrompt(false)
+        }
+    }
+
+    const handleUpgradePlan = async () => {
+        if (!tenant || !id) return
+        setSavingPlan(true)
+        try {
+            const updatedMetadata = {
+                ...(tenant.metadata || {}),
+                plan_type: 'VIP'
+            }
+            // 1. Update store metadata
+            await superadminApi.updateTenant(id, { metadata: updatedMetadata })
+
+            // 2. Update/Create subscription record
+            await superadminApi.updateSubscription(id, {
+                plan_type: 'vip',
+                status: 'active',
+                current_period_end: new Date(new Date().setFullYear(new Date().getFullYear() + 10)).toISOString(), // 10 years for testing
+                billing_cycle: 'annual'
+            })
+
+            setTenant({ ...tenant, metadata: updatedMetadata })
+            showToast('success', '¡Plan mejorado a VIP con éxito!')
+        } catch (err: any) {
+            console.error('Upgrade Plan Error:', err)
+            showToast('error', `Error al mejorar el plan: ${err.message || 'Error desconocido'}`)
+        } finally {
+            setSavingPlan(false)
         }
     }
 
@@ -234,11 +264,24 @@ export default function SATenantDetailPage() {
                                         </div>
                                         <span className="text-xs font-bold text-slate-700 capitalize">{tenant.is_active ? 'Online' : 'Offline'}</span>
                                     </div>
-                                    <div className="flex items-center gap-3 p-3 bg-white border border-slate-100 rounded-xl opacity-50">
-                                        <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-slate-50 text-slate-300">
-                                            <CreditCard className="w-4 h-4" />
+                                    <div className="flex flex-col gap-2">
+                                        <div className="flex items-center gap-3 p-3 bg-white border border-slate-100 rounded-xl">
+                                            <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-indigo-50 text-indigo-600">
+                                                <CreditCard className="w-4 h-4" />
+                                            </div>
+                                            <div className="flex-1">
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-xs font-black text-slate-700 uppercase tracking-widest">{tenant.metadata?.plan_type || 'Free'}</span>
+                                                    <button
+                                                        onClick={handleUpgradePlan}
+                                                        disabled={savingPlan}
+                                                        className="text-[9px] font-black text-indigo-600 hover:text-indigo-800 uppercase tracking-widest bg-indigo-50 px-2 py-1 rounded-md transition-all active:scale-95"
+                                                    >
+                                                        {savingPlan ? '...' : 'Subir a VIP'}
+                                                    </button>
+                                                </div>
+                                            </div>
                                         </div>
-                                        <span className="text-xs font-bold text-slate-700 capitalize">Plan Free</span>
                                     </div>
                                 </div>
                             </div>
