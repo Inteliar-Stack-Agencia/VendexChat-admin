@@ -7,8 +7,8 @@ interface ProtectedRouteProps {
   requiredRole?: 'client' | 'superadmin'
 }
 
-export default function ProtectedRoute({ children }: ProtectedRouteProps & { requiredRole?: string }) {
-  const { isAuthenticated, loading } = useAuth()
+export default function ProtectedRoute({ children, requiredRole = 'client' }: ProtectedRouteProps) {
+  const { user, isAuthenticated, loading, isSuperadmin } = useAuth()
   const location = useLocation()
 
   if (loading) {
@@ -21,6 +21,11 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps & { req
 
   if (!isAuthenticated) {
     return <Navigate to="/login" state={{ from: location }} replace />
+  }
+
+  // Si se requiere rol de cliente y el usuario es superadmin, redirigir a su consola
+  if (requiredRole === 'client' && isSuperadmin) {
+    return <Navigate to="/sa/overview" replace />
   }
 
   return <>{children}</>

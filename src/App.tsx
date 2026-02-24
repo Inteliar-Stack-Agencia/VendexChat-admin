@@ -51,6 +51,21 @@ import SAPermissionsPage from './pages/superadmin/SAPermissionsPage'
 import SAStatsPage from './pages/superadmin/SAStatsPage'
 import SALiquidationsPage from './pages/superadmin/SALiquidationsPage'
 import SASettingsPage from './pages/superadmin/SASettingsPage'
+import { useAuth } from './contexts/AuthContext'
+
+function RoleRedirect() {
+  const { user, loading, isSuperadmin } = useAuth()
+
+  if (loading) return null
+
+  if (!user) return <Navigate to="/login" replace />
+
+  if (isSuperadmin) {
+    return <Navigate to="/sa/overview" replace />
+  }
+
+  return <Navigate to="/dashboard" replace />
+}
 
 export default function App() {
   return (
@@ -134,9 +149,9 @@ export default function App() {
             <Route path="/superadmin/users" element={<UsersPage />} />
           </Route>
 
-          {/* Redirigir raíz al login */}
-          <Route path="/" element={<Navigate to="/login" replace />} />
-          <Route path="*" element={<Navigate to="/login" replace />} />
+          {/* Redirigir raíz al login o dashboard según rol */}
+          <Route path="/" element={<RoleRedirect />} />
+          <Route path="*" element={<RoleRedirect />} />
         </Routes>
       </AuthProvider>
     </BrowserRouter>
