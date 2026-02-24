@@ -4,8 +4,10 @@ import { Card, Button, Input, Modal, LoadingSpinner, EmptyState, ConfirmDialog }
 import { showToast } from '../../components/common/Toast'
 import { categoriesApi } from '../../services/api'
 import { Category } from '../../types'
+import { useAuth } from '../../contexts/AuthContext'
 
 export default function CategoriesPage() {
+  const { selectedStoreId } = useAuth()
   const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
@@ -31,7 +33,7 @@ export default function CategoriesPage() {
 
   useEffect(() => {
     loadCategories()
-  }, [])
+  }, [selectedStoreId])
 
   const openCreate = () => {
     setEditingCategory(null)

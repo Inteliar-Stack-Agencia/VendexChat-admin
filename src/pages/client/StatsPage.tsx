@@ -14,11 +14,13 @@ import {
 } from 'lucide-react'
 import { Card, LoadingSpinner, Button } from '../../components/common'
 import { statsApi } from '../../services/api'
+import { useAuth } from '../../contexts/AuthContext'
 import { formatPrice, formatDate } from '../../utils/helpers'
 import * as XLSX from 'xlsx'
 import { showToast } from '../../components/common/Toast'
 
 export default function StatsPage() {
+    const { selectedStoreId } = useAuth()
     const [loading, setLoading] = useState(true)
     const [overview, setOverview] = useState<any>(null)
     const [exporting, setExporting] = useState<string | null>(null)
@@ -26,7 +28,7 @@ export default function StatsPage() {
 
     useEffect(() => {
         loadOverview()
-    }, [range])
+    }, [range, selectedStoreId])
 
     const loadOverview = async () => {
         setLoading(true)

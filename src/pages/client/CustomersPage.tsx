@@ -2,8 +2,10 @@ import { useState, useEffect } from 'react'
 import { Users, Search, MessageSquare, ClipboardList } from 'lucide-react'
 import { Card, LoadingSpinner, EmptyState, Modal, Button, showToast } from '../../components/common'
 import { customersApi } from '../../services/api'
+import { useAuth } from '../../contexts/AuthContext'
 
 export default function CustomersPage() {
+    const { selectedStoreId } = useAuth()
     const [customers, setCustomers] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
     const [search, setSearch] = useState('')
@@ -14,7 +16,7 @@ export default function CustomersPage() {
 
     useEffect(() => {
         loadCustomers()
-    }, [])
+    }, [selectedStoreId])
 
     const loadCustomers = () => {
         setLoading(true)

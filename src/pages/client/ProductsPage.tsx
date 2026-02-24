@@ -6,6 +6,7 @@ import { productsApi, categoriesApi } from '../../services/api'
 import { Product, Category } from '../../types'
 import { formatPrice } from '../../utils/helpers'
 import { showToast } from '../../components/common/Toast'
+import { useAuth } from '../../contexts/AuthContext'
 import BulkActionsToolbar from '../../components/products/BulkActionsToolbar'
 
 // Dnd Kit Imports
@@ -186,6 +187,7 @@ export default function ProductsPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [isSortingMode, setIsSortingMode] = useState(false)
   const [isSavingOrder, setIsSavingOrder] = useState(false)
+  const { selectedStoreId } = useAuth()
   const requestCount = useRef(0)
 
   // Dnd Kit Sensors
@@ -218,7 +220,7 @@ export default function ProductsPage() {
         setLoading(false)
       }
     }
-  }, [page, search, categoryFilter])
+  }, [page, search, categoryFilter, selectedStoreId])
 
   useEffect(() => {
     if (categories.length > 0 && !categoryFilter) return
@@ -232,7 +234,7 @@ export default function ProductsPage() {
         setCategoryFilter(res[0].id)
       }
     }).catch(console.error)
-  }, []) // Solo al montar
+  }, [selectedStoreId]) // Refrescar cuando cambia la tienda
 
   const handleUpdateStatus = async (product: Product, newStatus: 'visible' | 'no-stock' | 'hidden') => {
     setUpdatingId(product.id)

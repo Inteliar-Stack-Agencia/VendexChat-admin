@@ -22,8 +22,10 @@ import { couponsApi, tenantApi } from '../../services/api'
 import { Coupon, Tenant } from '../../types'
 import { formatPrice } from '../../utils/helpers'
 import { showToast } from '../../components/common/Toast'
+import { useAuth } from '../../contexts/AuthContext'
 
 export default function CouponsPage() {
+    const { selectedStoreId } = useAuth()
     const [coupons, setCoupons] = useState<Coupon[]>([])
     const [tenant, setTenant] = useState<Tenant | null>(null)
     const [loading, setLoading] = useState(true)
@@ -49,7 +51,7 @@ export default function CouponsPage() {
 
     useEffect(() => {
         loadData()
-    }, [])
+    }, [selectedStoreId])
 
     const handleToggleGlobal = async () => {
         if (!tenant) return

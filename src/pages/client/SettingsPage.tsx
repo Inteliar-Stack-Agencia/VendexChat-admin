@@ -18,7 +18,7 @@ const TABS = [
 ]
 
 export default function SettingsPage() {
-  const { subscription } = useAuth()
+  const { subscription, selectedStoreId } = useAuth()
   const { tenant: globalTenant, setTenant: setGlobalTenant } = useOutletContext<{ tenant: Tenant | null, setTenant: (t: Tenant) => void }>()
   const location = useLocation()
   const currentPlan = subscription?.plan_type || 'free'
@@ -140,7 +140,7 @@ export default function SettingsPage() {
       }
     }
     loadData()
-  }, [])
+  }, [selectedStoreId])
 
   const handleUpdateTenantState = (updatedData: Partial<Tenant>) => {
     if (tenant) {

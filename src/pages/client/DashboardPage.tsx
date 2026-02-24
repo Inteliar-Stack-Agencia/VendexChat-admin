@@ -48,12 +48,13 @@ const modules = [
 ]
 
 export default function DashboardPage() {
-  const { subscription } = useAuth()
+  const { subscription, selectedStoreId } = useAuth()
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [tenant, setTenant] = useState<Tenant | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    setLoading(true)
     Promise.all([
       dashboardApi.getStats(),
       tenantApi.getMe()
@@ -64,7 +65,7 @@ export default function DashboardPage() {
       })
       .catch(console.error)
       .finally(() => setLoading(false))
-  }, [])
+  }, [selectedStoreId])
 
   const storefrontUrl = `${import.meta.env.VITE_STOREFRONT_URL}/${tenant?.slug}`
   const currentPlan = subscription?.plan_type || 'free'

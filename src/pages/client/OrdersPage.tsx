@@ -5,8 +5,10 @@ import { Card, Badge, LoadingSpinner, EmptyState, Pagination } from '../../compo
 import { ordersApi } from '../../services/api'
 import { Order } from '../../types'
 import { formatPrice, formatDate, orderStatusConfig } from '../../utils/helpers'
+import { useAuth } from '../../contexts/AuthContext'
 
 export default function OrdersPage() {
+  const { selectedStoreId } = useAuth()
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState('all')
@@ -41,7 +43,7 @@ export default function OrdersPage() {
     } finally {
       setLoading(false)
     }
-  }, [page, statusFilter, dateFilter])
+  }, [page, statusFilter, dateFilter, selectedStoreId])
 
   useEffect(() => {
     loadOrders()

@@ -11,7 +11,7 @@ import { Button } from '../common'
 export default function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [tenant, setTenant] = useState<Tenant | null>(null)
-  const { isSuperadmin } = useAuth()
+  const { isSuperadmin, selectedStoreId } = useAuth()
   const isImpersonating = !!localStorage.getItem('vendexchat_impersonated_store')
 
   // Cargar datos del tenant si es cliente o si estamos suplantando
@@ -23,7 +23,7 @@ export default function AppLayout() {
         if (isImpersonating) localStorage.removeItem('vendexchat_impersonated_store')
       })
     }
-  }, [isSuperadmin, isImpersonating])
+  }, [isSuperadmin, isImpersonating, selectedStoreId])
 
   const handleStopImpersonation = () => {
     superadminApi.stopImpersonation()
