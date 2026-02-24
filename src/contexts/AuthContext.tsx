@@ -39,7 +39,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let isMounted = true
 
     async function restoreSession() {
-      console.log('[AUTH] restoreSession start, token exists:', !!token)
       if (!token) {
         // Limpiar cualquier sesión interna de Supabase residual
         await supabase.auth.signOut().catch(() => { })
@@ -49,12 +48,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       try {
         const res = await authApi.me()
-        console.log('[AUTH] restoreSession me() success, role:', res.user?.role)
         if (isMounted) {
           setUser(res.user)
         }
       } catch (err) {
-        console.error('[AUTH] restoreSession FAILED:', err)
+        console.error('Session restoration failed:', err)
         // CRÍTICO: Limpiar TAMBIÉN la sesión interna de Supabase
         // para evitar que un refresh_token viejo cause errores CORS
         await supabase.auth.signOut().catch(() => { })
@@ -67,7 +65,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       } finally {
         if (isMounted) {
-          console.log('[AUTH] restoreSession done, setting loading=false')
           setLoading(false)
         }
       }
@@ -83,12 +80,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const login = useCallback(async (email: string, password: string) => {
-    console.log('[AUTH] login() called')
     const response = await authApi.login(email, password)
-    console.log('[AUTH] authApi.login() returned, response:', JSON.stringify(response).substring(0, 200))
     const payload = resolveAuthPayload(response)
     const authToken = payload.token ?? payload.access_token
-    console.log('[AUTH] token exists:', !!authToken, ', user role:', payload.user?.role)
 
     if (!authToken) {
       throw new Error('Token no recibido')
@@ -97,11 +91,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('vendexchat_token', authToken)
     setToken(authToken)
     setUser(payload.user)
-    console.log('[AUTH] user set, role:', payload.user?.role, ', store_id:', (payload.user as any)?.store_id)
 
     localStorage.removeItem('vendexchat_selected_store')
     setSelectedStoreId(null)
-    console.log('[AUTH] login() completed successfully')
   }, [])
 
   const register = useCallback(async (data: { store_name: string; email: string; password: string; slug: string; country: string; city: string }) => {

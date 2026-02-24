@@ -74,26 +74,21 @@ export const getStoreId = async (): Promise<string> => {
 // --- Auth ---
 export const authApi = {
   login: async (email: string, _password: string) => {
-    console.log('[API] login() called for:', email)
-
     // 1. Authenticate with Supabase
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email, password: _password })
-    console.log('[API] signInWithPassword result, error:', authError?.message, ', user:', !!authData?.user)
     if (authError) throw authError
     if (!authData.user) throw new Error('Usuario no encontrado')
 
-    // 2. Fetch full profile and store (same logic as me())
-    console.log('[API] Fetching profile for user:', authData.user.id)
+    // 2. Fetch full profile and store
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('*, stores(*)')
       .eq('id', authData.user.id)
       .single()
 
-    console.log('[API] Profile fetch result, error:', profileError?.message, ', role:', profile?.role, ', store_id:', profile?.store_id)
 
     if (profileError) {
-      console.warn('[API] Profile not found after login, using auth metadata fallback')
+      console.warn('Profile not found, using auth metadata fallback')
       return {
         token: authData.session?.access_token || '',
         user: {
@@ -103,7 +98,7 @@ export const authApi = {
       }
     }
 
-    console.log('[API] login() returning successfully with role:', profile.role)
+
     return {
       token: authData.session?.access_token || '',
       user: {
