@@ -76,6 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const selectStore = useCallback((storeId: string) => {
     console.log('[AuthContext] Selecting store:', storeId)
+    localStorage.removeItem('vendexchat_impersonated_store') // Limpiar suplantación al seleccionar manual
     localStorage.setItem('vendexchat_selected_store', storeId)
     setSelectedStoreId(storeId)
   }, [])
