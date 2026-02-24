@@ -155,13 +155,23 @@ export const authApi = {
       .eq('id', authUser.id)
       .single()
 
-    if (profileError) throw profileError
+    if (profileError) {
+      console.warn('[api] Profile not found, using auth metadata fallback')
+      return {
+        user: {
+          ...authUser,
+          role: (authUser.user_metadata as any)?.role || 'client',
+          tenant_id: (authUser.user_metadata as any)?.store_id,
+          store_id: (authUser.user_metadata as any)?.store_id
+        } as unknown as User
+      }
+    }
 
     return {
       user: {
         ...authUser,
         role: profile.role,
-        tenant_id: profile.store_id, // Mapeo para compatibilidad con tipos viejos
+        tenant_id: profile.store_id,
         store_id: profile.store_id,
         store: profile.stores
       } as unknown as User

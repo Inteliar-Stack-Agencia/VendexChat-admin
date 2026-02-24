@@ -38,8 +38,15 @@ export default function SelectStorePage() {
     }, [user, navigate, selectStore])
 
     const handleSelect = (storeId: string) => {
+        // 1. Guardar en localStorage primero (Sincrónico)
+        localStorage.setItem('vendexchat_selected_store', storeId)
+        localStorage.removeItem('vendexchat_impersonated_store')
+
+        // 2. Notificar al contexto si es posible, aunque el reload lo pisará
         selectStore(storeId)
-        // Usar full refresh para asegurar que todos los servicios y singletons se limpien
+
+        // 3. FULL REFRESH DURO para asegurar que la nueva ID sea la reina
+        console.log('[SelectStore] Store selected, forcing full reload to /dashboard...')
         window.location.href = '/dashboard'
     }
 

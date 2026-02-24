@@ -65,8 +65,8 @@ function RoleRedirect() {
   if (isSuperadmin) {
     // Si el superadmin seleccionó una tienda para trabajar, ir al dashboard de esa cada
     if (selectedStoreId) return <Navigate to="/dashboard" replace />
-    // Por defecto ir a la consola global
-    return <Navigate to="/sa/overview" replace />
+    // Por defecto ir al SELECTOR para que pueda elegir o ir a su consola
+    return <Navigate to="/select-store" replace />
   }
 
   // Si es cliente, verificar si ya seleccionó una tienda

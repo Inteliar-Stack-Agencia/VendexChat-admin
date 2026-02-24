@@ -27,8 +27,17 @@ export default function ProtectedRoute({ children, requiredRole = 'client' }: Pr
     return <Navigate to="/login" state={{ from: location }} replace />
   }
 
-  // Si se requiere rol de cliente y el usuario es superadmin, redirigir a su consola
+  // Si se requiere rol de cliente y el usuario es superadmin...
   if (requiredRole === 'client' && isSuperadmin) {
+    // ...pero tiene una tienda seleccionada (suplantada o manual), permitimos el paso
+    const impersonatedId = localStorage.getItem('vendexchat_impersonated_store')
+    const selectedStoreId = localStorage.getItem('vendexchat_selected_store')
+
+    if (impersonatedId || selectedStoreId) {
+      return <>{children}</>
+    }
+
+    // Si no tiene nada seleccionado, obligar a su consola
     return <Navigate to="/sa/overview" replace />
   }
 

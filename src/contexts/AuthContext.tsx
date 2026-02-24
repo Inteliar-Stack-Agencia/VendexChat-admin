@@ -51,17 +51,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (isMounted) {
           setUser(res.user)
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error('Session restoration failed:', err)
-        // CRÍTICO: Limpiar TAMBIÉN la sesión interna de Supabase
-        // para evitar que un refresh_token viejo cause errores CORS
-        await supabase.auth.signOut().catch(() => { })
-        if (isMounted) {
-          localStorage.removeItem('vendexchat_token')
-          localStorage.removeItem('vendexchat_selected_store')
-          setToken(null)
-          setUser(null)
-          setSelectedStoreId(null)
+        // SOLO desloguear si es un error de sesión expirada (401)
+        if (err?.status === 401 || err?.message?.includes('No auth user')) {
+          await supabase.auth.signOut().catch(() => { })
+          if (isMounted) {
+            localStorage.removeItem('vendexchat_token')
+            setToken(null)
+            setUser(null)
+          }
         }
       } finally {
         if (isMounted) {

@@ -29,13 +29,7 @@ export default function AppLayout() {
     superadminApi.stopImpersonation()
   }
 
-  // Redirección forzada si no hay tienda y es cliente
-  useEffect(() => {
-    if (!isSuperadmin && !selectedStoreId && !loading && window.location.pathname !== '/select-store') {
-      console.warn('[AppLayout] No store selected, redirecting to selector...')
-      window.location.href = '/select-store'
-    }
-  }, [isSuperadmin, selectedStoreId, loading])
+  // No redireccionar por JS en el Layout; dejar que el Router maneje esto para evitar loops
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col pt-2">
