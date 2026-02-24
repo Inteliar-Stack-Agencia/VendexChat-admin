@@ -13,7 +13,7 @@ export default function SADeleteTenantModal({ tenant, onClose, onConfirm }: SADe
     const [isDeleting, setIsDeleting] = useState(false)
     const [error, setError] = useState<string | null>(null)
 
-    const isConfirmed = confirmName === tenant.name
+    const isConfirmed = confirmName.trim().toLowerCase() === tenant.name.trim().toLowerCase()
 
     const handleDelete = async () => {
         if (!isConfirmed) return
@@ -89,15 +89,15 @@ export default function SADeleteTenantModal({ tenant, onClose, onConfirm }: SADe
                                     type="text"
                                     autoFocus
                                     disabled={isDeleting}
-                                    className={`w-full bg-slate-50 border-2 rounded-xl px-4 py-3 font-bold text-slate-900 transition-all outline-none ${confirmName === tenant.name
-                                            ? 'border-emerald-500 bg-emerald-50/30'
-                                            : confirmName.length > 0 ? 'border-amber-200' : 'border-transparent focus:border-indigo-100'
+                                    className={`w-full bg-slate-50 border-2 rounded-xl px-4 py-3 font-bold text-slate-900 transition-all outline-none ${isConfirmed
+                                        ? 'border-emerald-500 bg-emerald-50/30'
+                                        : confirmName.length > 0 ? 'border-amber-200' : 'border-transparent focus:border-indigo-100'
                                         }`}
                                     placeholder={tenant.name}
                                     value={confirmName}
                                     onChange={(e) => setConfirmName(e.target.value)}
                                 />
-                                {confirmName === tenant.name && (
+                                {isConfirmed && (
                                     <div className="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-600">
                                         <RefreshCw className="w-4 h-4 animate-spin-slow" />
                                     </div>
@@ -112,8 +112,8 @@ export default function SADeleteTenantModal({ tenant, onClose, onConfirm }: SADe
                             onClick={handleDelete}
                             disabled={!isConfirmed || isDeleting}
                             className={`w-full py-4 rounded-2xl font-black uppercase tracking-widest text-[11px] transition-all flex items-center justify-center gap-2 shadow-xl ${isConfirmed
-                                    ? 'bg-rose-600 text-white shadow-rose-100 hover:bg-rose-700 active:scale-95'
-                                    : 'bg-slate-100 text-slate-400 cursor-not-allowed shadow-none'
+                                ? 'bg-rose-600 text-white shadow-rose-100 hover:bg-rose-700 active:scale-95'
+                                : 'bg-slate-100 text-slate-400 cursor-not-allowed shadow-none'
                                 }`}
                         >
                             {isDeleting ? (
