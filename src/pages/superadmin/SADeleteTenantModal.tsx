@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { X, AlertTriangle, Trash2, RefreshCw } from 'lucide-react'
+import { X, AlertTriangle, Trash2, RefreshCw, CheckCircle } from 'lucide-react'
 import { Tenant } from '../../types'
 
 interface SADeleteTenantModalProps {
@@ -13,7 +13,9 @@ export default function SADeleteTenantModal({ tenant, onClose, onConfirm }: SADe
     const [isDeleting, setIsDeleting] = useState(false)
     const [error, setError] = useState<string | null>(null)
 
-    const isConfirmed = confirmName.trim().toLowerCase() === tenant.name.trim().toLowerCase()
+    // Comparación ultra robusta: ignoramos todos los espacios, acentos y mayúsculas
+    const normalize = (str: string) => str.trim().toLowerCase().replace(/\s/g, '').normalize('NFD').replace(/[\u0300-\u036f]/g, "")
+    const isConfirmed = normalize(confirmName) === normalize(tenant.name)
 
     const handleDelete = async () => {
         if (!isConfirmed) return
@@ -59,7 +61,11 @@ export default function SADeleteTenantModal({ tenant, onClose, onConfirm }: SADe
                         <div className="space-y-1">
                             <p className="text-xs font-bold text-amber-900 uppercase tracking-tight">Atención: Destrucción Total</p>
                             <p className="text-[11px] text-amber-700 leading-relaxed font-medium">
-                                Esta acción eliminará permanentemente la tienda <span className="font-bold underline">{tenant.name}</span>, incluyendo:
+                                Esta acción eliminará permanentemente la tienda <span
+                                    className="font-bold underline cursor-pointer hover:text-amber-900 transition-colors"
+                                    title="Haz clic para copiar el nombre"
+                                    onClick={() => setConfirmName(tenant.name)}
+                                >{tenant.name}</span>, incluyendo:
                             </p>
                             <ul className="grid grid-cols-2 gap-x-4 gap-y-1 mt-2">
                                 {['Categorías', 'Productos', 'Pedidos', 'Configuración'].map((item) => (
@@ -68,6 +74,7 @@ export default function SADeleteTenantModal({ tenant, onClose, onConfirm }: SADe
                                     </li>
                                 ))}
                             </ul>
+                            <p className="text-[9px] text-amber-500 mt-2 italic">* Haz clic en el nombre subrayado para auto-completar.</p>
                         </div>
                     </div>
 
@@ -99,7 +106,7 @@ export default function SADeleteTenantModal({ tenant, onClose, onConfirm }: SADe
                                 />
                                 {isConfirmed && (
                                     <div className="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-600">
-                                        <RefreshCw className="w-4 h-4 animate-spin-slow" />
+                                        <CheckCircle className="w-4 h-4" />
                                     </div>
                                 )}
                             </div>
