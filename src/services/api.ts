@@ -781,6 +781,34 @@ export const superadminApi = {
   },
 
   deleteTenant: async (id: string | number) => {
+    // 1. Limpiar perfiles vinculados (evita bloqueo por FK)
+    await supabase.from('profiles').update({ store_id: null }).eq('store_id', id)
+
+    // 2. Traer órdenes para borrar sus items primero
+    const { data: orders } = await supabase.from('orders').select('id').eq('store_id', id)
+    if (orders && orders.length > 0) {
+      const orderIds = orders.map(o => o.id)
+      await supabase.from('order_items').delete().in('order_id', orderIds)
+      await supabase.from('orders').delete().in('id', orderIds)
+    }
+
+    // 3. Borrar contenido directo de la tienda
+    await supabase.from('products').delete().eq('store_id', id)
+    await supabase.from('categories').delete().eq('store_id', id)
+    await supabase.from('subscriptions').delete().eq('store_id', id)
+    await supabase.from('gateways').delete().eq('store_id', id)
+    await supabase.from('coupons').delete().eq('store_id', id)
+
+    // 4. Intentar borrar registros de tablas opcionales si existen
+    try {
+      await supabase.from('sliders').delete().eq('store_id', id)
+      await supabase.from('popups').delete().eq('store_id', id)
+      await supabase.from('crm_contacts').delete().eq('store_id', id)
+    } catch (e) {
+      console.warn('Tablas opcionales no encontradas o sin permisos:', e)
+    }
+
+    // 5. Borrar la tienda finalmente
     const { error } = await supabase.from('stores').delete().eq('id', id)
     if (error) throw error
   },
