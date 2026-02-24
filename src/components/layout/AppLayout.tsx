@@ -30,10 +30,17 @@ export default function AppLayout() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      {/* DEBUG BANNER */}
-      <div className="fixed top-0 left-0 right-0 z-[100] h-6 bg-red-600 text-white text-[10px] flex items-center justify-center font-black uppercase tracking-tighter opacity-75 pointer-events-none">
-        DEBUG MODE: {selectedStoreId || 'NO_STORE'} | {isSuperadmin ? 'SA' : 'CLIENT'}
+    <div className="min-h-screen bg-gray-50 flex flex-col pt-6">
+      {/* DEBUG BANNER - MAS VISIBLE Y CON DATOS */}
+      <div className="fixed top-0 left-0 right-0 z-[100] h-7 bg-red-600 text-white text-[9px] flex items-center justify-between px-4 font-black uppercase tracking-tight">
+        <div className="flex gap-4">
+          <span>ID: <span className="text-yellow-300">{selectedStoreId || 'NULL'}</span></span>
+          <span>TENANT: <span className="text-yellow-300">{tenant?.name || 'LOADING...'}</span></span>
+          <span>CITY: <span className="text-yellow-300">{tenant?.city || 'N/A'}</span></span>
+        </div>
+        <div className="bg-white/20 px-2 py-0.5 rounded">
+          {isSuperadmin ? 'SUPERADMIN' : 'CLIENT'} ({import.meta.env.MODE})
+        </div>
       </div>
       {isImpersonating && (
         <div className="bg-slate-900 border-b border-white/10 px-6 py-2 flex items-center justify-between animate-in slide-in-from-top duration-500 relative z-[60]">
