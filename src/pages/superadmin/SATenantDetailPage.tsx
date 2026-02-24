@@ -313,6 +313,5 @@ export default function SATenantDetailPage() {
                 </div>
             </div>
         </div>
-        </div >
     )
 }
