@@ -2,6 +2,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react'
 import { User } from '../types'
 import { authApi, billingApi } from '../services/api'
+import { supabase } from '../supabaseClient'
 import { Subscription } from '../types'
 
 interface AuthContextType {
@@ -40,6 +41,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async function restoreSession() {
       console.log('[AUTH] restoreSession start, token exists:', !!token)
       if (!token) {
+        // Limpiar cualquier sesión interna de Supabase residual
+        await supabase.auth.signOut().catch(() => { })
         setLoading(false)
         return
       }
@@ -52,6 +55,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       } catch (err) {
         console.error('[AUTH] restoreSession FAILED:', err)
+        // CRÍTICO: Limpiar TAMBIÉN la sesión interna de Supabase
+        // para evitar que un refresh_token viejo cause errores CORS
+        await supabase.auth.signOut().catch(() => { })
         if (isMounted) {
           localStorage.removeItem('vendexchat_token')
           localStorage.removeItem('vendexchat_selected_store')
@@ -113,6 +119,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const logout = useCallback(() => {
+    supabase.auth.signOut().catch(() => { })
     localStorage.removeItem('vendexchat_token')
     localStorage.removeItem('vendexchat_selected_store')
     setToken(null)
