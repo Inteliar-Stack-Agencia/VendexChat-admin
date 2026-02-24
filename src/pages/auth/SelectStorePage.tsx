@@ -55,85 +55,91 @@ export default function SelectStorePage() {
     }
 
     return (
-        <div className="min-h-screen bg-[#F8FAFC] flex flex-col pt-12 lg:pt-20 px-6 pb-12">
-            <div className="max-w-4xl mx-auto w-full">
-                {/* Header */}
-                <div className="flex flex-col items-center text-center mb-12">
-                    <div className="w-16 h-16 bg-white rounded-2xl shadow-sm flex items-center justify-center mb-6 border border-slate-100">
-                        <Store className="w-8 h-8 text-indigo-600" />
-                    </div>
-                    <h1 className="text-3xl lg:text-4xl font-black text-slate-900 tracking-tight mb-4 uppercase">
-                        Seleccione su Sucursales
-                    </h1>
-                    <p className="text-slate-500 font-medium max-w-md">
-                        Bienvenido de nuevo, {user?.name}. Elige en qué negocio deseas trabajar hoy.
-                    </p>
+        <div className="min-h-screen bg-[#F8FAFC] flex flex-col items-center justify-center p-4">
+            <div className="w-full max-w-[700px] bg-white border-2 border-slate-600 shadow-2xl overflow-hidden">
+                {/* Legacy Headers */}
+                <div className="bg-[#337ab7] px-8 py-2 text-left">
+                    <span className="text-white font-black italic text-xl uppercase tracking-wider">
+                        SELECCIONE SU SUCURSALES
+                    </span>
+                </div>
+                <div className="bg-[#5A616B] px-8 py-2 text-left">
+                    <span className="text-white font-black italic text-xl uppercase tracking-wider">
+                        PEDIDOS POR WHATSAPP
+                    </span>
                 </div>
 
-                {/* Grid de Tiendas */}
-                {stores.length === 0 ? (
-                    <div className="bg-white rounded-[2.5rem] p-12 text-center border border-slate-100 shadow-sm">
-                        <p className="text-slate-400 font-bold text-lg mb-6">No se encontraron tiendas vinculadas a este email.</p>
-                        <button
-                            onClick={logout}
-                            className="bg-indigo-600 text-white px-8 py-4 rounded-2xl font-black flex items-center gap-2 mx-auto hover:bg-indigo-700 transition-all hover:scale-105"
-                        >
-                            <LogOut className="w-5 h-5" /> Regresar al Login
-                        </button>
+                {/* Main Content */}
+                <div className="p-8 flex flex-col items-center">
+                    {/* Large Store Icon */}
+                    <div className="w-24 h-24 mb-8 bg-emerald-500 rounded-full flex items-center justify-center shadow-lg transform hover:scale-110 transition-transform">
+                        <Store className="w-12 h-12 text-white" />
                     </div>
-                ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {stores.map((store) => (
-                            <button
-                                key={store.id}
-                                onClick={() => handleSelect(store.id)}
-                                className="group relative bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl hover:shadow-indigo-500/5 hover:-translate-y-1 transition-all text-left overflow-hidden ring-0 hover:ring-2 hover:ring-indigo-600/10"
-                            >
-                                <div className="flex items-center gap-6">
-                                    <div className="w-20 h-20 rounded-2xl bg-slate-50 flex items-center justify-center border border-slate-100 group-hover:bg-indigo-50 group-hover:border-indigo-100 transition-colors overflow-hidden">
-                                        {store.logo_url ? (
-                                            <img src={store.logo_url} alt={store.name} className="w-full h-full object-contain" />
-                                        ) : (
-                                            <Store className="w-8 h-8 text-slate-300 group-hover:text-indigo-600 transition-colors" />
-                                        )}
-                                    </div>
-                                    <div className="flex-1">
-                                        <div className="flex items-center gap-2 mb-1">
-                                            <h3 className="text-xl font-black text-slate-900 group-hover:text-indigo-600 transition-colors">
-                                                {store.name}
-                                            </h3>
-                                            {(store.city || store.country) && (
-                                                <span className="bg-slate-100 text-slate-500 text-[8px] px-1.5 py-0.5 rounded font-black uppercase tracking-widest">
-                                                    {store.city || store.country}
-                                                </span>
+
+                    {/* Stores Table-like List */}
+                    <div className="w-full border-t border-slate-200">
+                        {stores.length === 0 ? (
+                            <div className="py-12 text-center text-slate-400 font-bold italic">
+                                No se encontraron tiendas vinculadas.
+                            </div>
+                        ) : (
+                            stores.map((store) => (
+                                <div
+                                    key={store.id}
+                                    className="flex items-center justify-between py-6 px-4 border-b border-slate-100 hover:bg-slate-50 transition-colors"
+                                >
+                                    <div className="w-20">
+                                        <div className="w-14 h-14 rounded-xl shadow-md border border-slate-100 overflow-hidden bg-white">
+                                            {store.logo_url ? (
+                                                <img src={store.logo_url} alt="" className="w-full h-full object-contain" />
+                                            ) : (
+                                                <div className="w-full h-full flex items-center justify-center bg-slate-50">
+                                                    <Store className="w-6 h-6 text-slate-300" />
+                                                </div>
                                             )}
                                         </div>
-                                        <p className="text-slate-400 font-bold text-[10px] uppercase tracking-widest italic flex items-center gap-1">
-                                            <span className="opacity-50 text-[8px]">vendexchat.com/</span>
-                                            {store.slug}
-                                        </p>
                                     </div>
-                                    <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-300 group-hover:bg-indigo-600 group-hover:text-white transition-all scale-75 group-hover:scale-100">
-                                        <ChevronRight className="w-5 h-5" />
+
+                                    <h3 className="flex-1 text-2xl font-bold text-slate-700 px-4">
+                                        {store.name}
+                                    </h3>
+
+                                    <div className="w-32 flex justify-end">
+                                        <button
+                                            onClick={() => handleSelect(store.id)}
+                                            className="bg-[#337ab7] hover:bg-[#286090] text-white font-bold px-6 py-2.5 rounded text-lg transition-all active:scale-95 shadow-md flex items-center gap-2"
+                                        >
+                                            Ingresar
+                                        </button>
                                     </div>
                                 </div>
-
-                                {/* Decoración de fondo */}
-                                <div className="absolute -right-4 -bottom-4 w-24 h-24 bg-indigo-600/5 rounded-full blur-2xl group-hover:bg-indigo-600/10 transition-colors" />
-                            </button>
-                        ))}
+                            ))
+                        )}
                     </div>
-                )}
 
-                {/* Footer del Selector */}
-                <div className="mt-12 flex items-center justify-center gap-4">
-                    <button
-                        onClick={logout}
-                        className="text-slate-400 hover:text-rose-600 font-bold text-xs uppercase tracking-widest flex items-center gap-2 transition-colors py-2 px-4 rounded-lg hover:bg-rose-50"
-                    >
-                        <LogOut className="w-3.5 h-3.5" /> Cerrar Sesión
-                    </button>
+                    {/* Hard Reset Option for Debugging */}
+                    <div className="mt-8 pt-8 border-t border-slate-100 w-full flex justify-between items-center text-[10px] text-slate-400">
+                        <button onClick={logout} className="hover:text-rose-600 font-black uppercase tracking-widest">
+                            Cerrar Sesión
+                        </button>
+                        <div className="flex gap-2">
+                            <span>USER: {user?.email}</span>
+                            <button
+                                onClick={() => {
+                                    localStorage.clear();
+                                    window.location.reload();
+                                }}
+                                className="bg-slate-100 px-2 rounded hover:bg-slate-200"
+                            >
+                                LIMPIAR TODO
+                            </button>
+                        </div>
+                    </div>
                 </div>
+
+                {/* Footer Bars */}
+                <div className="bg-[#337ab7] h-2.5 w-full"></div>
+                <div className="bg-[#5A616B] h-2.5 w-full"></div>
             </div>
         </div>
     )
