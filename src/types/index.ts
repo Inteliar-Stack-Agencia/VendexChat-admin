@@ -170,6 +170,7 @@ export interface Order {
   delivery_cost: number
   total: number
   items: OrderItem[]
+  metadata?: any | null
   created_at: string
   updated_at: string
 }

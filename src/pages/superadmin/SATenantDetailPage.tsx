@@ -14,13 +14,14 @@ import {
     CheckCircle,
     Globe,
     Settings,
-    MoreVertical,
     Activity,
-    Bot
+    Bot,
+    Copy
 } from 'lucide-react'
 import { superadminApi } from '../../services/api'
 import { Tenant } from '../../types'
 import { showToast } from '../../components/common/Toast'
+import SACloneTenantModal from './SACloneTenantModal'
 
 export default function SATenantDetailPage() {
     const { id } = useParams()
@@ -32,6 +33,7 @@ export default function SATenantDetailPage() {
     const [aiPrompt, setAiPrompt] = useState('')
     const [savingPrompt, setSavingPrompt] = useState(false)
     const [savingPlan, setSavingPlan] = useState(false)
+    const [showCloneModal, setShowCloneModal] = useState(false)
 
     useEffect(() => {
         if (id) {
@@ -319,6 +321,12 @@ export default function SATenantDetailPage() {
                 <div className="bg-white rounded-[2rem] p-8 border border-slate-100 shadow-sm space-y-4">
                     <h3 className="font-bold text-slate-900 mb-4">Acciones Críticas</h3>
                     <button
+                        onClick={() => setShowCloneModal(true)}
+                        className="w-full bg-indigo-600 text-white font-bold py-3 rounded-xl hover:bg-slate-900 transition-colors shadow-lg shadow-indigo-100 flex items-center justify-center gap-2"
+                    >
+                        <Copy className="w-4 h-4" /> Clonar Tienda (Multi-Sede)
+                    </button>
+                    <button
                         onClick={handleImpersonate}
                         className="w-full bg-slate-100 text-slate-900 font-bold py-3 rounded-xl hover:bg-slate-200 transition-colors"
                     >
@@ -366,6 +374,18 @@ export default function SATenantDetailPage() {
                     </div>
                 </div>
             </div>
+            {showCloneModal && (
+                <SACloneTenantModal
+                    sourceTenant={tenant}
+                    onClose={() => setShowCloneModal(false)}
+                    onClone={(data) => superadminApi.cloneTenant(tenant.id, data)}
+                    onSuccess={(newId) => {
+                        setShowCloneModal(false)
+                        showToast('success', '¡Tienda clonada con éxito! Redirigiendo...')
+                        window.location.href = `/sa/tenants/${newId}`
+                    }}
+                />
+            )}
         </div>
     )
 }

@@ -1060,6 +1060,96 @@ export const superadminApi = {
       .single()
     if (error) throw error
     return updated
+  },
+
+  cloneTenant: async (sourceId: string, data: { name: string; slug: string; email: string }) => {
+    // 1. Get Source Store
+    const { data: sourceStore, error: sourceError } = await supabase
+      .from('stores')
+      .select('*')
+      .eq('id', sourceId)
+      .single()
+
+    if (sourceError || !sourceStore) throw new Error('No se pudo encontrar la tienda origen')
+
+    // 2. Create New Store (and Auth) using existing createTenant logic
+    const newStore = await superadminApi.createTenant({
+      name: data.name,
+      slug: data.slug,
+      email: data.email,
+      country: sourceStore.country || 'Argentina',
+      is_active: true,
+      plan_type: (sourceStore.metadata as any)?.plan_type || 'free'
+    })
+
+    // 3. Copy Metadata & Settings from Source
+    const { error: updateError } = await supabase
+      .from('stores')
+      .update({
+        logo_url: sourceStore.logo_url,
+        banner_url: sourceStore.banner_url,
+        description: sourceStore.description,
+        whatsapp: sourceStore.whatsapp || '',
+        address: sourceStore.address,
+        primary_color: sourceStore.primary_color,
+        metadata: sourceStore.metadata,
+        ai_prompt: sourceStore.ai_prompt,
+        physical_schedule: sourceStore.physical_schedule,
+        online_schedule: sourceStore.online_schedule,
+        delivery_cost: sourceStore.delivery_cost,
+        delivery_info: sourceStore.delivery_info
+      })
+      .eq('id', newStore.id)
+
+    if (updateError) console.error('Error copying store settings:', updateError)
+
+    // 4. Copy Categories & Products
+    const { data: categories } = await supabase
+      .from('categories')
+      .select('*')
+      .eq('store_id', sourceId)
+
+    if (categories && categories.length > 0) {
+      for (const cat of categories) {
+        // Create New Category
+        const { data: newCat, error: catError } = await supabase
+          .from('categories')
+          .insert({
+            store_id: newStore.id,
+            name: cat.name,
+            sort_order: cat.sort_order
+          })
+          .select()
+          .single()
+
+        if (!catError && newCat) {
+          // Fetch Products for this source Category
+          const { data: products } = await supabase
+            .from('products')
+            .select('*')
+            .eq('category_id', cat.id)
+
+          if (products && products.length > 0) {
+            const productsToInsert = products.map(p => ({
+              store_id: newStore.id,
+              category_id: newCat.id,
+              name: p.name,
+              description: p.description,
+              price: p.price,
+              stock: p.stock,
+              unlimited_stock: p.unlimited_stock,
+              image_url: p.image_url,
+              is_active: p.is_active,
+              is_featured: p.is_featured,
+              sort_order: p.sort_order
+            }))
+            await supabase.from('products').insert(productsToInsert)
+          }
+        }
+      }
+    }
+
+    return newStore
   }
 }
 

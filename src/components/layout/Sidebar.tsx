@@ -20,7 +20,8 @@ import {
   Bot,
   Truck,
   Wand2,
-  BarChart3
+  BarChart3,
+  Sparkles
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -138,6 +139,11 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                 <NavLink to="/ai-importer" className={linkClass} onClick={onClose}>
                   <Wand2 className="w-5 h-5" />
                   Importador IA
+                  <span className="ml-auto text-[8px] bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded font-black uppercase">VIP</span>
+                </NavLink>
+                <NavLink to="/ai-intelligence" className={linkClass} onClick={onClose}>
+                  <Sparkles className="w-5 h-5" />
+                  AI Inteligencia
                   <span className="ml-auto text-[8px] bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded font-black uppercase">VIP</span>
                 </NavLink>
                 <NavLink to="/stats" className={linkClass} onClick={onClose}>
