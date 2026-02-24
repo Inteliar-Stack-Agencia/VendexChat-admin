@@ -61,6 +61,7 @@ export default function AppLayout() {
             onMenuClick={() => setSidebarOpen(true)}
             storeName={tenant?.name}
             storeSlug={tenant?.slug}
+            storeCity={tenant?.city}
           />
 
           <main className="flex-1 p-4 lg:p-6 overflow-auto">

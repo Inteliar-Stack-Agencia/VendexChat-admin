@@ -21,50 +21,39 @@ import { normalizeProductData } from '../utils/helpers'
  * Si el perfil no tiene store_id, intenta encontrar la tienda por el slug en los metadatos de auth.
  */
 export const getStoreId = async (): Promise<string> => {
+  // 1. Prioridad Absoluta: Selección Manual o Suplantación (Sin esperas de red si es posible)
+  const impersonatedId = localStorage.getItem('vendexchat_impersonated_store')
+  const selectedStoreId = localStorage.getItem('vendexchat_selected_store')
+  const activeStoreId = impersonatedId || selectedStoreId
+
+  if (activeStoreId) {
+    console.log('[api] Using ACTIVE store ID from localStorage:', activeStoreId)
+    return activeStoreId
+  }
+
+  // 2. Fallback: Obtener usuario de Auth
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
     console.error('getStoreId: No hay sesión activa')
     throw new Error('No hay sesión activa')
   }
 
-  // 1. Soporte para Selección Manual (Multi-Tienda) o Suplantación
-  const selectedStoreId = localStorage.getItem('vendexchat_selected_store')
-  const impersonatedId = localStorage.getItem('vendexchat_impersonated_store')
-
-  const activeStoreId = impersonatedId || selectedStoreId
-
-  if (activeStoreId) {
-    console.log('[api] Using active store ID:', activeStoreId)
-    return activeStoreId
-  }
-
-  // 1. Intentar por perfil
+  // 3. Intentar por perfil
   const { data: profile } = await supabase.from('profiles').select('store_id').eq('id', user.id).single()
-
   if (profile?.store_id) {
+    console.log('[api] Using store ID from profile:', profile.store_id)
     return profile.store_id
   }
 
-  console.warn('getStoreId: Store ID no encontrado en perfil, intentando auto-reparación...')
-
-  // 2. Auto-reparación: Si no tiene store_id, buscar por slug en metadatos
+  // 4. Auto-reparación por slug en metadata
   const metaSlug = user.user_metadata?.slug
   if (metaSlug) {
     const { data: store } = await supabase.from('stores').select('id').eq('slug', metaSlug).single()
     if (store) {
-      console.log('getStoreId: Tienda encontrada por slug, vinculando perfil...', store.id)
-      // Vincular permanentemente para futuras llamadas
-      const { error: updateError } = await supabase.from('profiles').update({ store_id: store.id }).eq('id', user.id)
-      if (updateError) {
-        console.error('getStoreId: Error al actualizar perfil con store_id:', updateError)
-        // Aun así devolvemos el ID para que la petición actual funcione si es posible
-      }
+      console.log('getStoreId: Auto-vinculando perfil por slug...', store.id)
+      await supabase.from('profiles').update({ store_id: store.id }).eq('id', user.id)
       return store.id
-    } else {
-      console.error('getStoreId: No se encontró tienda con slug:', metaSlug)
     }
-  } else {
-    console.warn('getStoreId: Usuario no tiene slug en metadata')
   }
 
   throw new Error('Error al identificar la tienda (store_id ausente)')

@@ -39,7 +39,8 @@ export default function SelectStorePage() {
 
     const handleSelect = (storeId: string) => {
         selectStore(storeId)
-        navigate('/dashboard')
+        // Usar full refresh para asegurar que todos los servicios y singletons se limpien
+        window.location.href = '/dashboard'
     }
 
     if (loading) {

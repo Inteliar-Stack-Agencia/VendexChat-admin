@@ -6,11 +6,12 @@ interface HeaderProps {
   onMenuClick: () => void
   storeName?: string
   storeSlug?: string
+  storeCity?: string | null
 }
 
 const STOREFRONT_URL = import.meta.env.VITE_STOREFRONT_URL || 'https://vendexchat.app'
 
-export default function Header({ onMenuClick, storeName, storeSlug }: HeaderProps) {
+export default function Header({ onMenuClick, storeName, storeSlug, storeCity }: HeaderProps) {
   const { user, isSuperadmin } = useAuth()
   const isImpersonating = !!localStorage.getItem('vendexchat_impersonated_store')
 
@@ -20,8 +21,13 @@ export default function Header({ onMenuClick, storeName, storeSlug }: HeaderProp
         <button onClick={onMenuClick} className="lg:hidden p-2 rounded-lg hover:bg-gray-100">
           <Menu className="w-5 h-5 text-gray-600" />
         </button>
-        <h1 className="text-lg font-semibold text-gray-900 truncate">
+        <h1 className="text-lg font-semibold text-gray-900 truncate flex items-center gap-2">
           {storeName || 'Mi Tienda'}
+          {storeCity && (
+            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded italic">
+              {storeCity}
+            </span>
+          )}
         </h1>
       </div>
 
