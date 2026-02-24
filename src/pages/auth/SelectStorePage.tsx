@@ -6,12 +6,14 @@ import { authApi } from '../../services/api'
 import { Tenant } from '../../types'
 
 export default function SelectStorePage() {
-    const { user, selectStore, logout } = useAuth()
+    const { user, loading: authLoading, selectStore, logout } = useAuth()
     const navigate = useNavigate()
     const [stores, setStores] = useState<Tenant[]>([])
     const [loading, setLoading] = useState(true)
 
     useEffect(() => {
+        if (authLoading) return // ESPERAR a que restaure la sesión
+
         if (!user) {
             navigate('/login')
             return
@@ -35,7 +37,7 @@ export default function SelectStorePage() {
         }
 
         loadStores()
-    }, [user, navigate, selectStore])
+    }, [user, authLoading, navigate, selectStore])
 
     const handleSelect = (storeId: string) => {
         // 1. Guardar en localStorage primero (Sincrónico)

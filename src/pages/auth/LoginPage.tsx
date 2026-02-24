@@ -16,11 +16,9 @@ export default function LoginPage() {
   const navigate = useNavigate()
 
   useEffect(() => {
-    if (!user) return
-    if (user.role === 'superadmin') {
-      navigate('/sa/overview', { replace: true })
-    } else {
-      navigate('/dashboard', { replace: true })
+    if (user) {
+      // Dejar que RoleRedirect maneje la lógica centralizada en la ruta raíz
+      navigate('/', { replace: true })
     }
   }, [user, navigate])
 
