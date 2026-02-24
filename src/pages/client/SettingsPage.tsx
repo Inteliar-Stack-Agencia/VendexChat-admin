@@ -45,6 +45,7 @@ export default function SettingsPage() {
   // Form para info general
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
+  const [descriptionLong, setDescriptionLong] = useState('')
   const [logoUrl, setLogoUrl] = useState('')
   const [bannerUrl, setBannerUrl] = useState('')
 
@@ -109,6 +110,7 @@ export default function SettingsPage() {
         setDeliveryInfo(data.delivery_info || '')
         setCustomDomain(data.custom_domain || '')
         setLowStockThreshold(String(data.low_stock_threshold ?? 5))
+        setDescriptionLong(metadata.description_long || '')
 
         const gws = await tenantApi.listGateways()
         setGateways(gws)
@@ -151,15 +153,23 @@ export default function SettingsPage() {
         description,
         logo_url: logoUrl,
         banner_url: bannerUrl,
-        custom_domain: customDomain || null
+        custom_domain: customDomain || null,
+        metadata: {
+          ...((tenant as any)?.metadata || {}),
+          description_long: descriptionLong
+        }
       })
       handleUpdateTenantState({
         name,
         description,
         logo_url: logoUrl,
         banner_url: bannerUrl,
-        custom_domain: customDomain || null
-      })
+        custom_domain: customDomain || null,
+        metadata: {
+          ...((tenant as any)?.metadata || {}),
+          description_long: descriptionLong
+        }
+      } as any)
       showToast('success', 'Información actualizada')
     } catch {
       showToast('error', 'Error al guardar')
@@ -461,6 +471,16 @@ export default function SettingsPage() {
                 rows={3}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Nuestra Historia (Descripción detallada)</label>
+              <textarea
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                rows={5}
+                value={descriptionLong}
+                onChange={(e) => setDescriptionLong(e.target.value)}
+                placeholder="Cuenta más sobre tu negocio, valores o historia aquí..."
               />
             </div>
             <Button type="submit" loading={saving}>Guardar cambios</Button>
