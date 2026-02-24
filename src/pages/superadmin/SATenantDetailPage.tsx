@@ -125,31 +125,36 @@ export default function SATenantDetailPage() {
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 {/* Main Info */}
-                <div className="lg:col-span-2 space-y-8">
+                <div className="lg:col-span-2 space-y-8 min-h-screen">
                     {/* AI Prompt Restriction Section */}
-                    <div className="bg-white rounded-[2rem] border border-indigo-100 shadow-sm overflow-hidden">
+                    <div key={`ai-prompt-${tenant.id}-${aiPrompt ? 'filled' : 'empty'}`} className="bg-white rounded-[2rem] border border-indigo-100 shadow-sm overflow-hidden animate-in fade-in slide-in-from-top-4 duration-700">
                         <div className="p-8 border-b border-indigo-50 bg-indigo-50/30 flex items-center justify-between">
-                            <h3 className="font-bold text-lg text-slate-900 flex items-center gap-2">
-                                <Bot className="w-5 h-5 text-indigo-600" />
-                                Prompt del Asistente Virtual (Restringido)
-                            </h3>
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-indigo-100 rounded-xl text-indigo-600">
+                                    <Bot className="w-5 h-5" />
+                                </div>
+                                <h3 className="font-bold text-lg text-slate-900">
+                                    Prompt del Asistente Virtual (Restringido)
+                                </h3>
+                            </div>
                             <span className="px-2 py-1 bg-indigo-600 text-[8px] font-black text-white uppercase tracking-widest rounded-md">Solo Soporte</span>
                         </div>
                         <div className="p-8 space-y-4">
-                            <p className="text-xs text-slate-400 font-medium">Este prompt define la personalidad y conocimientos del bot. El dueño de la tienda no tiene acceso a este campo.</p>
+                            <p className="text-xs text-slate-400 font-medium leading-relaxed">Este prompt define la personalidad y conocimientos del bot. El dueño de la tienda no tiene acceso a este campo y solo puede verse desde esta consola global.</p>
                             <textarea
                                 value={aiPrompt}
                                 onChange={(e) => setAiPrompt(e.target.value)}
-                                className="w-full h-48 px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all"
-                                placeholder="Introduce las instrucciones del sistema para la IA..."
+                                className="w-full h-48 px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all placeholder:text-slate-300"
+                                placeholder="Introduce las instrucciones del sistema para la IA (ej: Eres un asistente experto en ventas...)"
                             />
-                            <div className="flex justify-end">
+                            <div className="flex justify-end gap-3 items-center">
+                                {savingPrompt && <span className="text-[10px] font-bold text-slate-400 animate-pulse">Guardando cambios...</span>}
                                 <button
                                     onClick={handleUpdatePrompt}
                                     disabled={savingPrompt}
-                                    className="px-6 py-2.5 bg-indigo-600 text-white text-xs font-black uppercase tracking-widest rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-all shadow-lg shadow-indigo-600/20"
+                                    className="px-6 py-2.5 bg-indigo-600 text-white text-xs font-black uppercase tracking-widest rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-all shadow-lg shadow-indigo-600/20 active:scale-95"
                                 >
-                                    {savingPrompt ? 'Guardando...' : 'Actualizar Prompt'}
+                                    {savingPrompt ? 'Actualizando...' : 'Actualizar Prompt'}
                                 </button>
                             </div>
                         </div>
