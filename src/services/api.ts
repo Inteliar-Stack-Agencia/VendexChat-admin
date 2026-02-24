@@ -105,30 +105,68 @@ export const authApi = {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return []
 
-    // 1. Intentar por email (Case-insensitive)
-    const { data: stores, error } = await supabase
-      .from('stores')
-      .select('*')
-      .ilike('email', user.email || '')
+    const allStores: any[] = []
+    const seenIds = new Set<string>()
 
-    console.log('[getMyStores] Found by email:', user.email, '->', stores?.length)
+    // 1. Buscar la tienda vinculada al perfil (SIEMPRE funciona por RLS)
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('store_id, role')
+      .eq('id', user.id)
+      .single()
 
-    // 2. Si es superadmin, forzar carga de TODO para que pueda elegir libremente sus sucursales
-    const isAdmin = (user.user_metadata as any)?.role === 'superadmin' ||
-      stores?.some(s => s.name.toLowerCase().includes('morfi')) // Heurística temporal para Morfi
+    if (profile?.store_id) {
+      const { data: profileStore } = await supabase
+        .from('stores')
+        .select('*')
+        .eq('id', profile.store_id)
+        .single()
 
-    if (isAdmin || (!stores || stores.length === 0)) {
-      console.log('[getMyStores] Aggressive fetch for admin or missing stores')
-      const { data: allStores } = await supabase.from('stores')
+      if (profileStore) {
+        allStores.push(profileStore)
+        seenIds.add(profileStore.id)
+      }
+    }
+
+    // 2. Buscar otras tiendas con el mismo email
+    if (user.email) {
+      const { data: emailStores } = await supabase
+        .from('stores')
+        .select('*')
+        .eq('email', user.email)
+
+      if (emailStores) {
+        for (const s of emailStores) {
+          if (!seenIds.has(s.id)) {
+            allStores.push(s)
+            seenIds.add(s.id)
+          }
+        }
+      }
+    }
+
+    // 3. Si es superadmin, traer TODAS las tiendas
+    if (profile?.role === 'superadmin') {
+      const { data: saStores } = await supabase
+        .from('stores')
         .select('*')
         .order('name', { ascending: true })
         .limit(100)
-      return (allStores || []) as Tenant[]
+
+      if (saStores) {
+        for (const s of saStores) {
+          if (!seenIds.has(s.id)) {
+            allStores.push(s)
+            seenIds.add(s.id)
+          }
+        }
+      }
     }
 
-    if (error) throw error
-    return (stores || []) as Tenant[]
+    console.log('[getMyStores] Total:', allStores.length, allStores.map((s: any) => s.name))
+    return allStores as Tenant[]
   },
+
 
   register: async (data: { store_name: string; email: string; password: string; slug: string; country: string; city: string }) => {
     // 1. Crear usuario en Auth con metadatos para el trigger de profiles
