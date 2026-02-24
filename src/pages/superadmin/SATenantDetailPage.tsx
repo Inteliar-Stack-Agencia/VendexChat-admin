@@ -15,7 +15,8 @@ import {
     Globe,
     Settings,
     MoreVertical,
-    Activity
+    Activity,
+    Bot
 } from 'lucide-react'
 import { superadminApi } from '../../services/api'
 import { Tenant } from '../../types'
@@ -28,6 +29,8 @@ export default function SATenantDetailPage() {
     const [editingSlug, setEditingSlug] = useState(false)
     const [newSlug, setNewSlug] = useState('')
     const [savingSlug, setSavingSlug] = useState(false)
+    const [aiPrompt, setAiPrompt] = useState('')
+    const [savingPrompt, setSavingPrompt] = useState(false)
 
     useEffect(() => {
         if (id) {
@@ -35,6 +38,7 @@ export default function SATenantDetailPage() {
                 .then(t => {
                     setTenant(t)
                     setNewSlug(t.slug)
+                    setAiPrompt(t.ai_prompt || '')
                 })
                 .finally(() => setLoading(false))
         }
@@ -78,6 +82,20 @@ export default function SATenantDetailPage() {
         }
     }
 
+    const handleUpdatePrompt = async () => {
+        if (!tenant || !id) return
+        setSavingPrompt(true)
+        try {
+            await superadminApi.updateTenant(id, { ai_prompt: aiPrompt || null })
+            setTenant({ ...tenant, ai_prompt: aiPrompt || null })
+            showToast('success', 'Prompt de IA actualizado correctamente.')
+        } catch (err) {
+            showToast('error', 'Error al actualizar el prompt de IA.')
+        } finally {
+            setSavingPrompt(false)
+        }
+    }
+
     if (loading) {
         return <div className="p-20 text-center font-bold text-slate-400 animate-pulse uppercase tracking-widest text-xs">Cargando ficha técnica del tenant...</div>
     }
@@ -108,6 +126,35 @@ export default function SATenantDetailPage() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 {/* Main Info */}
                 <div className="lg:col-span-2 space-y-8">
+                    {/* AI Prompt Restriction Section */}
+                    <div className="bg-white rounded-[2rem] border border-indigo-100 shadow-sm overflow-hidden">
+                        <div className="p-8 border-b border-indigo-50 bg-indigo-50/30 flex items-center justify-between">
+                            <h3 className="font-bold text-lg text-slate-900 flex items-center gap-2">
+                                <Bot className="w-5 h-5 text-indigo-600" />
+                                Prompt del Asistente Virtual (Restringido)
+                            </h3>
+                            <span className="px-2 py-1 bg-indigo-600 text-[8px] font-black text-white uppercase tracking-widest rounded-md">Solo Soporte</span>
+                        </div>
+                        <div className="p-8 space-y-4">
+                            <p className="text-xs text-slate-400 font-medium">Este prompt define la personalidad y conocimientos del bot. El dueño de la tienda no tiene acceso a este campo.</p>
+                            <textarea
+                                value={aiPrompt}
+                                onChange={(e) => setAiPrompt(e.target.value)}
+                                className="w-full h-48 px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all"
+                                placeholder="Introduce las instrucciones del sistema para la IA..."
+                            />
+                            <div className="flex justify-end">
+                                <button
+                                    onClick={handleUpdatePrompt}
+                                    disabled={savingPrompt}
+                                    className="px-6 py-2.5 bg-indigo-600 text-white text-xs font-black uppercase tracking-widest rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-all shadow-lg shadow-indigo-600/20"
+                                >
+                                    {savingPrompt ? 'Guardando...' : 'Actualizar Prompt'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
                     {/* Configuration Card */}
                     <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden">
                         <div className="p-8 border-b border-slate-50">
@@ -208,62 +255,64 @@ export default function SATenantDetailPage() {
                             ))}
                         </div>
                     </div>
+
+                </div>
+            </div>
+
+            {/* Sidebar Info */}
+            <div className="space-y-8">
+                {/* Quick Actions */}
+                <div className="bg-white rounded-[2rem] p-8 border border-slate-100 shadow-sm space-y-4">
+                    <h3 className="font-bold text-slate-900 mb-4">Acciones Críticas</h3>
+                    <button
+                        onClick={handleImpersonate}
+                        className="w-full bg-slate-100 text-slate-900 font-bold py-3 rounded-xl hover:bg-slate-200 transition-colors"
+                    >
+                        Iniciar Sesión como Merchant
+                    </button>
+                    <button
+                        onClick={handleToggleStatus}
+                        className={`w-full border font-bold py-3 rounded-xl transition-colors ${tenant.is_active ? 'border-rose-200 text-rose-600 hover:bg-rose-50' : 'border-emerald-200 text-emerald-600 hover:bg-emerald-50'}`}
+                    >
+                        {tenant.is_active ? 'Suspender Tienda' : 'Activar Tienda'}
+                    </button>
                 </div>
 
-                {/* Sidebar Info */}
-                <div className="space-y-8">
-                    {/* Quick Actions */}
-                    <div className="bg-white rounded-[2rem] p-8 border border-slate-100 shadow-sm space-y-4">
-                        <h3 className="font-bold text-slate-900 mb-4">Acciones Críticas</h3>
-                        <button
-                            onClick={handleImpersonate}
-                            className="w-full bg-slate-100 text-slate-900 font-bold py-3 rounded-xl hover:bg-slate-200 transition-colors"
-                        >
-                            Iniciar Sesión como Merchant
-                        </button>
-                        <button
-                            onClick={handleToggleStatus}
-                            className={`w-full border font-bold py-3 rounded-xl transition-colors ${tenant.is_active ? 'border-rose-200 text-rose-600 hover:bg-rose-50' : 'border-emerald-200 text-emerald-600 hover:bg-emerald-50'}`}
-                        >
-                            {tenant.is_active ? 'Suspender Tienda' : 'Activar Tienda'}
-                        </button>
-                    </div>
-
-                    {/* Contact Details */}
-                    <div className="bg-white rounded-[2rem] p-8 border border-slate-100 shadow-sm">
-                        <h3 className="font-bold text-slate-900 mb-6">Datos de Contacto</h3>
-                        <div className="space-y-6">
-                            <div className="flex items-center gap-4">
-                                <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center border border-slate-100 text-slate-400">
-                                    <Mail className="w-5 h-5" />
-                                </div>
-                                <div className="min-w-0">
-                                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Email</p>
-                                    <p className="text-sm font-bold text-slate-900 truncate">{tenant.email || 'N/A'}</p>
-                                </div>
+                {/* Contact Details */}
+                <div className="bg-white rounded-[2rem] p-8 border border-slate-100 shadow-sm">
+                    <h3 className="font-bold text-slate-900 mb-6">Datos de Contacto</h3>
+                    <div className="space-y-6">
+                        <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center border border-slate-100 text-slate-400">
+                                <Mail className="w-5 h-5" />
                             </div>
-                            <div className="flex items-center gap-4">
-                                <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center border border-emerald-100 text-emerald-600">
-                                    <Smartphone className="w-5 h-5" />
-                                </div>
-                                <div className="min-w-0">
-                                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">WhatsApp</p>
-                                    <p className="text-sm font-bold text-slate-900">+{tenant.whatsapp || 'N/A'}</p>
-                                </div>
+                            <div className="min-w-0">
+                                <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Email</p>
+                                <p className="text-sm font-bold text-slate-900 truncate">{tenant.email || 'N/A'}</p>
                             </div>
-                            <div className="flex items-center gap-4">
-                                <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center border border-slate-100 text-slate-400">
-                                    <Calendar className="w-5 h-5" />
-                                </div>
-                                <div className="min-w-0">
-                                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Miembro desde</p>
-                                    <p className="text-sm font-bold text-slate-900">{new Date(tenant.created_at).toLocaleDateString()}</p>
-                                </div>
+                        </div>
+                        <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center border border-emerald-100 text-emerald-600">
+                                <Smartphone className="w-5 h-5" />
+                            </div>
+                            <div className="min-w-0">
+                                <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">WhatsApp</p>
+                                <p className="text-sm font-bold text-slate-900">+{tenant.whatsapp || 'N/A'}</p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center border border-slate-100 text-slate-400">
+                                <Calendar className="w-5 h-5" />
+                            </div>
+                            <div className="min-w-0">
+                                <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Miembro desde</p>
+                                <p className="text-sm font-bold text-slate-900">{new Date(tenant.created_at).toLocaleDateString()}</p>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
+        </div >
     )
 }

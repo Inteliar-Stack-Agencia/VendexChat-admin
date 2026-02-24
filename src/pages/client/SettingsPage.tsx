@@ -48,6 +48,7 @@ export default function SettingsPage() {
   const [descriptionLong, setDescriptionLong] = useState('')
   const [logoUrl, setLogoUrl] = useState('')
   const [bannerUrl, setBannerUrl] = useState('')
+  const [highlights, setHighlights] = useState<{ icon: string, label: string, description: string }[]>([])
 
   // Form para contacto
   const [whatsapp, setWhatsapp] = useState('')
@@ -110,13 +111,15 @@ export default function SettingsPage() {
         setDeliveryInfo(data.delivery_info || '')
         setCustomDomain(data.custom_domain || '')
         setLowStockThreshold(String(data.low_stock_threshold ?? 5))
+
+        const metadata = (data as any).metadata || {}
         setDescriptionLong(metadata.description_long || '')
+        setHighlights(metadata.highlights || [])
 
         const gws = await tenantApi.listGateways()
         setGateways(gws)
 
         // Load manual methods from metadata
-        const metadata = (data as any).metadata || {}
         setManualMethods({
           cash: metadata.payment_methods?.cash ?? true,
           transfer: metadata.payment_methods?.transfer ?? false,
@@ -156,7 +159,8 @@ export default function SettingsPage() {
         custom_domain: customDomain || null,
         metadata: {
           ...((tenant as any)?.metadata || {}),
-          description_long: descriptionLong
+          description_long: descriptionLong,
+          highlights: highlights
         }
       })
       handleUpdateTenantState({
@@ -167,7 +171,8 @@ export default function SettingsPage() {
         custom_domain: customDomain || null,
         metadata: {
           ...((tenant as any)?.metadata || {}),
-          description_long: descriptionLong
+          description_long: descriptionLong,
+          highlights: highlights
         }
       } as any)
       showToast('success', 'Información actualizada')
@@ -483,7 +488,99 @@ export default function SettingsPage() {
                 placeholder="Cuenta más sobre tu negocio, valores o historia aquí..."
               />
             </div>
-            <Button type="submit" loading={saving}>Guardar cambios</Button>
+
+            {/* Highlights Section */}
+            <div className="pt-6 border-t border-slate-100">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight">Destacados (Highlights)</h3>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Iconos y descripciones clave de tu servicio</p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setHighlights([...highlights, { icon: 'Frozen', label: 'Nuevo Destacado', description: 'Descripción breve' }])}
+                  disabled={highlights.length >= 6}
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Agregar
+                </Button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {highlights.map((highlight, index) => (
+                  <div key={index} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-3 relative group">
+                    <button
+                      type="button"
+                      onClick={() => setHighlights(highlights.filter((_, i) => i !== index))}
+                      className="absolute top-2 right-2 p-1.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+
+                    <div className="flex gap-3">
+                      <div className="space-y-1 flex-1">
+                        <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Icono</label>
+                        <select
+                          value={highlight.icon}
+                          onChange={(e) => {
+                            const newHighlights = [...highlights]
+                            newHighlights[index].icon = e.target.value
+                            setHighlights(newHighlights)
+                          }}
+                          className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500/20"
+                        >
+                          <option value="Frozen">Copo de Nieve (Frío)</option>
+                          <option value="Truck">Camión (Envío)</option>
+                          <option value="Utensils">Cubiertos (Comida)</option>
+                          <option value="Zap">Rayo (Rápido)</option>
+                          <option value="Clock">Reloj (Horario)</option>
+                          <option value="Shield">Escudo (Seguro)</option>
+                        </select>
+                      </div>
+                      <div className="space-y-1 flex-[2]">
+                        <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Etiqueta</label>
+                        <input
+                          type="text"
+                          value={highlight.label}
+                          onChange={(e) => {
+                            const newHighlights = [...highlights]
+                            newHighlights[index].label = e.target.value
+                            setHighlights(newHighlights)
+                          }}
+                          className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500/20"
+                          placeholder="Ej: Congelados"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Descripción</label>
+                      <textarea
+                        value={highlight.description}
+                        onChange={(e) => {
+                          const newHighlights = [...highlights]
+                          newHighlights[index].description = e.target.value
+                          setHighlights(newHighlights)
+                        }}
+                        rows={2}
+                        className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium outline-none focus:ring-2 focus:ring-indigo-500/20 resize-none"
+                        placeholder="Breve descripción..."
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {highlights.length === 0 && (
+                <div className="text-center py-8 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-100">
+                  <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">No hay destaques configurados</p>
+                </div>
+              )}
+            </div>
+
+            <div className="pt-6">
+              <Button type="submit" loading={saving}>Guardar cambios</Button>
+            </div>
           </form>
         </Card>
       )}

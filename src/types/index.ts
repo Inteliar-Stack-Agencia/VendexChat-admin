@@ -59,6 +59,7 @@ export interface Tenant {
   is_active: boolean;
   coupons_enabled: boolean;
   metadata?: any;
+  ai_prompt?: string | null;
   low_stock_threshold: number;
   popups: Popup[];
   created_at: string;
