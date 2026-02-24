@@ -19,7 +19,8 @@ import {
     Copy,
     UserPlus,
     DollarSign,
-    Users
+    Users,
+    Trash2
 } from 'lucide-react'
 import { superadminApi } from '../../services/api'
 import { Tenant } from '../../types'
@@ -185,12 +186,6 @@ export default function SATenantDetailPage() {
                     </div>
                 </div>
                 <div className="flex items-center gap-3">
-                    <button
-                        onClick={() => setShowCloneModal(true)}
-                        className="bg-white text-slate-700 font-black px-6 py-3 rounded-xl border border-slate-200 hover:bg-slate-50 transition-all flex items-center gap-2 shadow-sm active:scale-95"
-                    >
-                        <Copy className="w-4 h-4" /> Clonar Tienda
-                    </button>
                     <button className="bg-indigo-600 text-white font-black px-6 py-3 rounded-xl hover:bg-indigo-700 transition-all flex items-center gap-2 shadow-lg shadow-indigo-100 active:scale-95">
                         <UserPlus className="w-4 h-4" /> Gestionar Accesos
                     </button>
@@ -382,19 +377,43 @@ export default function SATenantDetailPage() {
                 <div className="space-y-8">
                     {/* Quick Actions */}
                     <div className="bg-white rounded-[2rem] p-8 border border-slate-100 shadow-sm space-y-4">
-                        <h3 className="font-bold text-slate-900 mb-4">Acciones Críticas</h3>
+                        <h3 className="font-bold text-slate-900 mb-1 flex items-center gap-2">
+                            <Shield className="w-4 h-4 text-indigo-600" />
+                            Acciones Críticas
+                        </h3>
+                        <p className="text-[10px] text-slate-400 font-medium pb-2 border-b border-slate-50">Gestioná el acceso y ciclo de vida de la tienda.</p>
+                        <button
+                            onClick={() => setShowCloneModal(true)}
+                            className="w-full bg-indigo-600 text-white font-black py-4 rounded-xl hover:bg-slate-900 transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-100 group"
+                        >
+                            <Copy className="w-5 h-5 group-hover:scale-110 transition-transform" /> Clonar Tienda (Multi-Sede)
+                        </button>
                         <button
                             onClick={handleImpersonate}
-                            className="w-full bg-slate-50 text-slate-900 font-bold py-3 rounded-xl hover:bg-slate-100 transition-colors"
+                            className="w-full bg-slate-50 text-slate-900 font-bold py-3.5 rounded-xl hover:bg-slate-100 transition-colors flex items-center justify-center gap-2"
                         >
-                            Iniciar Sesión como Merchant
+                            <ExternalLink className="w-4 h-4 text-slate-400" /> Iniciar Sesión (Simulador)
                         </button>
                         <button
                             onClick={handleToggleStatus}
-                            className={`w-full border font-bold py-3 rounded-xl transition-colors ${tenant.is_active ? 'border-rose-100 text-rose-600 hover:bg-rose-50' : 'border-emerald-100 text-emerald-600 hover:bg-emerald-50'}`}
+                            className={`w-full border font-bold py-3.5 rounded-xl transition-colors flex items-center justify-center gap-2 ${tenant.is_active ? 'border-rose-100 text-rose-600 hover:bg-rose-50' : 'border-emerald-100 text-emerald-600 hover:bg-emerald-50'}`}
                         >
-                            {tenant.is_active ? 'Suspender Tienda' : 'Activar Tienda'}
+                            <Activity className="w-4 h-4" /> {tenant.is_active ? 'Suspender Merchant' : 'Activar Merchant'}
                         </button>
+
+                        {/* Danger Zone nested in Sidebar */}
+                        <div className="pt-6 mt-6 border-t border-slate-100 space-y-4">
+                            <div>
+                                <h4 className="text-[10px] font-black text-rose-600 uppercase tracking-widest mb-1">Zona de Peligro</h4>
+                                <p className="text-[9px] text-slate-400 font-medium leading-tight mb-4">Esta acción es irreversible y destruye todos los productos de esta sede.</p>
+                            </div>
+                            <button
+                                onClick={() => setShowDeleteModal(true)}
+                                className="w-full py-4 bg-white border-2 border-rose-100 text-rose-600 text-xs font-black uppercase tracking-widest rounded-xl hover:bg-rose-600 hover:text-white transition-all shadow-sm active:scale-95 flex items-center justify-center gap-2"
+                            >
+                                <Trash2 className="w-4 h-4" /> Eliminar Tienda
+                            </button>
+                        </div>
                     </div>
 
                     {/* Contact Details */}
@@ -406,7 +425,7 @@ export default function SATenantDetailPage() {
                                     <Mail className="w-5 h-5" />
                                 </div>
                                 <div className="min-w-0">
-                                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Email</p>
+                                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Email Comercial</p>
                                     <p className="text-sm font-bold text-slate-900 truncate">{tenant.email || 'N/A'}</p>
                                 </div>
                             </div>
@@ -419,28 +438,6 @@ export default function SATenantDetailPage() {
                                     <p className="text-sm font-bold text-slate-900">+{tenant.whatsapp || 'N/A'}</p>
                                 </div>
                             </div>
-                            <div className="flex items-center gap-4">
-                                <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center border border-slate-100 text-slate-400">
-                                    <Calendar className="w-5 h-5" />
-                                </div>
-                                <div className="min-w-0">
-                                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Miembro desde</p>
-                                    <p className="text-sm font-bold text-slate-900">{new Date(tenant.created_at).toLocaleDateString()}</p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <hr className="my-8 border-slate-100" />
-
-                        <div className="rounded-2xl bg-rose-50/50 p-6 border border-rose-100">
-                            <h4 className="text-xs font-black text-rose-600 uppercase tracking-widest mb-1">Zona de Peligro</h4>
-                            <p className="text-[10px] text-slate-500 font-medium mb-4">Eliminar una tienda borrará permanentemente todos sus productos, categorías y pedidos vinculados.</p>
-                            <button
-                                onClick={() => setShowDeleteModal(true)}
-                                className="w-full py-3 bg-white border border-rose-200 text-rose-600 text-xs font-black uppercase tracking-widest rounded-xl hover:bg-rose-600 hover:text-white transition-all shadow-sm active:scale-95"
-                            >
-                                Eliminar Tienda
-                            </button>
                         </div>
                     </div>
                 </div>
