@@ -113,14 +113,17 @@ export const authApi = {
 
     console.log('[getMyStores] Found by email:', user.email, '->', stores?.length)
 
-    // 2. Si es superadmin o el email no devolvió nada, intentar buscar si hay perfiles vinculados
-    // O si es Superadmin, simplemente mostrar todo para que pueda elegir (FLEXIBILIDAD TOTAL)
-    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+    // 2. Si es superadmin, forzar carga de TODO para que pueda elegir libremente sus sucursales
+    const isAdmin = (user.user_metadata as any)?.role === 'superadmin' ||
+      stores?.some(s => s.name.toLowerCase().includes('morfi')) // Heurística temporal para Morfi
 
-    if (profile?.role === 'superadmin' && (!stores || stores.length < 2)) {
-      console.log('[getMyStores] User is SA and needs more stores, fetching ALL as fallback')
-      const { data: allStores } = await supabase.from('stores').select('*').limit(50)
-      return allStores as Tenant[]
+    if (isAdmin || (!stores || stores.length === 0)) {
+      console.log('[getMyStores] Aggressive fetch for admin or missing stores')
+      const { data: allStores } = await supabase.from('stores')
+        .select('*')
+        .order('name', { ascending: true })
+        .limit(100)
+      return (allStores || []) as Tenant[]
     }
 
     if (error) throw error
