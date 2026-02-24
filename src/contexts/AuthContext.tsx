@@ -38,43 +38,62 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let isMounted = true
 
-    // Sincronizar con el estado interno de Supabase
-    const { data: { subscription: authListener } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('[AuthContext] Auth Event:', event, !!session)
-
+    // Función para procesar una sesión (inicial o de evento)
+    const handleSession = async (session: any) => {
       if (session?.user && session?.access_token) {
         if (isMounted) {
           setToken(session.access_token)
           localStorage.setItem('vendexchat_token', session.access_token)
         }
 
-        // Cargar perfil completo si el usuario cambió o no existe
-        if (!user || user.id !== session.user.id) {
-          try {
-            const res = await authApi.me()
-            if (isMounted) setUser(res.user)
-          } catch (err) {
-            console.error('[AuthContext] Error loading user info:', err)
-          }
+        try {
+          const res = await authApi.me()
+          if (isMounted) setUser(res.user)
+        } catch (err) {
+          console.error('[AuthContext] Error loading user info:', err)
+          // Si el me() falla pero hay sesión, podríamos estar en un estado inconsistente
+          // pero al menos intentamos mostrar algo si es un error de perfil
         }
+      } else {
+        if (isMounted) {
+          setUser(null)
+          setToken(null)
+          setSelectedStoreId(null)
+          // No limpiar localStorage aquí para evitar cerrar sesión por errores de red
+        }
+      }
+      if (isMounted) setLoading(false)
+    }
+
+    // 1. Carga inicial inmediata
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      handleSession(session)
+    })
+
+    // 2. Escuchar cambios futuros
+    const { data: { subscription: authListener } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('[AuthContext] Auth Event:', event, !!session)
+
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') {
+        handleSession(session)
       } else if (event === 'SIGNED_OUT') {
         if (isMounted) {
           setUser(null)
           setToken(null)
           setSelectedStoreId(null)
-          localStorage.removeItem('vendexchat_token')
-          localStorage.removeItem('vendexchat_selected_store')
+          setLoading(false)
         }
+      } else {
+        // Para otros eventos, asegurar que si no hay sesión, dejamos de cargar
+        if (!session && isMounted) setLoading(false)
       }
-
-      if (isMounted) setLoading(false)
     })
 
     return () => {
       isMounted = false
       authListener.unsubscribe()
     }
-  }, [user]) // Re-correr si el user cambia para asegurar consistencia
+  }, []) // Solo al montar para evitar bucles
 
   const selectStore = useCallback((storeId: string) => {
     console.log('[AuthContext] Selecting store:', storeId)
