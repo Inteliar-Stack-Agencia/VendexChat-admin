@@ -238,7 +238,7 @@ export default function SATenantDetailPage() {
                                                     <button onClick={() => setEditingSlug(true)} className="text-[10px] font-black text-indigo-600 hover:text-indigo-800 uppercase tracking-widest">
                                                         Editar
                                                     </button>
-                                                    <a href={`https://${tenant.slug}.vendexchat.app`} target="_blank" rel="noreferrer">
+                                                    <a href={`https://vendexchat.app/${tenant.slug}`} target="_blank" rel="noreferrer">
                                                         <ExternalLink className="w-4 h-4 text-slate-400 hover:text-indigo-600 cursor-pointer transition-colors" />
                                                     </a>
                                                 </div>
