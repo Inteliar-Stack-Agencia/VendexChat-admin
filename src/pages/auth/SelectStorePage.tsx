@@ -97,14 +97,22 @@ export default function SelectStorePage() {
                                         )}
                                     </div>
                                     <div className="flex-1">
-                                        <h3 className="text-xl font-black text-slate-900 mb-1 group-hover:text-indigo-600 transition-colors">
-                                            {store.name}
-                                        </h3>
-                                        <p className="text-slate-400 font-bold text-xs uppercase tracking-widest italic">
-                                            /{store.slug}
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <h3 className="text-xl font-black text-slate-900 group-hover:text-indigo-600 transition-colors">
+                                                {store.name}
+                                            </h3>
+                                            {(store.city || store.country) && (
+                                                <span className="bg-slate-100 text-slate-500 text-[8px] px-1.5 py-0.5 rounded font-black uppercase tracking-widest">
+                                                    {store.city || store.country}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <p className="text-slate-400 font-bold text-[10px] uppercase tracking-widest italic flex items-center gap-1">
+                                            <span className="opacity-50 text-[8px]">vendexchat.com/</span>
+                                            {store.slug}
                                         </p>
                                     </div>
-                                    <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-300 group-hover:bg-indigo-600 group-hover:text-white transition-all">
+                                    <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-300 group-hover:bg-indigo-600 group-hover:text-white transition-all scale-75 group-hover:scale-100">
                                         <ChevronRight className="w-5 h-5" />
                                     </div>
                                 </div>

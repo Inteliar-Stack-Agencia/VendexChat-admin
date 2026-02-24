@@ -75,6 +75,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []) // Solo al montar
 
   const selectStore = useCallback((storeId: string) => {
+    console.log('[AuthContext] Selecting store:', storeId)
     localStorage.setItem('vendexchat_selected_store', storeId)
     setSelectedStoreId(storeId)
   }, [])

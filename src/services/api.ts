@@ -34,8 +34,7 @@ export const getStoreId = async (): Promise<string> => {
   const activeStoreId = impersonatedId || selectedStoreId
 
   if (activeStoreId) {
-    // Si es superadmin, permitimos cualquier ID. 
-    // Si no, verificamos que el usuario tiene acceso a este ID (u omitimos verificación si confiamos en el selector)
+    console.log('[api] Using active store ID:', activeStoreId)
     return activeStoreId
   }
 
