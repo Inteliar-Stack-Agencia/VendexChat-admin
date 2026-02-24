@@ -12,9 +12,8 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({})
 
-  const { login } = useAuth()
+  const { login, user } = useAuth()
   const navigate = useNavigate()
-  const { user } = useAuth()
 
   useEffect(() => {
     if (!user) return

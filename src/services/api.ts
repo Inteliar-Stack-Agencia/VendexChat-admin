@@ -74,11 +74,40 @@ export const getStoreId = async (): Promise<string> => {
 // --- Auth ---
 export const authApi = {
   login: async (email: string, _password: string) => {
-    // Nota: El login ahora se maneja vía Supabase Auth
-    // Esta función es un placeholder para compatibilidad o login manual si fuera necesario
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password: _password })
-    if (error) throw error
-    return { token: data.session?.access_token || '', user: data.user as unknown as User }
+    // 1. Authenticate with Supabase
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email, password: _password })
+    if (authError) throw authError
+    if (!authData.user) throw new Error('Usuario no encontrado')
+
+    // 2. Fetch full profile and store (same logic as me())
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('*, stores(*)')
+      .eq('id', authData.user.id)
+      .single()
+
+    if (profileError) {
+      console.warn('Profile not found after login, attempting to create or use auth metadata')
+      // Fallback: If no profile yet, return auth user with default role
+      return {
+        token: authData.session?.access_token || '',
+        user: {
+          ...authData.user,
+          role: (authData.user.user_metadata as any)?.role || 'client'
+        } as unknown as User
+      }
+    }
+
+    return {
+      token: authData.session?.access_token || '',
+      user: {
+        ...authData.user,
+        role: profile.role,
+        tenant_id: profile.store_id,
+        store_id: profile.store_id,
+        store: profile.stores
+      } as unknown as User
+    }
   },
 
   getMyStores: async () => {
