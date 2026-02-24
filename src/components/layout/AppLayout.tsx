@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Outlet } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import Header from './Header'
-import { tenantApi, superadminApi, authApi } from '../../services/api'
+import { tenantApi, superadminApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import { Tenant } from '../../types'
 import { LogOut, ShieldAlert } from 'lucide-react'
@@ -11,19 +11,6 @@ import { Button } from '../common'
 export default function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [tenant, setTenant] = useState<Tenant | null>(null)
-  const [storesCount, setStoresCount] = useState<number | null>(null)
-  const [rawStorage, setRawStorage] = useState<string | null>(localStorage.getItem('vendexchat_selected_store'))
-
-  useEffect(() => {
-    // Escuchar cambios de localStorage (para este banner de debug únicamente)
-    const handleStorage = () => setRawStorage(localStorage.getItem('vendexchat_selected_store'))
-    window.addEventListener('storage', handleStorage)
-    return () => window.removeEventListener('storage', handleStorage)
-  }, [])
-
-  useEffect(() => {
-    authApi.getMyStores().then(s => setStoresCount(s.length)).catch(() => { })
-  }, [])
   const { isSuperadmin, selectedStoreId, loading } = useAuth()
   const isImpersonating = !!localStorage.getItem('vendexchat_impersonated_store')
 
@@ -51,19 +38,10 @@ export default function AppLayout() {
   }, [isSuperadmin, selectedStoreId, loading])
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col pt-8">
-      {/* DEBUG BANNER - MASIVO Y VERBOSO */}
-      <div className="fixed top-0 left-0 right-0 z-[999] h-8 bg-red-700 text-white text-[8px] flex items-center justify-between px-2 font-black uppercase overflow-hidden whitespace-nowrap">
-        <div className="flex gap-2 items-center">
-          <span className="bg-white text-red-700 px-1 rounded">STATE: {selectedStoreId || 'NULL'}</span>
-          <span className="bg-yellow-400 text-black px-1 rounded">RAW_LS: {rawStorage || 'NULL'}</span>
-          <span className="bg-white text-red-700 px-1 rounded">TENANT: {tenant?.name || '...'}</span>
-          <span className="bg-blue-500 text-white px-1 rounded">STORES_API: {storesCount ?? '?'}</span>
-        </div>
-        <div className="flex gap-2">
-          <button onClick={() => { localStorage.clear(); window.location.href = '/login' }} className="underline">RESET_ALL</button>
-          <span>{isSuperadmin ? 'SA' : 'CLIENT'}</span>
-        </div>
+    <div className="min-h-screen bg-gray-50 flex flex-col pt-2">
+      {/* SMALL DEBUG INDICATOR IF NEEDED (SUBTLE) */}
+      <div className="fixed top-0 left-0 bg-slate-900 text-white text-[6px] px-1 opacity-20 hover:opacity-100 z-[999]">
+        ID: {selectedStoreId || 'NULL'}
       </div>
       {isImpersonating && (
         <div className="bg-slate-900 border-b border-white/10 px-6 py-2 flex items-center justify-between animate-in slide-in-from-top duration-500 relative z-[60]">
