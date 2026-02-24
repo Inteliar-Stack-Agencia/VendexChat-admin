@@ -38,7 +38,8 @@ export default function SATenantDetailPage() {
                 .then(t => {
                     setTenant(t)
                     setNewSlug(t.slug)
-                    setAiPrompt(t.ai_prompt || '')
+                    // Pick from metadata as primary source for prompt
+                    setAiPrompt(t.metadata?.ai_prompt || t.ai_prompt || '')
                 })
                 .finally(() => setLoading(false))
         }
@@ -86,8 +87,12 @@ export default function SATenantDetailPage() {
         if (!tenant || !id) return
         setSavingPrompt(true)
         try {
-            await superadminApi.updateTenant(id, { ai_prompt: aiPrompt || null })
-            setTenant({ ...tenant, ai_prompt: aiPrompt || null })
+            const updatedMetadata = {
+                ...(tenant.metadata || {}),
+                ai_prompt: aiPrompt || null
+            }
+            await superadminApi.updateTenant(id, { metadata: updatedMetadata })
+            setTenant({ ...tenant, metadata: updatedMetadata })
             showToast('success', 'Prompt de IA actualizado correctamente.')
         } catch (err: any) {
             console.error('Update Prompt Error:', err)
