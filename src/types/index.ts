@@ -23,6 +23,8 @@ export interface RegisterRequest {
   email: string
   password: string
   slug: string
+  country: string
+  city: string
 }
 
 export interface AuthResponse {
@@ -56,6 +58,7 @@ export interface Tenant {
   online_schedule: Record<string, ScheduleDay> | null
   sliders: Slider[]
   country: string | null
+  city: string | null
   is_active: boolean;
   coupons_enabled: boolean;
   metadata?: any;

@@ -59,6 +59,8 @@ export default function SettingsPage() {
   const [instagram, setInstagram] = useState('')
   const [facebook, setFacebook] = useState('')
   const [customDomain, setCustomDomain] = useState('')
+  const [country, setCountry] = useState('')
+  const [city, setCity] = useState('')
 
   // Form para pedidos
   const [acceptOrders, setAcceptOrders] = useState(true)
@@ -113,6 +115,8 @@ export default function SettingsPage() {
         setDeliveryInfo(data.delivery_info || '')
         setCustomDomain(data.custom_domain || '')
         setLowStockThreshold(String(data.low_stock_threshold ?? 5))
+        setCountry(data.country || '')
+        setCity(data.city || '')
 
         const metadata = (data as any).metadata || {}
         setDescriptionLong(metadata.description_long || '')
@@ -200,8 +204,8 @@ export default function SettingsPage() {
     const cleanFacebook = facebook.trim().replace(/^(https?:\/\/)?(www\.)?facebook\.com\//i, '').replace(/\/$/, '')
 
     try {
-      await tenantApi.updateMe({ whatsapp, email, address, instagram: cleanInstagram, facebook: cleanFacebook })
-      handleUpdateTenantState({ whatsapp, email, address, instagram: cleanInstagram, facebook: cleanFacebook })
+      await tenantApi.updateMe({ whatsapp, email, address, country, city, instagram: cleanInstagram, facebook: cleanFacebook })
+      handleUpdateTenantState({ whatsapp, email, address, country, city, instagram: cleanInstagram, facebook: cleanFacebook })
       setInstagram(cleanInstagram)
       setFacebook(cleanFacebook)
       showToast('success', 'Contacto actualizado')
@@ -603,6 +607,10 @@ export default function SettingsPage() {
           <form onSubmit={handleSaveContact} className="space-y-4">
             <Input label="WhatsApp de la tienda" value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)} placeholder="+54 9 11 1234-5678" />
             <Input label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+            <div className="grid grid-cols-2 gap-4">
+              <Input label="País" value={country} onChange={(e) => setCountry(e.target.value)} />
+              <Input label="Ciudad" value={city} onChange={(e) => setCity(e.target.value)} />
+            </div>
             <Input label="Dirección física" value={address} onChange={(e) => setAddress(e.target.value)} />
             <Input label="Instagram" value={instagram} onChange={(e) => setInstagram(e.target.value)} placeholder="@tu_tienda" />
             <Input label="Facebook" value={facebook} onChange={(e) => setFacebook(e.target.value)} placeholder="facebook.com/tu_tienda" />

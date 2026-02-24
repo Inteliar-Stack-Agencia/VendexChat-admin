@@ -9,7 +9,7 @@ interface AuthContextType {
   token: string | null
   loading: boolean
   login: (email: string, password: string) => Promise<void>
-  register: (data: { store_name: string; email: string; password: string; slug: string }) => Promise<void>
+  register: (data: { store_name: string; email: string; password: string; slug: string; country: string; city: string }) => Promise<void>
   logout: () => void
   isAuthenticated: boolean
   isSuperadmin: boolean
@@ -77,7 +77,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSelectedStoreId(null)
   }, [])
 
-  const register = useCallback(async (data: { store_name: string; email: string; password: string; slug: string }) => {
+  const register = useCallback(async (data: { store_name: string; email: string; password: string; slug: string; country: string; city: string }) => {
     const response = await authApi.register(data)
     const payload = resolveAuthPayload(response)
     const authToken = payload.token ?? payload.access_token

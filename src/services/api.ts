@@ -94,7 +94,7 @@ export const authApi = {
     return stores as Tenant[]
   },
 
-  register: async (data: { store_name: string; email: string; password: string; slug: string }) => {
+  register: async (data: { store_name: string; email: string; password: string; slug: string; country: string; city: string }) => {
     // 1. Crear usuario en Auth con metadatos para el trigger de profiles
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: data.email,
@@ -103,6 +103,8 @@ export const authApi = {
         data: {
           name: data.store_name,
           slug: data.slug,
+          country: data.country,
+          city: data.city,
           whatsapp: '', // Nuevo: Para evitar el error de not-null en la tabla stores
           role: 'client'
         }

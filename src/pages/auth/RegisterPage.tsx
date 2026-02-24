@@ -1,10 +1,26 @@
 import { useState, FormEvent, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Store } from 'lucide-react'
+import { Store, Globe, MapPin } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
-import { Button, Input } from '../../components/common'
+import { Button, Input, Select } from '../../components/common'
 import { showToast } from '../../components/common/Toast'
 import { generateSlug } from '../../utils/helpers'
+
+const COUNTRIES = [
+  { value: 'Argentina', label: 'Argentina' },
+  { value: 'Uruguay', label: 'Uruguay' },
+  { value: 'Chile', label: 'Chile' },
+  { value: 'México', label: 'México' },
+  { value: 'España', label: 'España' },
+  { value: 'Colombia', label: 'Colombia' },
+  { value: 'Perú', label: 'Perú' },
+  { value: 'Ecuador', label: 'Ecuador' },
+  { value: 'Paraguay', label: 'Paraguay' },
+  { value: 'Bolivia', label: 'Bolivia' },
+  { value: 'Puerto Rico', label: 'Puerto Rico' },
+  { value: 'Estados Unidos', label: 'Estados Unidos' },
+  { value: 'Otro', label: 'Otro (Especificar)' },
+]
 
 export default function RegisterPage() {
   const [storeName, setStoreName] = useState('')
@@ -12,6 +28,8 @@ export default function RegisterPage() {
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [slug, setSlug] = useState('')
+  const [country, setCountry] = useState('Argentina')
+  const [city, setCity] = useState('')
   const [slugEdited, setSlugEdited] = useState(false)
   const [acceptTerms, setAcceptTerms] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -41,6 +59,8 @@ export default function RegisterPage() {
     else if (password.length < 8) newErrors.password = 'Mínimo 8 caracteres'
     if (password !== confirmPassword) newErrors.confirmPassword = 'Las contraseñas no coinciden'
     if (!slug.trim()) newErrors.slug = 'El slug es obligatorio'
+    if (!country) newErrors.country = 'Debes seleccionar un país'
+    if (!city.trim()) newErrors.city = 'La ciudad es obligatoria'
     if (!acceptTerms) newErrors.terms = 'Debes aceptar los términos y condiciones'
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
@@ -52,7 +72,7 @@ export default function RegisterPage() {
 
     setLoading(true)
     try {
-      await register({ store_name: storeName, email, password, slug })
+      await register({ store_name: storeName, email, password, slug, country, city })
       showToast('success', '¡Tienda creada exitosamente!')
       navigate('/dashboard')
     } catch (err) {
@@ -65,7 +85,7 @@ export default function RegisterPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
+      <div className="w-full max-w-md py-8">
         {/* Logo */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 bg-emerald-600 rounded-2xl mb-4">
@@ -100,6 +120,23 @@ export default function RegisterPage() {
               />
             </div>
 
+            <div className="grid grid-cols-2 gap-4">
+              <Select
+                label="País"
+                options={COUNTRIES}
+                value={country}
+                onChange={(e) => setCountry(e.target.value)}
+                error={errors.country}
+              />
+              <Input
+                label="Ciudad"
+                placeholder="Ej: Buenos Aires"
+                value={city}
+                onChange={(e) => setCity(e.target.value)}
+                error={errors.city}
+              />
+            </div>
+
             <Input
               label="Email"
               type="email"
@@ -130,7 +167,7 @@ export default function RegisterPage() {
               autoComplete="new-password"
             />
 
-            <label className="flex items-start gap-2 cursor-pointer">
+            <label className="flex items-start gap-2 cursor-pointer pt-2">
               <input
                 type="checkbox"
                 checked={acceptTerms}
@@ -146,7 +183,7 @@ export default function RegisterPage() {
             </label>
             {errors.terms && <p className="text-xs text-red-600">{errors.terms}</p>}
 
-            <Button type="submit" loading={loading} className="w-full">
+            <Button type="submit" loading={loading} className="w-full h-12 text-base">
               Crear mi tienda
             </Button>
           </form>
