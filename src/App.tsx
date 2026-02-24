@@ -1,60 +1,61 @@
+import { Suspense, lazy } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
 import ToastContainer from './components/common/Toast'
+import RouteLoader from './components/common/RouteLoader'
 
 // Layout
 import AppLayout from './components/layout/AppLayout'
 import ProtectedRoute, { SuperadminRoute } from './components/layout/ProtectedRoute'
 
 // Auth pages
-import LoginPage from './pages/auth/LoginPage'
-import RegisterPage from './pages/auth/RegisterPage'
-import RecoverPasswordPage from './pages/auth/RecoverPasswordPage'
-import ResetPasswordPage from './pages/auth/ResetPasswordPage'
+const LoginPage = lazy(() => import('./pages/auth/LoginPage'))
+const RegisterPage = lazy(() => import('./pages/auth/RegisterPage'))
+const RecoverPasswordPage = lazy(() => import('./pages/auth/RecoverPasswordPage'))
+const ResetPasswordPage = lazy(() => import('./pages/auth/ResetPasswordPage'))
+const SelectStorePage = lazy(() => import('./pages/auth/SelectStorePage'))
 
 // Client pages
-import DashboardPage from './pages/client/DashboardPage'
-import ProductsPage from './pages/client/ProductsPage'
-import ProductFormPage from './pages/client/ProductFormPage'
-import CategoriesPage from './pages/client/CategoriesPage'
-import OrdersPage from './pages/client/OrdersPage'
-import OrderDetailPage from './pages/client/OrderDetailPage'
-import CustomersPage from './pages/client/CustomersPage'
-import CouponsPage from './pages/client/CouponsPage'
-import CouponFormPage from './pages/client/CouponFormPage'
-import SchedulePage from './pages/client/SchedulePage'
-
-import SubscriptionPage from './pages/client/SubscriptionPage'
-import SettingsPage from './pages/client/SettingsPage'
-import BotConfigPage from './pages/client/BotConfigPage'
-import LogisticsPage from './pages/client/LogisticsPage'
-import QRPage from './pages/client/QRPage'
-import SlidersPage from './pages/client/SlidersPage'
-import PopupsPage from './pages/client/PopupsPage'
-import HelpPage from './pages/client/HelpPage'
-import AIImporterPage from './pages/client/AIImporterPage'
-import StatsPage from './pages/client/StatsPage'
-import AIAssistantPage from './pages/client/AIAssistantPage'
+const DashboardPage = lazy(() => import('./pages/client/DashboardPage'))
+const ProductsPage = lazy(() => import('./pages/client/ProductsPage'))
+const ProductFormPage = lazy(() => import('./pages/client/ProductFormPage'))
+const CategoriesPage = lazy(() => import('./pages/client/CategoriesPage'))
+const OrdersPage = lazy(() => import('./pages/client/OrdersPage'))
+const OrderDetailPage = lazy(() => import('./pages/client/OrderDetailPage'))
+const CustomersPage = lazy(() => import('./pages/client/CustomersPage'))
+const CouponsPage = lazy(() => import('./pages/client/CouponsPage'))
+const CouponFormPage = lazy(() => import('./pages/client/CouponFormPage'))
+const SchedulePage = lazy(() => import('./pages/client/SchedulePage'))
+const SubscriptionPage = lazy(() => import('./pages/client/SubscriptionPage'))
+const SettingsPage = lazy(() => import('./pages/client/SettingsPage'))
+const BotConfigPage = lazy(() => import('./pages/client/BotConfigPage'))
+const LogisticsPage = lazy(() => import('./pages/client/LogisticsPage'))
+const QRPage = lazy(() => import('./pages/client/QRPage'))
+const SlidersPage = lazy(() => import('./pages/client/SlidersPage'))
+const PopupsPage = lazy(() => import('./pages/client/PopupsPage'))
+const HelpPage = lazy(() => import('./pages/client/HelpPage'))
+const AIImporterPage = lazy(() => import('./pages/client/AIImporterPage'))
+const StatsPage = lazy(() => import('./pages/client/StatsPage'))
+const AIAssistantPage = lazy(() => import('./pages/client/AIAssistantPage'))
 
 // Superadmin pages (Legacy)
-import SuperadminDashboard from './pages/superadmin/SuperadminDashboard'
-import TenantsPage from './pages/superadmin/TenantsPage'
-import UsersPage from './pages/superadmin/UsersPage'
+const SuperadminDashboard = lazy(() => import('./pages/superadmin/SuperadminDashboard'))
+const TenantsPage = lazy(() => import('./pages/superadmin/TenantsPage'))
+const UsersPage = lazy(() => import('./pages/superadmin/UsersPage'))
 
 // Superadmin pages (New /sa)
 import SuperadminLayout from './components/layout/SuperadminLayout'
-import SAOverviewPage from './pages/superadmin/SAOverviewPage'
-import SATenantsPage from './pages/superadmin/SATenantsPage'
-import SATenantDetailPage from './pages/superadmin/SATenantDetailPage'
-import SAPaymentsPage from './pages/superadmin/SAPaymentsPage'
-import SASubscriptionsPage from './pages/superadmin/SASubscriptionsPage'
-import SAPermissionsPage from './pages/superadmin/SAPermissionsPage'
-import SAStatsPage from './pages/superadmin/SAStatsPage'
-import SALiquidationsPage from './pages/superadmin/SALiquidationsPage'
-import SASettingsPage from './pages/superadmin/SASettingsPage'
-import { useAuth } from './contexts/AuthContext'
+const SAOverviewPage = lazy(() => import('./pages/superadmin/SAOverviewPage'))
+const SATenantsPage = lazy(() => import('./pages/superadmin/SATenantsPage'))
+const SATenantDetailPage = lazy(() => import('./pages/superadmin/SATenantDetailPage'))
+const SAPaymentsPage = lazy(() => import('./pages/superadmin/SAPaymentsPage'))
+const SASubscriptionsPage = lazy(() => import('./pages/superadmin/SASubscriptionsPage'))
+const SAPermissionsPage = lazy(() => import('./pages/superadmin/SAPermissionsPage'))
+const SAStatsPage = lazy(() => import('./pages/superadmin/SAStatsPage'))
+const SALiquidationsPage = lazy(() => import('./pages/superadmin/SALiquidationsPage'))
+const SASettingsPage = lazy(() => import('./pages/superadmin/SASettingsPage'))
 
-import SelectStorePage from './pages/auth/SelectStorePage'
+import { useAuth } from './contexts/AuthContext'
 
 function RoleRedirect() {
   const { user, loading, isSuperadmin, selectedStoreId } = useAuth()
@@ -80,89 +81,91 @@ export default function App() {
     <BrowserRouter>
       <AuthProvider>
         <ToastContainer />
-        <Routes>
-          {/* Rutas públicas (Auth) */}
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/register" element={<RegisterPage />} />
-          <Route path="/recover-password" element={<RecoverPasswordPage />} />
-          <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
-          <Route path="/select-store" element={<SelectStorePage />} />
+        <Suspense fallback={<RouteLoader />}>
+          <Routes>
+            {/* Rutas públicas (Auth) */}
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/register" element={<RegisterPage />} />
+            <Route path="/recover-password" element={<RecoverPasswordPage />} />
+            <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
+            <Route path="/select-store" element={<SelectStorePage />} />
 
-          {/* Rutas protegidas del cliente */}
-          <Route
-            element={
-              <ProtectedRoute>
-                <AppLayout />
-              </ProtectedRoute>
-            }
-          >
-            <Route path="/dashboard" element={<DashboardPage />} />
-            <Route path="/products" element={<ProductsPage />} />
-            <Route path="/products/new" element={<ProductFormPage />} />
-            <Route path="/products/edit/:id" element={<ProductFormPage />} />
-            <Route path="/categories" element={<CategoriesPage />} />
-            <Route path="/orders" element={<OrdersPage />} />
-            <Route path="/orders/:id" element={<OrderDetailPage />} />
-            <Route path="/customers" element={<CustomersPage />} />
-            <Route path="/coupons" element={<CouponsPage />} />
-            <Route path="/coupons/new" element={<CouponFormPage />} />
-            <Route path="/coupons/edit/:id" element={<CouponFormPage />} />
-            <Route path="/horarios" element={<SchedulePage />} />
-            <Route path="/subscription" element={<SubscriptionPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
-            <Route path="/bot" element={<BotConfigPage />} />
-            <Route path="/logistics" element={<LogisticsPage />} />
-            <Route path="/qr" element={<QRPage />} />
-            <Route path="/sliders" element={<SlidersPage />} />
-            <Route path="/popups" element={<PopupsPage />} />
-            <Route path="/ayuda" element={<HelpPage />} />
-            <Route path="/ai-importer" element={<AIImporterPage />} />
-            <Route path="/ai-intelligence" element={<AIAssistantPage />} />
-            <Route path="/stats" element={<StatsPage />} />
+            {/* Rutas protegidas del cliente */}
+            <Route
+              element={
+                <ProtectedRoute>
+                  <AppLayout />
+                </ProtectedRoute>
+              }
+            >
+              <Route path="/dashboard" element={<DashboardPage />} />
+              <Route path="/products" element={<ProductsPage />} />
+              <Route path="/products/new" element={<ProductFormPage />} />
+              <Route path="/products/edit/:id" element={<ProductFormPage />} />
+              <Route path="/categories" element={<CategoriesPage />} />
+              <Route path="/orders" element={<OrdersPage />} />
+              <Route path="/orders/:id" element={<OrderDetailPage />} />
+              <Route path="/customers" element={<CustomersPage />} />
+              <Route path="/coupons" element={<CouponsPage />} />
+              <Route path="/coupons/new" element={<CouponFormPage />} />
+              <Route path="/coupons/edit/:id" element={<CouponFormPage />} />
+              <Route path="/horarios" element={<SchedulePage />} />
+              <Route path="/subscription" element={<SubscriptionPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/bot" element={<BotConfigPage />} />
+              <Route path="/logistics" element={<LogisticsPage />} />
+              <Route path="/qr" element={<QRPage />} />
+              <Route path="/sliders" element={<SlidersPage />} />
+              <Route path="/popups" element={<PopupsPage />} />
+              <Route path="/ayuda" element={<HelpPage />} />
+              <Route path="/ai-importer" element={<AIImporterPage />} />
+              <Route path="/ai-intelligence" element={<AIAssistantPage />} />
+              <Route path="/stats" element={<StatsPage />} />
 
-            {/* Redirigir root del merchant a dashboard */}
-            <Route index element={<Navigate to="/dashboard" replace />} />
-          </Route>
+              {/* Redirigir root del merchant a dashboard */}
+              <Route index element={<Navigate to="/dashboard" replace />} />
+            </Route>
 
-          {/* Rutas protegidas del superadmin (NUEVA CONSOLA /sa) */}
-          <Route
-            element={
-              <SuperadminRoute>
-                <SuperadminLayout />
-              </SuperadminRoute>
-            }
-          >
-            <Route path="/sa/overview" element={<SAOverviewPage />} />
-            <Route path="/sa/tenants" element={<SATenantsPage />} />
-            <Route path="/sa/tenants/:id" element={<SATenantDetailPage />} />
-            <Route path="/sa/subscriptions" element={<SASubscriptionsPage />} />
-            <Route path="/sa/payments" element={<SAPaymentsPage />} />
-            <Route path="/sa/permissions" element={<SAPermissionsPage />} />
-            <Route path="/sa/stats" element={<SAStatsPage />} />
-            <Route path="/sa/liquidations" element={<SALiquidationsPage />} />
-            <Route path="/sa/settings" element={<SASettingsPage />} />
+            {/* Rutas protegidas del superadmin (NUEVA CONSOLA /sa) */}
+            <Route
+              element={
+                <SuperadminRoute>
+                  <SuperadminLayout />
+                </SuperadminRoute>
+              }
+            >
+              <Route path="/sa/overview" element={<SAOverviewPage />} />
+              <Route path="/sa/tenants" element={<SATenantsPage />} />
+              <Route path="/sa/tenants/:id" element={<SATenantDetailPage />} />
+              <Route path="/sa/subscriptions" element={<SASubscriptionsPage />} />
+              <Route path="/sa/payments" element={<SAPaymentsPage />} />
+              <Route path="/sa/permissions" element={<SAPermissionsPage />} />
+              <Route path="/sa/stats" element={<SAStatsPage />} />
+              <Route path="/sa/liquidations" element={<SALiquidationsPage />} />
+              <Route path="/sa/settings" element={<SASettingsPage />} />
 
-            {/* Alias para el dashboard de entrada */}
-            <Route path="/sa" element={<Navigate to="/sa/overview" replace />} />
-          </Route>
+              {/* Alias para el dashboard de entrada */}
+              <Route path="/sa" element={<Navigate to="/sa/overview" replace />} />
+            </Route>
 
-          {/* Legacy Superadmin routes */}
-          <Route
-            element={
-              <SuperadminRoute>
-                <AppLayout />
-              </SuperadminRoute>
-            }
-          >
-            <Route path="/superadmin/dashboard" element={<SuperadminDashboard />} />
-            <Route path="/superadmin/tenants" element={<TenantsPage />} />
-            <Route path="/superadmin/users" element={<UsersPage />} />
-          </Route>
+            {/* Legacy Superadmin routes */}
+            <Route
+              element={
+                <SuperadminRoute>
+                  <AppLayout />
+                </SuperadminRoute>
+              }
+            >
+              <Route path="/superadmin/dashboard" element={<SuperadminDashboard />} />
+              <Route path="/superadmin/tenants" element={<TenantsPage />} />
+              <Route path="/superadmin/users" element={<UsersPage />} />
+            </Route>
 
-          {/* Redirigir raíz al login o dashboard según rol */}
-          <Route path="/" element={<RoleRedirect />} />
-          <Route path="*" element={<RoleRedirect />} />
-        </Routes>
+            {/* Redirigir raíz al login o dashboard según rol */}
+            <Route path="/" element={<RoleRedirect />} />
+            <Route path="*" element={<RoleRedirect />} />
+          </Routes>
+        </Suspense>
       </AuthProvider>
     </BrowserRouter>
   )
