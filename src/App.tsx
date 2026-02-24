@@ -1,21 +1,22 @@
 import { Suspense, lazy } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { AuthProvider } from './contexts/AuthContext'
+import { AuthProvider, useAuth } from './contexts/AuthContext'
 import ToastContainer from './components/common/Toast'
 import RouteLoader from './components/common/RouteLoader'
 
-// Layout
+// Layout (Estáticos para mayor estabilidad en el core)
 import AppLayout from './components/layout/AppLayout'
 import ProtectedRoute, { SuperadminRoute } from './components/layout/ProtectedRoute'
+import SuperadminLayout from './components/layout/SuperadminLayout'
 
-// Auth pages
-const LoginPage = lazy(() => import('./pages/auth/LoginPage'))
-const RegisterPage = lazy(() => import('./pages/auth/RegisterPage'))
-const RecoverPasswordPage = lazy(() => import('./pages/auth/RecoverPasswordPage'))
-const ResetPasswordPage = lazy(() => import('./pages/auth/ResetPasswordPage'))
-const SelectStorePage = lazy(() => import('./pages/auth/SelectStorePage'))
+// Auth pages (Estáticos: El core de auth debe ser instantáneo)
+import LoginPage from './pages/auth/LoginPage'
+import RegisterPage from './pages/auth/RegisterPage'
+import RecoverPasswordPage from './pages/auth/RecoverPasswordPage'
+import ResetPasswordPage from './pages/auth/ResetPasswordPage'
+import SelectStorePage from './pages/auth/SelectStorePage'
 
-// Client pages
+// Client pages (Lazy)
 const DashboardPage = lazy(() => import('./pages/client/DashboardPage'))
 const ProductsPage = lazy(() => import('./pages/client/ProductsPage'))
 const ProductFormPage = lazy(() => import('./pages/client/ProductFormPage'))
@@ -38,13 +39,12 @@ const AIImporterPage = lazy(() => import('./pages/client/AIImporterPage'))
 const StatsPage = lazy(() => import('./pages/client/StatsPage'))
 const AIAssistantPage = lazy(() => import('./pages/client/AIAssistantPage'))
 
-// Superadmin pages (Legacy)
+// Superadmin pages (Lazy)
 const SuperadminDashboard = lazy(() => import('./pages/superadmin/SuperadminDashboard'))
 const TenantsPage = lazy(() => import('./pages/superadmin/TenantsPage'))
 const UsersPage = lazy(() => import('./pages/superadmin/UsersPage'))
 
-// Superadmin pages (New /sa)
-import SuperadminLayout from './components/layout/SuperadminLayout'
+// New Superadmin pages (Lazy)
 const SAOverviewPage = lazy(() => import('./pages/superadmin/SAOverviewPage'))
 const SATenantsPage = lazy(() => import('./pages/superadmin/SATenantsPage'))
 const SATenantDetailPage = lazy(() => import('./pages/superadmin/SATenantDetailPage'))
@@ -54,8 +54,6 @@ const SAPermissionsPage = lazy(() => import('./pages/superadmin/SAPermissionsPag
 const SAStatsPage = lazy(() => import('./pages/superadmin/SAStatsPage'))
 const SALiquidationsPage = lazy(() => import('./pages/superadmin/SALiquidationsPage'))
 const SASettingsPage = lazy(() => import('./pages/superadmin/SASettingsPage'))
-
-import { useAuth } from './contexts/AuthContext'
 
 function RoleRedirect() {
   const { user, loading, isSuperadmin, selectedStoreId } = useAuth()

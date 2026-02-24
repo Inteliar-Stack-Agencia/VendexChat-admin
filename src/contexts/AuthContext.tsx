@@ -35,25 +35,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Al cargar la app, verificar si el token guardado es válido
   useEffect(() => {
+    let isMounted = true
     if (token) {
       authApi
         .me()
         .then((res) => {
-          setUser(res.user)
+          if (isMounted) {
+            setUser(res.user)
+          }
         })
-        .catch(() => {
-          console.log('Token inválido, cerrando sesión')
-          localStorage.removeItem('vendexchat_token')
-          localStorage.removeItem('vendexchat_selected_store')
-          setToken(null)
-          setUser(null)
-          setSelectedStoreId(null)
+        .catch((err) => {
+          console.error('Session restoration failed:', err)
+          if (isMounted) {
+            localStorage.removeItem('vendexchat_token')
+            localStorage.removeItem('vendexchat_selected_store')
+            setToken(null)
+            setUser(null)
+            setSelectedStoreId(null)
+          }
         })
-        .finally(() => setLoading(false))
+        .finally(() => {
+          if (isMounted) {
+            setLoading(false)
+          }
+        })
     } else {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLoading(false)
     }
+    return () => { isMounted = false }
   }, [token])
 
   const selectStore = useCallback((storeId: string) => {
@@ -62,31 +71,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const login = useCallback(async (email: string, password: string) => {
-    const response = await authApi.login(email, password)
-    const payload = resolveAuthPayload(response)
-    const authToken = payload.token ?? payload.access_token
-    if (!authToken) {
-      throw new Error('Token no recibido')
-    }
-    localStorage.setItem('vendexchat_token', authToken)
-    setToken(authToken)
-    setUser(payload.user)
+    setLoading(true)
+    try {
+      const response = await authApi.login(email, password)
+      const payload = resolveAuthPayload(response)
+      const authToken = payload.token ?? payload.access_token
 
-    // Al loguear, limpiamos la selección previa para forzar el selector si es necesario
-    localStorage.removeItem('vendexchat_selected_store')
-    setSelectedStoreId(null)
+      if (!authToken) {
+        throw new Error('Token no recibido')
+      }
+
+      localStorage.setItem('vendexchat_token', authToken)
+      setToken(authToken)
+      setUser(payload.user)
+
+      localStorage.removeItem('vendexchat_selected_store')
+      setSelectedStoreId(null)
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
   const register = useCallback(async (data: { store_name: string; email: string; password: string; slug: string; country: string; city: string }) => {
-    const response = await authApi.register(data)
-    const payload = resolveAuthPayload(response)
-    const authToken = payload.token ?? payload.access_token
-    if (!authToken) {
-      throw new Error('Token no recibido')
+    setLoading(true)
+    try {
+      const response = await authApi.register(data)
+      const payload = resolveAuthPayload(response)
+      const authToken = payload.token ?? payload.access_token
+
+      if (!authToken) {
+        throw new Error('Token no recibido')
+      }
+
+      localStorage.setItem('vendexchat_token', authToken)
+      setToken(authToken)
+      setUser(payload.user)
+    } finally {
+      setLoading(false)
     }
-    localStorage.setItem('vendexchat_token', authToken)
-    setToken(authToken)
-    setUser(payload.user)
   }, [])
 
   const logout = useCallback(() => {
