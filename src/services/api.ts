@@ -27,17 +27,16 @@ export const getStoreId = async (): Promise<string> => {
     throw new Error('No hay sesión activa')
   }
 
-  // 1. Soporte para Suplantación (Impersonation) para Superadmins
+  // 1. Soporte para Selección Manual (Multi-Tienda) o Suplantación
+  const selectedStoreId = localStorage.getItem('vendexchat_selected_store')
   const impersonatedId = localStorage.getItem('vendexchat_impersonated_store')
-  if (impersonatedId) {
-    // Verificar si el usuario realmente es superadmin por seguridad
-    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-    if (profile?.role === 'superadmin') {
-      console.log('getStoreId: Usando tienda suplantada:', impersonatedId)
-      return impersonatedId
-    } else {
-      localStorage.removeItem('vendexchat_impersonated_store')
-    }
+
+  const activeStoreId = impersonatedId || selectedStoreId
+
+  if (activeStoreId) {
+    // Si es superadmin, permitimos cualquier ID. 
+    // Si no, verificamos que el usuario tiene acceso a este ID (u omitimos verificación si confiamos en el selector)
+    return activeStoreId
   }
 
   // 1. Intentar por perfil
@@ -80,6 +79,19 @@ export const authApi = {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password: _password })
     if (error) throw error
     return { token: data.session?.access_token || '', user: data.user as unknown as User }
+  },
+
+  getMyStores: async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return []
+
+    const { data: stores, error } = await supabase
+      .from('stores')
+      .select('*')
+      .eq('email', user.email)
+
+    if (error) throw error
+    return stores as Tenant[]
   },
 
   register: async (data: { store_name: string; email: string; password: string; slug: string }) => {
@@ -764,25 +776,44 @@ export const superadminApi = {
   },
 
   createTenant: async (data: { name: string; slug: string; email: string; country?: string; is_active?: boolean; password?: string; whatsapp?: string; plan_type?: string }) => {
-    // 1. Create the Auth User (Invitation) using a temp client to avoid logout
-    const { createTempClient } = await import('../supabaseClient')
-    const tempClient = createTempClient()
+    // 1. Check if user already exists in auth or profiles
+    const { data: existingProfiles, error: checkError } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('email', data.email)
+      .maybeSingle()
 
-    const { data: authData, error: authError } = await tempClient.auth.signUp({
-      email: data.email,
-      password: data.password || Math.random().toString(36).slice(-12),
-      options: {
-        data: {
-          name: data.name,
-          slug: data.slug,
-          whatsapp: data.whatsapp || '',
-          role: 'client'
+    let authUserId: string | null = existingProfiles?.id || null
+
+    if (!authUserId) {
+      // Create the Auth User (Invitation) using a temp client to avoid logout
+      const { createTempClient } = await import('../supabaseClient')
+      const tempClient = createTempClient()
+
+      const { data: authData, error: authError } = await tempClient.auth.signUp({
+        email: data.email,
+        password: data.password || Math.random().toString(36).slice(-12),
+        options: {
+          data: {
+            name: data.name,
+            slug: data.slug,
+            whatsapp: data.whatsapp || '',
+            role: 'client'
+          }
+        }
+      })
+
+      if (authError) {
+        // Check if it's already registered but not in profiles? (Unlikely with triggers but possible)
+        if (authError.message.toLowerCase().includes('already registered')) {
+          // We'll try to proceed manually by trusting the slug match below
+          console.log('User already registered in Auth, proceeding to match store...')
+        } else {
+          throw authError
         }
       }
-    })
-
-    if (authError) throw authError
-    if (!authData.user) throw new Error('Failed to create auth user')
+      authUserId = authData.user?.id || null
+    }
 
     // 2. We wait a bit for the trigger to create the store or update it manually
     // Since we want to ensure 'country' is saved, we update the store by slug

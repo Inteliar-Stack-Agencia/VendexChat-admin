@@ -1,4 +1,5 @@
-import { Menu, ExternalLink, User } from 'lucide-react'
+import { Menu, ExternalLink, User, RefreshCw } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 
 interface HeaderProps {
@@ -42,6 +43,17 @@ export default function Header({ onMenuClick, storeName, storeSlug }: HeaderProp
           <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-xl bg-slate-50 border border-dashed border-slate-200 text-slate-400 cursor-help" title="Configura tu slug en ajustes">
             Tienda inactiva
           </div>
+        )}
+
+        {!isSuperadmin && (
+          <Link
+            to="/select-store"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-indigo-600 transition-colors bg-slate-50 hover:bg-indigo-50 rounded-xl"
+            title="Cambiar de sucursal"
+          >
+            <RefreshCw className="w-3 h-3" />
+            <span className="hidden md:inline">Cambiar Sucursal</span>
+          </Link>
         )}
         <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gray-50">
           <div className={`w-7 h-7 rounded-full flex items-center justify-center ${(isSuperadmin && !isImpersonating) ? 'bg-indigo-600' : 'bg-emerald-600'}`}>

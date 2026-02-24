@@ -54,8 +54,10 @@ import SALiquidationsPage from './pages/superadmin/SALiquidationsPage'
 import SASettingsPage from './pages/superadmin/SASettingsPage'
 import { useAuth } from './contexts/AuthContext'
 
+import SelectStorePage from './pages/auth/SelectStorePage'
+
 function RoleRedirect() {
-  const { user, loading, isSuperadmin } = useAuth()
+  const { user, loading, isSuperadmin, selectedStoreId } = useAuth()
 
   if (loading) return null
 
@@ -63,6 +65,11 @@ function RoleRedirect() {
 
   if (isSuperadmin) {
     return <Navigate to="/sa/overview" replace />
+  }
+
+  // Si es cliente, verificar si ya seleccionó una tienda
+  if (!selectedStoreId) {
+    return <Navigate to="/select-store" replace />
   }
 
   return <Navigate to="/dashboard" replace />
@@ -79,6 +86,7 @@ export default function App() {
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/recover-password" element={<RecoverPasswordPage />} />
           <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
+          <Route path="/select-store" element={<SelectStorePage />} />
 
           {/* Rutas protegidas del cliente */}
           <Route

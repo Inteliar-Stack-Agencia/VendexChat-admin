@@ -15,6 +15,8 @@ interface AuthContextType {
   isSuperadmin: boolean
   subscription: Subscription | null
   refreshSubscription: () => Promise<void>
+  selectedStoreId: string | null
+  selectStore: (storeId: string) => void
 }
 
 const AuthContext = createContext<AuthContextType | null>(null)
@@ -28,6 +30,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [subscription, setSubscription] = useState<Subscription | null>(null)
   const [token, setToken] = useState<string | null>(localStorage.getItem('vendexchat_token'))
+  const [selectedStoreId, setSelectedStoreId] = useState<string | null>(localStorage.getItem('vendexchat_selected_store'))
   const [loading, setLoading] = useState(true)
 
   // Al cargar la app, verificar si el token guardado es válido
@@ -41,8 +44,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .catch(() => {
           console.log('Token inválido, cerrando sesión')
           localStorage.removeItem('vendexchat_token')
+          localStorage.removeItem('vendexchat_selected_store')
           setToken(null)
           setUser(null)
+          setSelectedStoreId(null)
         })
         .finally(() => setLoading(false))
     } else {
@@ -50,6 +55,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false)
     }
   }, [token])
+
+  const selectStore = useCallback((storeId: string) => {
+    localStorage.setItem('vendexchat_selected_store', storeId)
+    setSelectedStoreId(storeId)
+  }, [])
 
   const login = useCallback(async (email: string, password: string) => {
     const response = await authApi.login(email, password)
@@ -61,6 +71,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('vendexchat_token', authToken)
     setToken(authToken)
     setUser(payload.user)
+
+    // Al loguear, limpiamos la selección previa para forzar el selector si es necesario
+    localStorage.removeItem('vendexchat_selected_store')
+    setSelectedStoreId(null)
   }, [])
 
   const register = useCallback(async (data: { store_name: string; email: string; password: string; slug: string }) => {
@@ -77,9 +91,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(() => {
     localStorage.removeItem('vendexchat_token')
+    localStorage.removeItem('vendexchat_selected_store')
     setToken(null)
     setUser(null)
     setSubscription(null)
+    setSelectedStoreId(null)
   }, [])
 
   const refreshSubscription = useCallback(async () => {
@@ -111,6 +127,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isSuperadmin: user?.role === 'superadmin',
         subscription,
         refreshSubscription,
+        selectedStoreId,
+        selectStore,
       }}
     >
       {children}
