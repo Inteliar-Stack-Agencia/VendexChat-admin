@@ -11,7 +11,10 @@ import {
     Check,
     AlertTriangle,
     Loader2,
-    Package
+    Package,
+    CheckSquare,
+    Square,
+    MinusSquare
 } from 'lucide-react'
 import { Card, LoadingSpinner, Button } from '../../components/common'
 import { productsApi, categoriesApi } from '../../services/api'
@@ -27,6 +30,7 @@ export default function BulkPriceEditorPage() {
     const [selectedCategory, setSelectedCategory] = useState<string>('all')
     const [editedPrices, setEditedPrices] = useState<Record<string, number>>({})
     const [percentAdjust, setPercentAdjust] = useState<string>('')
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
     useEffect(() => {
         loadData()
@@ -53,6 +57,40 @@ export default function BulkPriceEditorPage() {
         if (selectedCategory === 'all') return products
         return products.filter(p => String(p.category_id) === String(selectedCategory))
     }, [products, selectedCategory])
+
+    // Products targeted by actions: selected ones, or all filtered if none selected
+    const targetProducts = useMemo(() => {
+        if (selectedIds.size === 0) return filteredProducts
+        return filteredProducts.filter(p => selectedIds.has(p.id))
+    }, [filteredProducts, selectedIds])
+
+    const allFilteredSelected = filteredProducts.length > 0 && filteredProducts.every(p => selectedIds.has(p.id))
+    const someFilteredSelected = filteredProducts.some(p => selectedIds.has(p.id))
+
+    const toggleSelectAll = () => {
+        if (allFilteredSelected) {
+            setSelectedIds(prev => {
+                const next = new Set(prev)
+                filteredProducts.forEach(p => next.delete(p.id))
+                return next
+            })
+        } else {
+            setSelectedIds(prev => {
+                const next = new Set(prev)
+                filteredProducts.forEach(p => next.add(p.id))
+                return next
+            })
+        }
+    }
+
+    const toggleSelect = (id: string) => {
+        setSelectedIds(prev => {
+            const next = new Set(prev)
+            if (next.has(id)) next.delete(id)
+            else next.add(id)
+            return next
+        })
+    }
 
     const hasChanges = Object.keys(editedPrices).length > 0
 
@@ -84,7 +122,7 @@ export default function BulkPriceEditorPage() {
         const multiplier = 1 + pct / 100
         const newEdits: Record<string, number> = { ...editedPrices }
 
-        filteredProducts.forEach(product => {
+        targetProducts.forEach(product => {
             const currentPrice = newEdits[product.id] ?? product.price
             const newPrice = Math.round(currentPrice * multiplier)
             if (newPrice !== product.price) {
@@ -96,13 +134,13 @@ export default function BulkPriceEditorPage() {
 
         setEditedPrices(newEdits)
         setPercentAdjust('')
-        showToast('success', `Ajuste de ${pct > 0 ? '+' : ''}${pct}% aplicado a ${filteredProducts.length} productos`)
+        showToast('success', `Ajuste de ${pct > 0 ? '+' : ''}${pct}% aplicado a ${targetProducts.length} productos`)
     }
 
     const roundPrices = (roundTo: number) => {
         const newEdits: Record<string, number> = { ...editedPrices }
 
-        filteredProducts.forEach(product => {
+        targetProducts.forEach(product => {
             const currentPrice = newEdits[product.id] ?? product.price
             const rounded = Math.round(currentPrice / roundTo) * roundTo
             if (rounded !== product.price) {
@@ -241,6 +279,20 @@ export default function BulkPriceEditorPage() {
 
             {/* Quick Actions */}
             <Card className="border-indigo-100 shadow-sm">
+                {selectedIds.size > 0 && (
+                    <div className="flex items-center gap-2 mb-3 pb-3 border-b border-indigo-100">
+                        <CheckSquare className="w-4 h-4 text-indigo-500" />
+                        <span className="text-[10px] font-black uppercase tracking-widest text-indigo-600">
+                            {selectedIds.size} producto{selectedIds.size > 1 ? 's' : ''} seleccionado{selectedIds.size > 1 ? 's' : ''}
+                        </span>
+                        <button
+                            onClick={() => setSelectedIds(new Set())}
+                            className="text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 ml-2"
+                        >
+                            Deseleccionar
+                        </button>
+                    </div>
+                )}
                 <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
                     <div className="flex items-center gap-2 flex-1">
                         <Percent className="w-4 h-4 text-indigo-500" />
@@ -315,28 +367,39 @@ export default function BulkPriceEditorPage() {
                         <table className="w-full text-sm">
                             <thead>
                                 <tr className="bg-slate-50 text-[10px] font-black uppercase text-slate-400 tracking-widest border-b border-slate-100">
-                                    <th className="text-left px-6 py-4 w-16">#</th>
-                                    <th className="text-left px-6 py-4">Producto</th>
-                                    <th className="text-left px-6 py-4 hidden sm:table-cell">Categoría</th>
-                                    <th className="text-right px-6 py-4 w-36">Precio Actual</th>
-                                    <th className="text-right px-6 py-4 w-40">Nuevo Precio</th>
-                                    <th className="text-right px-6 py-4 w-24">Dif.</th>
+                                    <th className="text-center px-3 py-4 w-10">
+                                        <button onClick={toggleSelectAll} className="hover:text-indigo-600 transition-colors">
+                                            {allFilteredSelected ? <CheckSquare className="w-4 h-4 text-indigo-600" /> : someFilteredSelected ? <MinusSquare className="w-4 h-4 text-indigo-400" /> : <Square className="w-4 h-4" />}
+                                        </button>
+                                    </th>
+                                    <th className="text-left px-4 py-4 w-10">#</th>
+                                    <th className="text-left px-4 py-4">Producto</th>
+                                    <th className="text-left px-4 py-4 hidden sm:table-cell">Categoría</th>
+                                    <th className="text-right px-4 py-4 w-36">Precio Actual</th>
+                                    <th className="text-right px-4 py-4 w-40">Nuevo Precio</th>
+                                    <th className="text-right px-4 py-4 w-24">Dif.</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
                                 {filteredProducts.map((product, idx) => {
                                     const editedPrice = editedPrices[product.id]
                                     const isEdited = editedPrice !== undefined
+                                    const isSelected = selectedIds.has(product.id)
                                     const diff = isEdited ? editedPrice - product.price : 0
                                     const diffPct = isEdited && product.price > 0 ? ((diff / product.price) * 100).toFixed(1) : null
 
                                     return (
                                         <tr
                                             key={product.id}
-                                            className={`group hover:bg-slate-50/50 transition-colors ${isEdited ? 'bg-indigo-50/30' : ''}`}
+                                            className={`group hover:bg-slate-50/50 transition-colors ${isEdited ? 'bg-indigo-50/30' : ''} ${isSelected ? 'bg-indigo-50/20' : ''}`}
                                         >
-                                            <td className="px-6 py-3 text-slate-300 font-bold text-xs">{idx + 1}</td>
-                                            <td className="px-6 py-3">
+                                            <td className="text-center px-3 py-3">
+                                                <button onClick={() => toggleSelect(product.id)} className="hover:text-indigo-600 transition-colors">
+                                                    {isSelected ? <CheckSquare className="w-4 h-4 text-indigo-600" /> : <Square className="w-4 h-4 text-slate-300" />}
+                                                </button>
+                                            </td>
+                                            <td className="px-4 py-3 text-slate-300 font-bold text-xs">{idx + 1}</td>
+                                            <td className="px-4 py-3">
                                                 <div className="flex items-center gap-3">
                                                     {product.image_url ? (
                                                         <img src={product.image_url} alt="" className="w-8 h-8 rounded-lg object-cover ring-1 ring-slate-100" />
@@ -348,15 +411,15 @@ export default function BulkPriceEditorPage() {
                                                     <span className="font-bold text-slate-800 text-sm">{product.name}</span>
                                                 </div>
                                             </td>
-                                            <td className="px-6 py-3 text-slate-400 font-bold text-[10px] uppercase tracking-widest hidden sm:table-cell">
+                                            <td className="px-4 py-3 text-slate-400 font-bold text-[10px] uppercase tracking-widest hidden sm:table-cell">
                                                 {product.category_name || '—'}
                                             </td>
-                                            <td className="px-6 py-3 text-right">
+                                            <td className="px-4 py-3 text-right">
                                                 <span className={`font-black ${isEdited ? 'text-slate-400 line-through' : 'text-slate-900'}`}>
                                                     {formatPrice(product.price)}
                                                 </span>
                                             </td>
-                                            <td className="px-6 py-3 text-right">
+                                            <td className="px-4 py-3 text-right">
                                                 <input
                                                     type="number"
                                                     min="0"
@@ -369,7 +432,7 @@ export default function BulkPriceEditorPage() {
                                                         }`}
                                                 />
                                             </td>
-                                            <td className="px-6 py-3 text-right">
+                                            <td className="px-4 py-3 text-right">
                                                 {isEdited && (
                                                     <div className="flex flex-col items-end">
                                                         <span className={`text-xs font-black ${diff > 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
