@@ -80,6 +80,12 @@ export default function OrderDetailPage() {
             <span className="text-gray-500">Nombre:</span>
             <span className="ml-2 font-medium text-gray-900">{order.customer_name}</span>
           </div>
+          {order.metadata?.company_name && (
+            <div>
+              <span className="text-gray-500">Empresa:</span>
+              <span className="ml-2 font-medium text-gray-900">{order.metadata.company_name}</span>
+            </div>
+          )}
           <div>
             <span className="text-gray-500">WhatsApp:</span>
             <a

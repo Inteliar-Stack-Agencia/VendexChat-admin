@@ -160,7 +160,7 @@ export default function SubscriptionPage() {
                 </div>
 
                 {(plans.length > 0) && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
                         {plans.map((plan) => {
                             const isCurrent = currentSub?.plan_type === plan.id && (currentSub?.billing_cycle === billingCycle || (plan.id === 'free'))
                             const isPopular = plan.is_popular
@@ -190,6 +190,12 @@ export default function SubscriptionPage() {
                                     bg: 'bg-amber-50 text-amber-500',
                                     border: 'border-amber-400',
                                     shadow: 'shadow-amber-100'
+                                },
+                                ultra: {
+                                    icon: <Zap className="w-7 h-7" />,
+                                    bg: 'bg-purple-50 text-purple-600',
+                                    border: 'border-purple-500',
+                                    shadow: 'shadow-purple-100'
                                 }
                             }
 
@@ -214,9 +220,9 @@ export default function SubscriptionPage() {
                                         <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">{plan.name}</h3>
                                         <div className="mt-2 flex items-baseline gap-1">
                                             <span className="text-4xl font-black text-slate-900 tracking-tighter">
-                                                ${billingCycle === 'monthly' ? plan.price : (plan.annual_price / 12).toFixed(2)}
+                                                {plan.id === 'ultra' ? 'Custom' : `$${billingCycle === 'monthly' ? plan.price : (plan.annual_price / 12).toFixed(2)}`}
                                             </span>
-                                            <span className="text-slate-400 text-xs font-bold">/ mes</span>
+                                            {plan.id !== 'ultra' && <span className="text-slate-400 text-xs font-bold">/ mes</span>}
                                         </div>
                                         {billingCycle === 'annual' && plan.annual_price > 0 && (
                                             <p className="text-[10px] font-bold text-emerald-600 mt-1 uppercase tracking-tighter">
@@ -238,7 +244,13 @@ export default function SubscriptionPage() {
 
                                     <div className="space-y-3">
                                         <Button
-                                            onClick={() => handleSubscribe(plan.id)}
+                                            onClick={() => {
+                                                if (plan.id === 'ultra') {
+                                                    window.open(`https://wa.me/5491100000000?text=Hola! Quiero info sobre el plan VENDEx ULTRA`, '_blank')
+                                                } else {
+                                                    handleSubscribe(plan.id)
+                                                }
+                                            }}
                                             disabled={isCurrent || isProcessing}
                                             loading={isProcessing && selectedPlan?.id === plan.id}
                                             className={`w-full py-4 rounded-2xl font-black uppercase tracking-widest text-[10px] flex items-center justify-center gap-2 group/btn transition-all ${isCurrent
@@ -247,10 +259,12 @@ export default function SubscriptionPage() {
                                                     ? 'bg-indigo-600 text-white hover:bg-slate-900 shadow-xl shadow-indigo-100 hover:shadow-indigo-200'
                                                     : plan.id === 'vip'
                                                         ? 'bg-amber-500 text-white hover:bg-slate-900 shadow-xl shadow-amber-100 hover:shadow-amber-200'
-                                                        : 'bg-white text-slate-900 border-2 border-slate-100 hover:border-slate-900'
+                                                        : plan.id === 'ultra'
+                                                            ? 'bg-purple-600 text-white hover:bg-slate-900 shadow-xl shadow-purple-100 hover:shadow-purple-200'
+                                                            : 'bg-white text-slate-900 border-2 border-slate-100 hover:border-slate-900'
                                                 }`}
                                         >
-                                            {isCurrent ? 'Tu Plan Actual' : 'Suscribirse Ahora'}
+                                            {isCurrent ? 'Tu Plan Actual' : plan.id === 'ultra' ? 'Contactar' : 'Suscribirse'}
                                             {!isCurrent && <ArrowRight className="w-4 h-4 transition-transform group-hover/btn:translate-x-1" />}
                                         </Button>
                                     </div>
