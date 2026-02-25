@@ -40,6 +40,9 @@ export default function SATenantDetailPage() {
     const [savingPlan, setSavingPlan] = useState(false)
     const [showCloneModal, setShowCloneModal] = useState(false)
     const [showDeleteModal, setShowDeleteModal] = useState(false)
+    const [editingDomain, setEditingDomain] = useState(false)
+    const [newDomain, setNewDomain] = useState('')
+    const [savingDomain, setSavingDomain] = useState(false)
 
     useEffect(() => {
         if (id) {
@@ -47,6 +50,7 @@ export default function SATenantDetailPage() {
                 .then(t => {
                     setTenant(t)
                     setNewSlug(t.slug)
+                    setNewDomain(t.custom_domain || '')
                     // Pick from metadata as primary source for prompt
                     setAiPrompt(t.metadata?.ai_prompt || t.ai_prompt || '')
                 })
@@ -79,6 +83,22 @@ export default function SATenantDetailPage() {
             showToast('error', 'Error al actualizar el slug. Podría estar duplicado.')
         } finally {
             setSavingSlug(false)
+        }
+    }
+
+    const handleUpdateDomain = async () => {
+        if (!tenant || !id) return
+        setSavingDomain(true)
+        try {
+            const domain = newDomain.trim().toLowerCase().replace(/^https?:\/\//, '')
+            await superadminApi.updateTenant(id, { custom_domain: domain || null })
+            setTenant({ ...tenant, custom_domain: domain || null })
+            setEditingDomain(false)
+            showToast('success', domain ? `Dominio actualizado: ${domain}` : 'Dominio personalizado eliminado.')
+        } catch (err) {
+            showToast('error', 'Error al actualizar el dominio.')
+        } finally {
+            setSavingDomain(false)
         }
     }
 
@@ -308,6 +328,57 @@ export default function SATenantDetailPage() {
                                         <Globe className="w-4 h-4 text-slate-400" />
                                     </div>
                                 </div>
+                            </div>
+
+                            {/* Custom Domain */}
+                            <div className="sm:col-span-2">
+                                <label className="block text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2">Dominio Personalizado</label>
+                                <div className="flex items-center gap-2">
+                                    {editingDomain ? (
+                                        <div className="flex-1 flex gap-2">
+                                            <input
+                                                type="text"
+                                                value={newDomain}
+                                                onChange={(e) => setNewDomain(e.target.value)}
+                                                placeholder="www.mitienda.com"
+                                                className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500/20 outline-none"
+                                            />
+                                            <button
+                                                onClick={handleUpdateDomain}
+                                                disabled={savingDomain}
+                                                className="px-3 py-2 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+                                            >
+                                                {savingDomain ? '...' : 'OK'}
+                                            </button>
+                                            <button
+                                                onClick={() => { setEditingDomain(false); setNewDomain(tenant.custom_domain || ''); }}
+                                                className="px-3 py-2 bg-slate-200 text-slate-600 text-xs font-bold rounded-lg hover:bg-slate-300"
+                                            >
+                                                X
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <div className="flex-1 flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
+                                            <div className="flex items-center gap-2">
+                                                <Globe className="w-4 h-4 text-slate-400" />
+                                                <span className={`font-bold ${tenant.custom_domain ? 'text-slate-900' : 'text-slate-300'}`}>
+                                                    {tenant.custom_domain || 'Sin dominio propio'}
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center gap-3">
+                                                <button onClick={() => setEditingDomain(true)} className="text-[10px] font-black text-indigo-600 hover:text-indigo-800 uppercase tracking-widest">
+                                                    {tenant.custom_domain ? 'Editar' : 'Agregar'}
+                                                </button>
+                                                {tenant.custom_domain && (
+                                                    <a href={`https://${tenant.custom_domain}`} target="_blank" rel="noreferrer">
+                                                        <ExternalLink className="w-4 h-4 text-slate-400 hover:text-indigo-600 cursor-pointer transition-colors" />
+                                                    </a>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                                <p className="text-[10px] text-slate-400 font-medium mt-1.5">Requiere CNAME apuntando a Cloudflare Pages + agregar dominio en CF.</p>
                             </div>
 
                             <div>
