@@ -160,7 +160,7 @@ export default function SubscriptionPage() {
                 </div>
 
                 {(plans.length > 0) && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                         {plans.map((plan) => {
                             const isCurrent = currentSub?.plan_type === plan.id && (currentSub?.billing_cycle === billingCycle || (plan.id === 'free'))
                             const isPopular = plan.is_popular

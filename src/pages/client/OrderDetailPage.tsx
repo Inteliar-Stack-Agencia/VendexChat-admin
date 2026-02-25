@@ -4,27 +4,34 @@ import { ArrowLeft, MessageCircle, Printer } from 'lucide-react'
 import { Card, Badge, Button, LoadingSpinner, Select } from '../../components/common'
 import { showToast } from '../../components/common/Toast'
 import { ordersApi } from '../../services/api'
-import { Order, OrderStatus } from '../../types'
+import { Order, OrderStatus, Tenant } from '../../types'
 import { formatPrice, formatDate, orderStatusConfig, whatsappLink } from '../../utils/helpers'
+import { tenantApi } from '../../services/api'
 
 export default function OrderDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const [order, setOrder] = useState<Order | null>(null)
+  const [tenant, setTenant] = useState<Tenant | null>(null)
   const [loading, setLoading] = useState(true)
   const [newStatus, setNewStatus] = useState<string>('')
   const [updatingStatus, setUpdatingStatus] = useState(false)
 
   useEffect(() => {
     if (id) {
-      ordersApi
-        .get(id)
-        .then((data) => {
-          setOrder(data)
-          setNewStatus(data.status)
+      setLoading(true)
+      Promise.all([
+        ordersApi.get(id),
+        tenantApi.getMe()
+      ])
+        .then(([orderData, tenantData]) => {
+          setOrder(orderData)
+          setTenant(tenantData)
+          setNewStatus(orderData.status)
         })
-        .catch(() => {
-          showToast('error', 'Error al cargar el pedido')
+        .catch((err) => {
+          console.error(err)
+          showToast('error', 'Error al cargar los datos')
           navigate('/orders')
         })
         .finally(() => setLoading(false))
@@ -53,10 +60,96 @@ export default function OrderDetailPage() {
   if (!order) return null
 
   const statusConf = orderStatusConfig[order.status]
+  const printerSettings = (tenant as any)?.metadata?.printer || {}
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
-      {/* Header */}
+      {/* Estilos para impresión de comanda térmica */}
+      <style>
+        {`
+        @media print {
+          body * {
+            visibility: hidden;
+          }
+          #thermal-ticket, #thermal-ticket * {
+            visibility: visible;
+          }
+          #thermal-ticket {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: ${printerSettings.width || '80mm'};
+            padding: 0;
+            margin: 0;
+          }
+        }
+        `}
+      </style>
+
+      {/* Ticket Térmico (Invisible en pantalla) */}
+      <div id="thermal-ticket" className="hidden print:block font-mono text-[11px] leading-tight text-black p-4 bg-white">
+        <div className="text-center border-b border-dashed border-gray-400 pb-2 mb-2">
+          <p className="font-bold text-sm uppercase">{tenant?.name}</p>
+          <p>{formatDate(order.created_at)}</p>
+        </div>
+
+        {printerSettings.header && (
+          <div className="text-center mb-2 italic">
+            {printerSettings.header}
+          </div>
+        )}
+
+        {printerSettings.show_order_number !== false && (
+          <div className="text-center py-2 border-b border-dashed border-gray-400 mb-2">
+            <p className="text-[10px] uppercase font-bold">Pedido</p>
+            <p className="text-2xl font-black">#{order.order_number}</p>
+          </div>
+        )}
+
+        <div className="mb-2">
+          <p className="font-bold uppercase mb-1">Cliente:</p>
+          <p>{order.customer_name}</p>
+          <p>{order.customer_whatsapp}</p>
+          {order.metadata?.company_name && <p>Empresa: {order.metadata.company_name}</p>}
+        </div>
+
+        <div className="mb-2 border-t border-dashed border-gray-400 pt-2">
+          <p className="font-bold uppercase mb-1">Detalles:</p>
+          <p>Tipo: {order.customer_address ? 'Envío' : 'Retiro'}</p>
+          {order.customer_address && <p>DIR: {order.customer_address}</p>}
+          <p>Pago: {order.metadata?.payment_method || 'Consultar'}</p>
+        </div>
+
+        <div className="border-t border-dashed border-gray-400 py-2 mb-2">
+          {order.items?.map((item, i) => (
+            <div key={i} className="flex justify-between mb-1">
+              <span>{item.quantity}x {item.product_name}</span>
+              <span>{formatPrice(item.subtotal)}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="border-t border-dashed border-gray-400 pt-1 font-bold">
+          {order.delivery_cost > 0 && (
+            <div className="flex justify-between">
+              <span>Delivery</span>
+              <span>{formatPrice(order.delivery_cost)}</span>
+            </div>
+          )}
+          <div className="flex justify-between text-base mt-1">
+            <span>TOTAL</span>
+            <span>{formatPrice(order.total)}</span>
+          </div>
+        </div>
+
+        {printerSettings.footer && (
+          <div className="text-center mt-4 border-t border-dashed border-gray-400 pt-2">
+            {printerSettings.footer}
+          </div>
+        )}
+      </div>
+
+      {/* Contenido Normal (Screen) */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button onClick={() => navigate('/orders')} className="p-2 rounded-lg hover:bg-gray-100">

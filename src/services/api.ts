@@ -1413,10 +1413,9 @@ export const billingApi = {
   getPlans: async (): Promise<any[]> => {
     // Mock de planes (estos podrían venir de una tabla 'plans' en el futuro)
     return [
-      { id: 'free', name: 'Free', price: 0, annual_price: 0, features: ['2 Categorías', '10 Productos por cat.', 'Módulos Principales', 'Menú QR'] },
-      { id: 'advance', name: 'Advance', price: 4.99, annual_price: 49.90, features: ['4 Categorías', '20 Productos por cat.', 'Estadísticas', 'Horarios', 'Costo envío por zonas'] },
-      { id: 'pro', name: 'Premium (Pro)', price: 9.99, annual_price: 99.90, features: ['Categorías Ilimitadas', 'Productos Ilimitados', 'Seguimiento de Pedido', 'Campos Personalizados', 'Exportar a Excel'], is_popular: true },
-      { id: 'vip', name: 'VIP (Business)', price: 14.99, annual_price: 149.90, features: ['Todo lo anterior', 'VENDEx Bot (Beta)', 'Cabify Logistics (Pre-reg)', 'Facebook Pixel', 'Google Analytics'] },
+      { id: 'free', name: 'Free', price: 0, annual_price: 0, features: ['2 Categorías', '10 Productos por cat.', 'Menú Digital QR', 'Pedidos por WhatsApp'] },
+      { id: 'pro', name: 'Premium (Pro)', price: 9.99, annual_price: 99.90, features: ['Categorías Ilimitadas', 'Productos Ilimitados', 'Dominios Personalizados', 'Estadísticas de Venta', 'Exportar a Excel'], is_popular: true },
+      { id: 'vip', name: 'VIP (Business)', price: 14.99, annual_price: 149.90, features: ['Todo lo anterior Pro', 'VENDEx Bot (Beta)', 'Logística Integrada', 'Control de Stock Avanzado', 'Soporte Prioritario'] },
       { id: 'ultra', name: 'ULTRA', price: 0, annual_price: 0, features: ['Desarrollo a Medida', 'Web & Hosting Propio', 'Bots & Automatizaciones', 'Consultoría Estratégica', 'Soporte 24/7 VIP'] },
     ]
   },

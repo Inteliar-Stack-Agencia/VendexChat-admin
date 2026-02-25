@@ -21,7 +21,8 @@ import {
   Truck,
   Wand2,
   BarChart3,
-  Sparkles
+  Sparkles,
+  Printer
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -121,6 +122,10 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                 <NavLink to="/customers" className={linkClass} onClick={onClose}>
                   <Users className="w-5 h-5" />
                   Clientes
+                </NavLink>
+                <NavLink to="/settings#printer" className={linkClass} onClick={onClose}>
+                  <Printer className="w-5 h-5" />
+                  Impresora
                 </NavLink>
               </div>
 

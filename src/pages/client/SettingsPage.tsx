@@ -4,7 +4,7 @@ import { Card, Button, Input, LoadingSpinner } from '../../components/common'
 import { showToast } from '../../components/common/Toast'
 import { tenantApi, authApi, storageApi } from '../../services/api'
 import { Tenant } from '../../types'
-import { CreditCard, Plus, RefreshCw, Trash2, ShieldCheck, Globe, MessageSquare, Palette, LayoutGrid, Upload, Info } from 'lucide-react'
+import { CreditCard, Plus, RefreshCw, Trash2, ShieldCheck, Globe, MessageSquare, Palette, LayoutGrid, Upload, Info, Printer } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import FeatureGuard from '../../components/FeatureGuard'
 
@@ -13,6 +13,7 @@ const TABS = [
   { id: 'contact', label: 'Información', icon: MessageSquare },
   { id: 'orders', label: 'Pedidos', icon: LayoutGrid },
   { id: 'customization', label: 'Diseño', icon: Palette },
+  { id: 'printer', label: 'Impresora', icon: Printer },
   { id: 'payments', label: 'Pagos', icon: CreditCard, hidden: true },
   { id: 'account', label: 'Cuenta', icon: ShieldCheck },
 ]
@@ -74,6 +75,12 @@ export default function SettingsPage() {
   const [welcomeMessage, setWelcomeMessage] = useState('')
   const [footerMessage, setFooterMessage] = useState('')
 
+  // Form para impresora
+  const [ticketWidth, setTicketWidth] = useState('80mm')
+  const [ticketHeader, setTicketHeader] = useState('')
+  const [ticketFooter, setTicketFooter] = useState('')
+  const [showOrderNumber, setShowOrderNumber] = useState(true)
+
   // Form para cambiar contraseña
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
@@ -123,6 +130,13 @@ export default function SettingsPage() {
         setHighlights(metadata.highlights || [])
         setAboutTitle(metadata.about_title || 'Nosotros')
         setHistoryTitle(metadata.history_title || 'Nuestra Historia')
+
+        // Load printer settings from metadata
+        const printer = metadata.printer || {}
+        setTicketWidth(printer.width || '80mm')
+        setTicketHeader(printer.header || '')
+        setTicketFooter(printer.footer || '')
+        setShowOrderNumber(printer.show_order_number ?? true)
 
         const gws = await tenantApi.listGateways()
         setGateways(gws)
@@ -337,6 +351,35 @@ export default function SettingsPage() {
     } catch (err) {
       console.error('Error saving manual payments:', err)
       showToast('error', 'Error al guardar')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleSavePrinter = async (e: FormEvent) => {
+    e.preventDefault()
+    setSaving(true)
+    try {
+      const currentMetadata = (tenant as any)?.metadata || {}
+      const updatedMetadata = {
+        ...currentMetadata,
+        printer: {
+          width: ticketWidth,
+          header: ticketHeader,
+          footer: ticketFooter,
+          show_order_number: showOrderNumber
+        }
+      }
+
+      await tenantApi.updateMe({
+        metadata: updatedMetadata
+      } as any)
+
+      handleUpdateTenantState({ metadata: updatedMetadata } as any)
+      showToast('success', 'Configuración de impresora actualizada')
+    } catch (err: any) {
+      console.error('Error saving printer settings:', err)
+      showToast('error', err?.message || 'Error al guardar')
     } finally {
       setSaving(false)
     }
@@ -820,6 +863,120 @@ export default function SettingsPage() {
           </div>
         )
       }
+
+      {activeTab === 'printer' && (
+        <div className="space-y-6">
+          <Card>
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center">
+                <Printer className="w-5 h-5 text-indigo-600" />
+              </div>
+              <div>
+                <h2 className="text-sm font-black text-slate-900 uppercase tracking-tight">Ajustes de Impresión</h2>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Configura el formato de tus comandas para ticketeras térmicas</p>
+              </div>
+            </div>
+
+            <form onSubmit={handleSavePrinter} className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Ancho del Papel</label>
+                    <div className="flex gap-2">
+                      {['58mm', '80mm'].map((width) => (
+                        <button
+                          key={width}
+                          type="button"
+                          onClick={() => setTicketWidth(width)}
+                          className={`flex-1 py-3 px-4 rounded-xl text-xs font-bold border-2 transition-all ${ticketWidth === width
+                            ? 'border-indigo-600 bg-indigo-50 text-indigo-600'
+                            : 'border-slate-100 bg-white text-slate-400 hover:border-slate-200'
+                            }`}
+                        >
+                          {width}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <Input
+                    label="Cabecera del Ticket"
+                    value={ticketHeader}
+                    onChange={(e) => setTicketHeader(e.target.value)}
+                    placeholder="Ej: ¡Gracias por elegirnos!"
+                    helperText="Aparece al inicio de cada comanda"
+                  />
+
+                  <Input
+                    label="Pie del Ticket"
+                    value={ticketFooter}
+                    onChange={(e) => setTicketFooter(e.target.value)}
+                    placeholder="Ej: Síguenos en @tienda"
+                    helperText="Aparece al final de cada comanda"
+                  />
+
+                  <label className="flex items-center gap-3 cursor-pointer p-3 bg-slate-50 rounded-xl">
+                    <input
+                      type="checkbox"
+                      checked={showOrderNumber}
+                      onChange={(e) => setShowOrderNumber(e.target.checked)}
+                      className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <span className="text-xs font-bold text-slate-700">Mostrar número de pedido grande</span>
+                  </label>
+                </div>
+
+                {/* Preview */}
+                <div className="bg-slate-100 p-6 rounded-3xl flex flex-col items-center">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Vista Previa (Simulada)</p>
+                  <div
+                    className={`bg-white shadow-lg p-4 font-mono text-[10px] text-slate-800 transition-all duration-300 overflow-hidden`}
+                    style={{ width: ticketWidth === '58mm' ? '180px' : '240px' }}
+                  >
+                    <div className="text-center border-b border-dashed border-slate-200 pb-2 mb-2">
+                      <p className="font-bold uppercase">{tenant?.name}</p>
+                      <p className="text-[8px]">{new Date().toLocaleString()}</p>
+                    </div>
+
+                    {ticketHeader && (
+                      <div className="text-center mb-2 italic">
+                        {ticketHeader}
+                      </div>
+                    )}
+
+                    {showOrderNumber && (
+                      <div className="text-center py-2 border-b border-dashed border-slate-200 mb-2">
+                        <p className="text-[8px] uppercase font-bold">Pedido</p>
+                        <p className="text-xl font-black">#0001</p>
+                      </div>
+                    )}
+
+                    <div className="space-y-1 mb-2">
+                      <div className="flex justify-between"><span>1x Producto A</span><span>$1.000</span></div>
+                      <div className="flex justify-between"><span>2x Producto B</span><span>$2.000</span></div>
+                    </div>
+
+                    <div className="border-t border-dashed border-slate-200 pt-1 font-bold flex justify-between mb-2">
+                      <span>TOTAL</span>
+                      <span>$3.000</span>
+                    </div>
+
+                    {ticketFooter && (
+                      <div className="text-center mt-2 border-t border-dashed border-slate-200 pt-2 text-[8px]">
+                        {ticketFooter}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-slate-100">
+                <Button type="submit" loading={saving}>Guardar Configuración</Button>
+              </div>
+            </form>
+          </Card>
+        </div>
+      )}
 
       {/* Tab: Cuenta */}
       {
