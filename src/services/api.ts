@@ -648,6 +648,7 @@ export const tenantApi = {
   updateMe: async (data: Partial<Tenant>) => {
     const storeId = await getStoreId()
 
+    // 1. Intentar actualización directa (funciona si RLS lo permite)
     const { data: updated, error } = await supabase
       .from('stores')
       .update(data)
@@ -655,9 +656,19 @@ export const tenantApi = {
       .select()
       .single()
 
-    if (error) throw error
-    return updated as unknown as Tenant
+    if (!error && updated) return updated as unknown as Tenant
+
+    // 2. Fallback: usar RPC para multi-store (bypasses RLS con validación propia)
+    console.warn('[tenantApi.updateMe] Direct update failed, trying RPC fallback:', error?.message)
+    const { data: rpcResult, error: rpcError } = await supabase.rpc('update_my_store', {
+      p_store_id: storeId,
+      p_data: data
+    })
+
+    if (rpcError) throw rpcError
+    return rpcResult as unknown as Tenant
   },
+
 
   listGateways: async () => {
     const { data: profile } = await supabase.from('profiles').select('store_id').single();
