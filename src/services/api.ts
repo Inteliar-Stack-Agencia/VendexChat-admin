@@ -20,6 +20,9 @@ import { normalizeProductData } from '../utils/helpers'
  * Utilidad para obtener el store_id del usuario actual con lógica de "Auto-reparación"
  * Si el perfil no tiene store_id, intenta encontrar la tienda por el slug en los metadatos de auth.
  */
+// Cache para evitar sincronizar en cada llamada
+let _lastSyncedStoreId: string | null = null
+
 export const getStoreId = async (): Promise<string> => {
   console.log('[getStoreId] START')
   // 1. Prioridad Absoluta: Selección Manual o Suplantación (Sin esperas de red si es posible)
@@ -29,6 +32,19 @@ export const getStoreId = async (): Promise<string> => {
   const activeStoreId = impersonatedId || selectedStoreId
 
   if (activeStoreId) {
+    // SYNC: Mantener profiles.store_id en sync con localStorage para que RLS funcione
+    if (_lastSyncedStoreId !== activeStoreId) {
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (user) {
+          await supabase.from('profiles').update({ store_id: activeStoreId }).eq('id', user.id)
+          _lastSyncedStoreId = activeStoreId
+          console.log('[getStoreId] Profile store_id synced to:', activeStoreId)
+        }
+      } catch (e) {
+        console.warn('[getStoreId] Profile sync failed (non-blocking):', e)
+      }
+    }
     console.log('[api] Using ACTIVE store ID from localStorage:', activeStoreId)
     return activeStoreId
   }
