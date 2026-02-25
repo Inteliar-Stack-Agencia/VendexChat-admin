@@ -145,16 +145,17 @@ export const authApi = {
       }
     }
 
-    // 3. Si es superadmin, traer TODAS las tiendas
-    if (profile?.role === 'superadmin') {
-      const { data: saStores } = await supabase
+    // 3. Fallback: traer TODAS las tiendas visibles para el usuario
+    //    (si es superadmin, o si encontramos pocas tiendas por los métodos anteriores)
+    if (profile?.role === 'superadmin' || allStores.length < 2) {
+      const { data: moreStores } = await supabase
         .from('stores')
         .select('*')
         .order('name', { ascending: true })
         .limit(100)
 
-      if (saStores) {
-        for (const s of saStores) {
+      if (moreStores) {
+        for (const s of moreStores) {
           if (!seenIds.has(s.id)) {
             allStores.push(s)
             seenIds.add(s.id)
@@ -166,6 +167,7 @@ export const authApi = {
     console.log('[getMyStores] Total:', allStores.length, allStores.map((s: any) => s.name))
     return allStores as Tenant[]
   },
+
 
 
   register: async (data: { store_name: string; email: string; password: string; slug: string; country: string; city: string }) => {
