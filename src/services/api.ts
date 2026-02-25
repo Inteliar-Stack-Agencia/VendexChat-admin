@@ -1261,10 +1261,11 @@ export const superadminApi = {
       plan_type: (sourceStore.metadata as any)?.plan_type || 'free'
     })
 
-    // 3. Copy Metadata & Settings from Source (ensure email is set!)
+    // 3. Copy Metadata & Settings from Source (ensure email + owner are set!)
     const { error: updateError } = await supabase
       .from('stores')
       .update({
+        owner_id: sourceStore.owner_id,
         email: data.email || sourceStore.email,
         logo_url: sourceStore.logo_url,
         banner_url: sourceStore.banner_url,
