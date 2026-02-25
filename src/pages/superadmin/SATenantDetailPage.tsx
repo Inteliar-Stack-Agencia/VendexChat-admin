@@ -43,6 +43,10 @@ export default function SATenantDetailPage() {
     const [editingDomain, setEditingDomain] = useState(false)
     const [newDomain, setNewDomain] = useState('')
     const [savingDomain, setSavingDomain] = useState(false)
+    const [tenantGateways, setTenantGateways] = useState<any[]>([])
+    const [showGatewayForm, setShowGatewayForm] = useState(false)
+    const [gatewayForm, setGatewayForm] = useState({ provider: 'mercadopago', public_key: '', secret_key: '' })
+    const [savingGateway, setSavingGateway] = useState(false)
 
     useEffect(() => {
         if (id) {
@@ -53,6 +57,8 @@ export default function SATenantDetailPage() {
                     setNewDomain(t.custom_domain || '')
                     // Pick from metadata as primary source for prompt
                     setAiPrompt(t.metadata?.ai_prompt || t.ai_prompt || '')
+                    // Load gateways for this tenant
+                    superadminApi.listTenantGateways(t.id).then(setTenantGateways).catch(console.error)
                 })
                 .finally(() => setLoading(false))
         }
@@ -99,6 +105,25 @@ export default function SATenantDetailPage() {
             showToast('error', 'Error al actualizar el dominio.')
         } finally {
             setSavingDomain(false)
+        }
+    }
+
+    const handleConnectGateway = async () => {
+        if (!tenant || !id) return
+        setSavingGateway(true)
+        try {
+            const result = await superadminApi.connectTenantGateway(tenant.id, gatewayForm.provider, {
+                public_key: gatewayForm.public_key,
+                secret_key: gatewayForm.secret_key
+            })
+            setTenantGateways(prev => [...prev.filter((g: any) => g.provider !== gatewayForm.provider), result])
+            setShowGatewayForm(false)
+            setGatewayForm({ provider: 'mercadopago', public_key: '', secret_key: '' })
+            showToast('success', `Pasarela ${gatewayForm.provider} vinculada correctamente.`)
+        } catch (err) {
+            showToast('error', 'Error al vincular la pasarela.')
+        } finally {
+            setSavingGateway(false)
         }
     }
 
@@ -418,6 +443,118 @@ export default function SATenantDetailPage() {
                                     </div>
                                 </div>
                             </div>
+                        </div>
+                    </div>
+
+                    {/* Payment Gateway Section */}
+                    <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden">
+                        <div className="p-8 border-b border-slate-50 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-emerald-100 rounded-xl text-emerald-600">
+                                    <CreditCard className="w-5 h-5" />
+                                </div>
+                                <h3 className="font-bold text-lg text-slate-900">Pasarela de Pagos</h3>
+                            </div>
+                            {tenantGateways.length > 0 && (
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-emerald-50 text-emerald-600 border border-emerald-100">
+                                    <CheckCircle className="w-3 h-3" /> Conectada
+                                </span>
+                            )}
+                            {tenantGateways.length === 0 && (
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-slate-50 text-slate-400 border border-slate-100">
+                                    Sin Configurar
+                                </span>
+                            )}
+                        </div>
+                        <div className="p-8 space-y-6">
+                            {/* Existing gateways */}
+                            {tenantGateways.map((gw: any) => (
+                                <div key={gw.id} className="flex items-center justify-between p-4 bg-emerald-50/50 rounded-xl border border-emerald-100">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center border border-emerald-100">
+                                            <CreditCard className="w-5 h-5 text-emerald-600" />
+                                        </div>
+                                        <div>
+                                            <p className="text-sm font-black text-slate-900 uppercase">{gw.provider}</p>
+                                            <p className="text-[10px] text-slate-400 font-medium">
+                                                {gw.config?.public_key ? `${gw.config.public_key.slice(0, 20)}...` : 'Keys configuradas'}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={async () => {
+                                            if (!confirm('¿Desconectar esta pasarela?')) return
+                                            try {
+                                                await superadminApi.disconnectTenantGateway(gw.id)
+                                                setTenantGateways(prev => prev.filter((g: any) => g.id !== gw.id))
+                                                showToast('success', 'Pasarela desconectada')
+                                            } catch { showToast('error', 'Error al desconectar') }
+                                        }}
+                                        className="text-[10px] font-black text-rose-500 hover:text-rose-700 uppercase tracking-widest"
+                                    >
+                                        Desconectar
+                                    </button>
+                                </div>
+                            ))}
+
+                            {/* Connect new gateway form */}
+                            {showGatewayForm ? (
+                                <div className="space-y-4 p-6 bg-slate-50 rounded-2xl border border-slate-100">
+                                    <div>
+                                        <label className="block text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2">Proveedor</label>
+                                        <select
+                                            value={gatewayForm.provider}
+                                            onChange={e => setGatewayForm(prev => ({ ...prev, provider: e.target.value }))}
+                                            className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500/20 outline-none"
+                                        >
+                                            <option value="mercadopago">Mercado Pago</option>
+                                            <option value="stripe">Stripe</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2">Public Key</label>
+                                        <input
+                                            type="text"
+                                            value={gatewayForm.public_key}
+                                            onChange={e => setGatewayForm(prev => ({ ...prev, public_key: e.target.value }))}
+                                            placeholder="PUBLIC_KEY o APP_USR-..."
+                                            className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500/20 outline-none placeholder:text-slate-300"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2">Secret Key / Access Token</label>
+                                        <input
+                                            type="password"
+                                            value={gatewayForm.secret_key}
+                                            onChange={e => setGatewayForm(prev => ({ ...prev, secret_key: e.target.value }))}
+                                            placeholder="SECRET_KEY o ACCESS_TOKEN"
+                                            className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500/20 outline-none placeholder:text-slate-300"
+                                        />
+                                    </div>
+                                    <div className="flex justify-end gap-3 pt-2">
+                                        <button
+                                            onClick={() => { setShowGatewayForm(false); setGatewayForm({ provider: 'mercadopago', public_key: '', secret_key: '' }) }}
+                                            className="px-4 py-2.5 bg-slate-200 text-slate-600 text-xs font-bold rounded-xl hover:bg-slate-300 transition-colors"
+                                        >
+                                            Cancelar
+                                        </button>
+                                        <button
+                                            onClick={handleConnectGateway}
+                                            disabled={savingGateway || !gatewayForm.public_key || !gatewayForm.secret_key}
+                                            className="px-6 py-2.5 bg-emerald-600 text-white text-xs font-black uppercase tracking-widest rounded-xl hover:bg-emerald-700 disabled:opacity-50 transition-all shadow-lg shadow-emerald-200"
+                                        >
+                                            {savingGateway ? 'Conectando...' : '+ Vincular Pasarela'}
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <button
+                                    onClick={() => setShowGatewayForm(true)}
+                                    className="w-full p-4 border-2 border-dashed border-slate-200 rounded-2xl text-sm font-bold text-slate-400 hover:border-emerald-300 hover:text-emerald-600 hover:bg-emerald-50/30 transition-all"
+                                >
+                                    + Conectar Pasarela de Pagos
+                                </button>
+                            )}
                         </div>
                     </div>
 

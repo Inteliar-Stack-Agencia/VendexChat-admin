@@ -1222,6 +1222,38 @@ export const superadminApi = {
     return data
   },
 
+  listTenantGateways: async (storeId: string) => {
+    const { data, error } = await supabase
+      .from('gateways')
+      .select('*')
+      .eq('store_id', storeId)
+      .eq('is_master', false)
+
+    if (error) throw error
+    return data || []
+  },
+
+  connectTenantGateway: async (storeId: string, provider: string, config: any) => {
+    const { data, error } = await supabase
+      .from('gateways')
+      .upsert({
+        store_id: storeId,
+        provider,
+        config,
+        is_master: false
+      }, { onConflict: 'store_id,provider,is_master' })
+      .select()
+      .single()
+
+    if (error) throw error
+    return data
+  },
+
+  disconnectTenantGateway: async (gatewayId: string) => {
+    const { error } = await supabase.from('gateways').delete().eq('id', gatewayId)
+    if (error) throw error
+  },
+
   listSubscriptions: async () => {
     const { data, error } = await supabase
       .from('subscriptions')
