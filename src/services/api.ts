@@ -1328,6 +1328,31 @@ export const superadminApi = {
       }
     }
 
+    // 5. Copy Subscription from Source Store
+    const { data: sourceSub } = await supabase
+      .from('subscriptions')
+      .select('*')
+      .eq('store_id', sourceId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single()
+
+    if (sourceSub) {
+      const { error: subError } = await supabase
+        .from('subscriptions')
+        .insert({
+          store_id: newStore.id,
+          plan_type: sourceSub.plan_type,
+          status: sourceSub.status,
+          current_period_start: sourceSub.current_period_start,
+          current_period_end: sourceSub.current_period_end,
+          billing_cycle: sourceSub.billing_cycle,
+        })
+
+      if (subError) console.error('Error copying subscription:', subError)
+      else console.log('[cloneTenant] Subscription copied:', sourceSub.plan_type)
+    }
+
     return newStore
   }
 }
