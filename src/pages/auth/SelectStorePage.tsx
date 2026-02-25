@@ -3,7 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import { Store, ChevronRight, LogOut, Loader2 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { authApi } from '../../services/api'
+import { supabase } from '../../supabaseClient'
 import { Tenant } from '../../types'
+
 
 export default function SelectStorePage() {
     const { user, loading: authLoading, selectStore, logout } = useAuth()
@@ -33,12 +35,30 @@ export default function SelectStorePage() {
         loadStores()
     }, [user, authLoading, navigate, selectStore])
 
-    const handleSelect = (storeId: string) => {
+    const handleSelect = async (storeId: string) => {
+        // 1. Guardar en localStorage
         localStorage.setItem('vendexchat_selected_store', storeId)
         localStorage.removeItem('vendexchat_impersonated_store')
         selectStore(storeId)
+
+        // 2. CLAVE: Sincronizar profiles.store_id para que RLS funcione en TODAS las tablas
+        try {
+            const { data: { user: authUser } } = await supabase.auth.getUser()
+            if (authUser) {
+                await supabase
+                    .from('profiles')
+                    .update({ store_id: storeId })
+                    .eq('id', authUser.id)
+                console.log('[SelectStore] Profile store_id synced to:', storeId)
+            }
+        } catch (err) {
+            console.error('[SelectStore] Failed to sync profile store_id:', err)
+        }
+
+        // 3. FULL REFRESH para que toda la app use la nueva store
         window.location.href = '/dashboard'
     }
+
 
     if (loading) {
         return (
