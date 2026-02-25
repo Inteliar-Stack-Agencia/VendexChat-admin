@@ -1261,10 +1261,11 @@ export const superadminApi = {
       plan_type: (sourceStore.metadata as any)?.plan_type || 'free'
     })
 
-    // 3. Copy Metadata & Settings from Source
+    // 3. Copy Metadata & Settings from Source (ensure email is set!)
     const { error: updateError } = await supabase
       .from('stores')
       .update({
+        email: data.email || sourceStore.email,
         logo_url: sourceStore.logo_url,
         banner_url: sourceStore.banner_url,
         description: sourceStore.description,
@@ -1279,6 +1280,7 @@ export const superadminApi = {
         delivery_info: sourceStore.delivery_info
       })
       .eq('id', newStore.id)
+
 
     if (updateError) console.error('Error copying store settings:', updateError)
 
