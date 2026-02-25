@@ -30,6 +30,7 @@ export default function BulkPriceEditorPage() {
     const [selectedCategory, setSelectedCategory] = useState<string>('all')
     const [editedPrices, setEditedPrices] = useState<Record<string, number>>({})
     const [percentAdjust, setPercentAdjust] = useState<string>('')
+    const [roundAmount, setRoundAmount] = useState<string>('')
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
     useEffect(() => {
@@ -317,15 +318,28 @@ export default function BulkPriceEditorPage() {
 
                     <div className="flex items-center gap-2">
                         <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Redondear a</span>
-                        {[10, 50, 100, 500].map(n => (
+                        <div className="flex items-center gap-2">
+                            <input
+                                type="number"
+                                value={roundAmount}
+                                onChange={e => setRoundAmount(e.target.value)}
+                                placeholder="ej: 100"
+                                className="w-24 px-3 py-1.5 bg-slate-50 border-2 border-slate-100 rounded-xl text-[11px] font-bold text-center focus:border-indigo-500 transition-all outline-none"
+                            />
                             <button
-                                key={n}
-                                onClick={() => roundPrices(n)}
-                                className="px-3 py-1.5 bg-slate-50 border border-slate-100 rounded-lg text-[10px] font-black text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-100 transition-all"
+                                onClick={() => {
+                                    const val = parseInt(roundAmount)
+                                    if (!isNaN(val) && val > 0) {
+                                        roundPrices(val)
+                                        setRoundAmount('')
+                                    }
+                                }}
+                                disabled={!roundAmount || parseInt(roundAmount) <= 0}
+                                className="px-3 py-1.5 bg-slate-800 text-white rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-slate-700 transition-colors disabled:opacity-30 shadow-sm"
                             >
-                                ${n}
+                                Redondear
                             </button>
-                        ))}
+                        </div>
                     </div>
                 </div>
             </Card>
