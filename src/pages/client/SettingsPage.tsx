@@ -188,8 +188,9 @@ export default function SettingsPage() {
         }
       } as any)
       showToast('success', 'Información actualizada')
-    } catch {
-      showToast('error', 'Error al guardar')
+    } catch (err: any) {
+      console.error('[SaveGeneral]', err)
+      showToast('error', err?.message || 'Error al guardar general')
     } finally {
       setSaving(false)
     }
@@ -209,8 +210,9 @@ export default function SettingsPage() {
       setInstagram(cleanInstagram)
       setFacebook(cleanFacebook)
       showToast('success', 'Contacto actualizado')
-    } catch {
-      showToast('error', 'Error al guardar')
+    } catch (err: any) {
+      console.error('[SaveContact]', err)
+      showToast('error', err?.message || 'Error al guardar contacto')
     } finally {
       setSaving(false)
     }
@@ -235,8 +237,9 @@ export default function SettingsPage() {
         low_stock_threshold: Number(lowStockThreshold)
       })
       showToast('success', 'Configuración de pedidos actualizada')
-    } catch {
-      showToast('error', 'Error al guardar')
+    } catch (err: any) {
+      console.error('[SaveOrders]', err)
+      showToast('error', err?.message || 'Error al guardar pedidos')
     } finally {
       setSaving(false)
     }
@@ -257,8 +260,9 @@ export default function SettingsPage() {
         footer_message: footerMessage,
       })
       showToast('success', 'Personalización actualizada')
-    } catch {
-      showToast('error', 'Error al guardar')
+    } catch (err: any) {
+      console.error('[SaveCustomization]', err)
+      showToast('error', err?.message || 'Error al guardar diseño')
     } finally {
       setSaving(false)
     }

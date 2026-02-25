@@ -251,8 +251,9 @@ export default function ProductsPage() {
       await productsApi.update(product.id, updates)
       setProducts(prev => prev.map(p => p.id === product.id ? { ...p, ...updates } : p))
       showToast('success', 'Estado actualizado')
-    } catch (err) {
-      showToast('error', 'Error al actualizar estado')
+    } catch (err: any) {
+      console.error('[ToggleProduct]', err)
+      showToast('error', err?.message || 'Error al actualizar estado')
     } finally {
       setUpdatingId(null)
     }
