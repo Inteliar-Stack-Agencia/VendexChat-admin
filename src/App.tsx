@@ -38,6 +38,7 @@ const HelpPage = lazy(() => import('./pages/client/HelpPage'))
 const AIImporterPage = lazy(() => import('./pages/client/AIImporterPage'))
 const StatsPage = lazy(() => import('./pages/client/StatsPage'))
 const AIAssistantPage = lazy(() => import('./pages/client/AIAssistantPage'))
+const BulkPriceEditorPage = lazy(() => import('./pages/client/BulkPriceEditorPage'))
 
 // Superadmin pages (Lazy)
 const SuperadminDashboard = lazy(() => import('./pages/superadmin/SuperadminDashboard'))
@@ -122,6 +123,7 @@ export default function App() {
               <Route path="/ai-importer" element={<AIImporterPage />} />
               <Route path="/ai-intelligence" element={<AIAssistantPage />} />
               <Route path="/stats" element={<StatsPage />} />
+              <Route path="/bulk-prices" element={<BulkPriceEditorPage />} />
 
               {/* Redirigir root del merchant a dashboard */}
               <Route index element={<Navigate to="/dashboard" replace />} />

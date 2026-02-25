@@ -45,6 +45,7 @@ const modules = [
   { id: 'menu-qr', label: 'Menú QR', icon: QrCode, path: '/qr' },
   { id: 'cupones', label: 'Cupones', icon: Percent, path: '/coupons' },
   { id: 'mensajes', label: 'Popups', icon: Bell, path: '/popups' },
+  { id: 'editor-precios', label: 'Editor Precios', icon: DollarSign, path: '/bulk-prices' },
 ]
 
 export default function DashboardPage() {
