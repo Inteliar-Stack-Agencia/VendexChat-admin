@@ -30,6 +30,7 @@ import {
   Calendar
 } from 'lucide-react'
 import { Card, LoadingSpinner, Badge, Button } from '../../components/common'
+import OnboardingChecklist from '../../components/dashboard/OnboardingChecklist'
 import { dashboardApi, tenantApi } from '../../services/api'
 import { DashboardStats, Tenant } from '../../types'
 import { formatPrice, formatDate, orderStatusConfig } from '../../utils/helpers'
@@ -148,6 +149,8 @@ export default function DashboardPage() {
           </Link>
         </div>
       </div>
+
+      <OnboardingChecklist tenant={tenant} stats={stats} />
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

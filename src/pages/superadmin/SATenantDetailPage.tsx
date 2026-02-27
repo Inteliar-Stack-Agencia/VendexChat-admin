@@ -353,7 +353,7 @@ export default function SATenantDetailPage() {
                                 <div>
                                     <label className="block text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2">País / Región</label>
                                     <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
-                                        <span className="font-bold text-slate-900">AR</span>
+                                        <span className="font-bold text-slate-900">{tenant.country || 'Sin definir'}</span>
                                         <Globe className="w-4 h-4 text-slate-400" />
                                     </div>
                                 </div>
@@ -513,6 +513,7 @@ export default function SATenantDetailPage() {
                                         >
                                             <option value="mercadopago">Mercado Pago</option>
                                             <option value="stripe">Stripe</option>
+                                            <option value="paypal">PayPal</option>
                                         </select>
                                     </div>
                                     <div>

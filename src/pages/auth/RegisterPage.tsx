@@ -176,9 +176,9 @@ export default function RegisterPage() {
               />
               <span className="text-sm text-gray-600">
                 Acepto los{' '}
-                <a href="#" className="text-emerald-600 hover:underline">
+                <Link to="/legal/terms" className="text-emerald-600 hover:underline">
                   términos y condiciones
-                </a>
+                </Link>
               </span>
             </label>
             {errors.terms && <p className="text-xs text-red-600">{errors.terms}</p>}

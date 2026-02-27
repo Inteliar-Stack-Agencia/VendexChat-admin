@@ -16,77 +16,68 @@ import type {
 } from '../types'
 import { normalizeProductData } from '../utils/helpers'
 
-/**
- * Utilidad para obtener el store_id del usuario actual con lógica de "Auto-reparación"
- * Si el perfil no tiene store_id, intenta encontrar la tienda por el slug en los metadatos de auth.
- */
-// Cache para evitar sincronizar en cada llamada
+// Cache volátil en memoria para evitar llamadas redundantes de getUser en la misma sesión
+let _cachedUser: any = null
 let _lastSyncedStoreId: string | null = null
 
 export const getStoreId = async (): Promise<string> => {
-  console.log('[getStoreId] START')
-  // 1. Prioridad Absoluta: Selección Manual o Suplantación (Sin esperas de red si es posible)
+  // 1. Prioridad Absoluta: Selección Manual o Suplantación (Local Storage es Síncrono y Rápido)
   const impersonatedId = localStorage.getItem('vendexchat_impersonated_store')
   const selectedStoreId = localStorage.getItem('vendexchat_selected_store')
-  console.log('[getStoreId] Storage - Impersonated:', impersonatedId, 'Selected:', selectedStoreId)
   const activeStoreId = impersonatedId || selectedStoreId
 
-  if (activeStoreId) {
-    // SYNC: Mantener profiles.store_id en sync con localStorage para que RLS funcione
-    if (_lastSyncedStoreId !== activeStoreId) {
-      try {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (user) {
-          await supabase.from('profiles').update({ store_id: activeStoreId }).eq('id', user.id)
-          _lastSyncedStoreId = activeStoreId
-          console.log('[getStoreId] Profile store_id synced to:', activeStoreId)
-        }
-      } catch (e) {
-        console.warn('[getStoreId] Profile sync failed (non-blocking):', e)
-      }
-    }
-    console.log('[api] Using ACTIVE store ID from localStorage:', activeStoreId)
+  // Si tenemos un store_id activo y ya lo sincronizamos este ciclo, devolverlo de inmediato
+  if (activeStoreId && _lastSyncedStoreId === activeStoreId) {
     return activeStoreId
   }
 
-  // 2. Fallback: Obtener usuario de Auth
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) {
-    console.error('getStoreId: No hay sesión activa')
-    throw new Error('No hay sesión activa')
+  // 2. Obtener usuario de Auth (Con caché en memoria para esta ráfaga de peticiones)
+  if (!_cachedUser) {
+    const { data: { user } } = await supabase.auth.getUser()
+    _cachedUser = user
   }
 
-  // 3. Intentar por perfil (UUID es lo más seguro)
+  const user = _cachedUser
+  if (!user) throw new Error('No hay sesión activa')
+
+  if (activeStoreId) {
+    // SYNC: Mantener profiles.store_id en sync con localStorage si cambió
+    try {
+      await supabase.from('profiles').update({ store_id: activeStoreId }).eq('id', user.id)
+      _lastSyncedStoreId = activeStoreId
+      console.log('[getStoreId] Profile store_id synced to:', activeStoreId)
+    } catch (e) {
+      console.warn('[getStoreId] Profile sync failed (non-blocking):', e)
+    }
+    return activeStoreId
+  }
+
+  // 3. Fallback: Obtener de perfiles (Si no hay en local storage)
   const { data: profile } = await supabase.from('profiles').select('store_id').eq('id', user.id).single()
   if (profile?.store_id) {
-    console.log('[getStoreId] Success: Using UUID from profile:', profile.store_id)
+    _lastSyncedStoreId = profile.store_id
     return profile.store_id
   }
 
-  // 4. Auto-reparación por slug en metadata (FALLBACK)
+  // 4. Auto-reparación por slug en metadata
   const metaSlug = user.user_metadata?.slug
   if (metaSlug) {
-    console.log('[getStoreId] Fallback: Searching by metaSlug:', metaSlug)
     const { data: store } = await supabase.from('stores').select('id').eq('slug', metaSlug).single()
     if (store) {
-      console.log('[getStoreId] Auto-fixing profile with store_id:', store.id)
-      supabase.from('profiles').update({ store_id: store.id }).eq('id', user.id).then(({ error }) => {
-        if (error) console.error('[getStoreId] Failed to save profile sync:', error)
-      })
+      _lastSyncedStoreId = store.id
+      supabase.from('profiles').update({ store_id: store.id }).eq('id', user.id)
       return store.id
-    } else {
-      console.warn('[getStoreId] Store not found with metaSlug:', metaSlug)
     }
   }
 
-  // 5. Último intento: Buscar cualquier tienda que sea dueño (Owner)
+  // 5. Último intento via owner_id
   const { data: anyStore } = await supabase.from('stores').select('id').eq('owner_id', user.id).limit(1).single()
   if (anyStore) {
-    console.log('[getStoreId] Recovery: Found store via owner_id:', anyStore.id)
+    _lastSyncedStoreId = anyStore.id
     return anyStore.id
   }
 
-  throw new Error(`No se pudo identificar la tienda para el usuario: ${user.email}. Por favor, contacta a soporte.`)
+  throw new Error(`No se pudo identificar la tienda.`)
 }
 
 // --- Auth ---
@@ -303,66 +294,62 @@ export const authApi = {
 export const dashboardApi = {
   getStats: async (): Promise<any> => {
     const storeId = await getStoreId()
-
     if (!storeId) return { orders_today: 0, sales_today: 0, active_products: 0, recent_orders: [], low_stock_products: [] }
 
     const today = new Date()
     today.setHours(0, 0, 0, 0)
 
-    // 1. Pedidos de hoy
-    const { count: ordersCount } = await supabase
-      .from('orders')
-      .select('*', { count: 'exact', head: true })
-      .eq('store_id', storeId)
-      .gte('created_at', today.toISOString())
+    // Parallel execution for all dashboard queries
+    const [
+      ordersTodayResult,
+      salesTodayResult,
+      productsCountResult,
+      recentOrdersResult,
+      storeDataResult,
+      lowStockResult
+    ] = await Promise.all([
+      supabase
+        .from('orders')
+        .select('*', { count: 'exact', head: true })
+        .eq('store_id', storeId)
+        .gte('created_at', today.toISOString()),
+      supabase
+        .from('orders')
+        .select('total')
+        .eq('store_id', storeId)
+        .eq('status', 'completed')
+        .gte('created_at', today.toISOString()),
+      supabase
+        .from('products')
+        .select('id', { count: 'exact', head: true })
+        .eq('store_id', storeId),
+      supabase
+        .from('orders')
+        .select('id, total, status, customer_name, order_number, created_at')
+        .eq('store_id', storeId)
+        .order('created_at', { ascending: false })
+        .limit(5),
+      supabase
+        .from('stores')
+        .select('low_stock_threshold')
+        .eq('id', storeId)
+        .single(),
+      supabase
+        .from('products')
+        .select('id, name, stock, image_url')
+        .eq('store_id', storeId)
+        // We calculate stock alert based on the threshold later to keep queries simple
+        .order('stock', { ascending: true })
+    ])
 
-    // 2. Ventas hoy (Suma de totales)
-    const { data: salesData } = await supabase
-      .from('orders')
-      .select('total')
-      .eq('store_id', storeId)
-      .eq('status', 'completed') // Solo sumamos las entregadas/pagadas
-      .gte('created_at', today.toISOString())
-
-    const salesToday = salesData?.reduce((acc, curr) => acc + (curr.total || 0), 0) || 0
-
-    // 3. Productos activos totales
-    const { count: productsCount } = await supabase
-      .from('products')
-      .select('id', { count: 'exact', head: true }) // Only need ID for count
-      .eq('store_id', storeId)
-
-    // 4. Últimos 5 pedidos (con detalles seleccionados)
-    const { data: recentOrders } = await supabase
-      .from('orders')
-      .select('id, total, status, customer_name, order_number, created_at') // Added order_number
-      .eq('store_id', storeId)
-      .order('created_at', { ascending: false })
-      .limit(5)
-
-    // 5. Umbral de stock (de la tienda)
-    const { data: storeData } = await supabase
-      .from('stores')
-      .select('low_stock_threshold')
-      .eq('id', storeId)
-      .single()
-
-    const threshold = storeData?.low_stock_threshold ?? 5
-
-    // 6. Alertas de stock bajo (usando el umbral y campos específicos)
-    const { data: lowStock } = await supabase
-      .from('products')
-      .select('id, name, stock, image_url') // Avoid * to skip large base64 if still present
-      .eq('store_id', storeId)
-      .lte('stock', threshold)
-      .order('stock', { ascending: true })
+    const threshold = storeDataResult.data?.low_stock_threshold ?? 5
 
     return {
-      orders_today: ordersCount || 0,
-      sales_today: salesToday,
-      active_products: productsCount || 0,
-      recent_orders: recentOrders || [],
-      low_stock_products: lowStock || []
+      orders_today: ordersTodayResult.count || 0,
+      sales_today: salesTodayResult.data?.reduce((acc, curr) => acc + (curr.total || 0), 0) || 0,
+      active_products: productsCountResult.count || 0,
+      recent_orders: recentOrdersResult.data || [],
+      low_stock_products: (lowStockResult.data || []).filter(p => p.stock <= threshold)
     }
   }
 }
@@ -374,7 +361,7 @@ export const productsApi = {
 
     // Seleccionamos campos específicos para evitar traer datos pesados (como base64) si no son necesarios
     // Si ya migramos a Storage, image_url será corto, pero por ahora somos precavidos
-    let query = supabase.from('products').select('id, name, description, price, image_url, stock, is_active, category_id, unlimited_stock, sort_order, store_id, is_featured, created_at, categories(name)', { count: 'exact' }).eq('store_id', storeId)
+    let query = supabase.from('products').select('id, name, description, price, image_url, stock, is_active, category_id, sort_order, store_id, is_featured, created_at, categories(name)', { count: 'exact' }).eq('store_id', storeId)
 
     if (params?.search) query = query.ilike('name', `%${params.search}%`)
     if (params?.category_id) query = query.eq('category_id', params.category_id)

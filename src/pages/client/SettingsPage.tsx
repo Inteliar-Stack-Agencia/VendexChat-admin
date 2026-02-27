@@ -96,7 +96,11 @@ export default function SettingsPage() {
   const [manualMethods, setManualMethods] = useState({
     cash: true,
     transfer: false,
-    transfer_details: ''
+    transfer_details: '',
+    yape: false,
+    yape_details: '',
+    plin: false,
+    plin_details: ''
   })
 
   useEffect(() => {
@@ -145,7 +149,11 @@ export default function SettingsPage() {
         setManualMethods({
           cash: metadata.payment_methods?.cash ?? true,
           transfer: metadata.payment_methods?.transfer ?? false,
-          transfer_details: metadata.transfer_details || ''
+          transfer_details: metadata.transfer_details || '',
+          yape: metadata.payment_methods?.yape ?? false,
+          yape_details: metadata.yape_details || '',
+          plin: metadata.payment_methods?.plin ?? false,
+          plin_details: metadata.plin_details || ''
         })
       } catch (err) {
         console.error(err)
@@ -338,8 +346,12 @@ export default function SettingsPage() {
           ...currentMetadata.payment_methods,
           cash: manualMethods.cash,
           transfer: manualMethods.transfer,
+          yape: manualMethods.yape,
+          plin: manualMethods.plin,
         },
-        transfer_details: manualMethods.transfer_details
+        transfer_details: manualMethods.transfer_details,
+        yape_details: manualMethods.yape_details,
+        plin_details: manualMethods.plin_details
       }
 
       await tenantApi.updateMe({
@@ -659,7 +671,26 @@ export default function SettingsPage() {
             <Input label="WhatsApp de la tienda" value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)} placeholder="+54 9 11 1234-5678" />
             <Input label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
             <div className="grid grid-cols-2 gap-4">
-              <Input label="País" value={country} onChange={(e) => setCountry(e.target.value)} />
+              <div className="space-y-1">
+                <label className="block text-sm font-medium text-gray-700">País</label>
+                <select
+                  value={country}
+                  onChange={(e) => setCountry(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                >
+                  <option value="">Seleccionar país</option>
+                  <option value="Argentina">Argentina</option>
+                  <option value="Peru">Perú</option>
+                  <option value="Chile">Chile</option>
+                  <option value="Colombia">Colombia</option>
+                  <option value="Mexico">México</option>
+                  <option value="Ecuador">Ecuador</option>
+                  <option value="Bolivia">Bolivia</option>
+                  <option value="Uruguay">Uruguay</option>
+                  <option value="Paraguay">Paraguay</option>
+                  <option value="Other">Otro</option>
+                </select>
+              </div>
               <Input label="Ciudad" value={city} onChange={(e) => setCity(e.target.value)} />
             </div>
             <Input label="Dirección física" value={address} onChange={(e) => setAddress(e.target.value)} />
@@ -757,7 +788,7 @@ export default function SettingsPage() {
                 Métodos Manuales
               </h2>
               <form onSubmit={handleSaveManualPayments} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                   <label className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
                     <input
                       type="checkbox"
@@ -766,8 +797,8 @@ export default function SettingsPage() {
                       className="w-4 h-4 text-emerald-600 rounded"
                     />
                     <div>
-                      <p className="text-sm font-medium text-gray-900">Efectivo / Acordar con vendedor</p>
-                      <p className="text-xs text-gray-500">El cliente paga al recibir o retira el pedido.</p>
+                      <p className="text-sm font-medium text-gray-900">Efectivo</p>
+                      <p className="text-[10px] text-gray-500">Pagar al recibir o retirar.</p>
                     </div>
                   </label>
 
@@ -779,24 +810,78 @@ export default function SettingsPage() {
                       className="w-4 h-4 text-emerald-600 rounded"
                     />
                     <div>
-                      <p className="text-sm font-medium text-gray-900">Transferencia Bancaria</p>
-                      <p className="text-xs text-gray-500">Mostrá tus datos bancarios al finalizar el pedido.</p>
+                      <p className="text-sm font-medium text-gray-900">Transferencia</p>
+                      <p className="text-[10px] text-gray-500">Mostrar CBU/Alias.</p>
+                    </div>
+                  </label>
+
+                  <label className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
+                    <input
+                      type="checkbox"
+                      checked={manualMethods.yape}
+                      onChange={e => setManualMethods(p => ({ ...p, yape: e.target.checked }))}
+                      className="w-4 h-4 text-emerald-600 rounded"
+                    />
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">Yape</p>
+                      <p className="text-[10px] text-gray-500">Billetera digital (Perú).</p>
+                    </div>
+                  </label>
+
+                  <label className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
+                    <input
+                      type="checkbox"
+                      checked={manualMethods.plin}
+                      onChange={e => setManualMethods(p => ({ ...p, plin: e.target.checked }))}
+                      className="w-4 h-4 text-emerald-600 rounded"
+                    />
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">Plin</p>
+                      <p className="text-[10px] text-gray-500">Billetera digital (Perú).</p>
                     </div>
                   </label>
                 </div>
 
-                {manualMethods.transfer && (
-                  <div className="space-y-1">
-                    <label className="text-sm font-medium text-gray-700">Datos Bancarios (Alias, CVU, Titular)</label>
-                    <textarea
-                      placeholder="Ingresá CBU, Alias, Banco y Titular..."
-                      value={manualMethods.transfer_details}
-                      onChange={e => setManualMethods(p => ({ ...p, transfer_details: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-emerald-500 focus:outline-none focus:ring-2"
-                      rows={4}
-                    />
-                  </div>
-                )}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {manualMethods.transfer && (
+                    <div className="space-y-1">
+                      <label className="text-xs font-black uppercase text-slate-400 tracking-widest">Datos Bancarios</label>
+                      <textarea
+                        placeholder="Alias, CBU, Titular..."
+                        value={manualMethods.transfer_details}
+                        onChange={e => setManualMethods(p => ({ ...p, transfer_details: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-emerald-500 focus:outline-none focus:ring-2"
+                        rows={3}
+                      />
+                    </div>
+                  )}
+
+                  {manualMethods.yape && (
+                    <div className="space-y-1">
+                      <label className="text-xs font-black uppercase text-slate-400 tracking-widest">Datos de Yape</label>
+                      <textarea
+                        placeholder="Número de teléfono y Titular..."
+                        value={manualMethods.yape_details}
+                        onChange={e => setManualMethods(p => ({ ...p, yape_details: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-emerald-500 focus:outline-none focus:ring-2"
+                        rows={3}
+                      />
+                    </div>
+                  )}
+
+                  {manualMethods.plin && (
+                    <div className="space-y-1">
+                      <label className="text-xs font-black uppercase text-slate-400 tracking-widest">Datos de Plin</label>
+                      <textarea
+                        placeholder="Número de teléfono y Titular..."
+                        value={manualMethods.plin_details}
+                        onChange={e => setManualMethods(p => ({ ...p, plin_details: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-emerald-500 focus:outline-none focus:ring-2"
+                        rows={3}
+                      />
+                    </div>
+                  )}
+                </div>
                 <Button type="submit" loading={saving}>
                   <RefreshCw className="w-4 h-4 mr-2" />
                   Guardar Métodos Manuales

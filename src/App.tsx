@@ -39,6 +39,7 @@ const AIImporterPage = lazy(() => import('./pages/client/AIImporterPage'))
 const StatsPage = lazy(() => import('./pages/client/StatsPage'))
 const AIAssistantPage = lazy(() => import('./pages/client/AIAssistantPage'))
 const BulkPriceEditorPage = lazy(() => import('./pages/client/BulkPriceEditorPage'))
+const LegalPage = lazy(() => import('./pages/legal/LegalPage'))
 
 // Superadmin pages (Lazy)
 const SuperadminDashboard = lazy(() => import('./pages/superadmin/SuperadminDashboard'))
@@ -91,6 +92,7 @@ export default function App() {
             <Route path="/recover-password" element={<RecoverPasswordPage />} />
             <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
             <Route path="/select-store" element={<SelectStorePage />} />
+            <Route path="/legal/:type" element={<LegalPage />} />
 
             {/* Rutas protegidas del cliente */}
             <Route
