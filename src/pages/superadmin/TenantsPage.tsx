@@ -117,7 +117,7 @@ export default function TenantsPage() {
       })
       showToast('success', 'Suscripción actualizada')
       setSubModalOpen(false)
-    } catch (err) {
+    } catch {
       showToast('error', 'Error al actualizar suscripción')
     } finally {
       setSubSaving(false)

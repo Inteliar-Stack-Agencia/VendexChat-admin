@@ -1,17 +1,10 @@
-import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { Store, Users, DollarSign, TrendingUp, AlertCircle } from 'lucide-react'
-import { superadminApi } from '../../services/api'
+import { useSuperadminOverview } from '../../hooks/useSuperadminOverview'
+import StatCard from './components/StatCard'
 
 export default function SAOverviewPage() {
-    const [data, setData] = useState<any>(null)
-    const [loading, setLoading] = useState(true)
-
-    useEffect(() => {
-        superadminApi.overview()
-            .then(setData)
-            .finally(() => setLoading(false))
-    }, [])
+    const { data, loading } = useSuperadminOverview()
 
     const stats = [
         { name: 'Tiendas Activas', value: data?.active_stores || '0', icon: Store, trend: '+12%', color: 'text-indigo-600', bg: 'bg-indigo-50' },
@@ -39,24 +32,12 @@ export default function SAOverviewPage() {
                     ))
                 ) : (
                     stats.map((stat) => (
-                        <div key={stat.name} className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-md transition-shadow group cursor-default">
-                            <div className="flex items-center justify-between mb-4">
-                                <div className={`p-3 rounded-2xl ${stat.bg} ${stat.color} group-hover:scale-110 transition-transform`}>
-                                    <stat.icon className="w-6 h-6" />
-                                </div>
-                                <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${stat.trend.startsWith('+') ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
-                                    {stat.trend}
-                                </span>
-                            </div>
-                            <p className="text-xs font-black uppercase text-slate-400 tracking-widest">{stat.name}</p>
-                            <h3 className="text-3xl font-black text-slate-900 mt-1">{stat.value}</h3>
-                        </div>
+                        <StatCard key={stat.name} {...stat} />
                     ))
                 )}
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* Recent Activity */}
                 <div className="lg:col-span-2 bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden min-h-[400px]">
                     <div className="p-8 border-b border-slate-50 flex items-center justify-between">
                         <h3 className="font-bold text-lg text-slate-900">Actividad Reciente</h3>
@@ -96,7 +77,6 @@ export default function SAOverviewPage() {
                     </div>
                 </div>
 
-                {/* Action Center - Real Alerts */}
                 <div className="bg-gradient-to-br from-indigo-600 to-indigo-900 rounded-[2rem] p-10 text-white shadow-2xl shadow-indigo-100 relative overflow-hidden group flex flex-col justify-between min-h-[400px]">
                     <div className="relative z-10">
                         <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center mb-6 border border-white/10">

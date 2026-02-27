@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Shield, UserPlus, MoreHorizontal, User, Mail, ShieldCheck, Trash2 } from 'lucide-react'
 import { superadminApi } from '../../services/api'
+import { toast } from 'sonner'
 
 export default function SAPermissionsPage() {
     const [users, setUsers] = useState<any[]>([])
@@ -24,10 +25,10 @@ export default function SAPermissionsPage() {
         try {
             setLoading(true)
             await superadminApi.inviteStaff(email)
-            alert('Usuario promovido a Administrador con éxito.')
+            toast.success('Usuario promovido a Administrador con éxito.')
             loadUsers()
         } catch (err: any) {
-            alert(err.message || 'Error al invitar admin.')
+            toast.error(err.message || 'Error al invitar admin.')
         } finally {
             setLoading(false)
         }
@@ -38,10 +39,10 @@ export default function SAPermissionsPage() {
         try {
             setLoading(true)
             await superadminApi.updateUser(id, { role: 'merchant' }) // Lo bajamos de rango
-            alert('Acceso revocado con éxito.')
+            toast.success('Acceso revocado con éxito.')
             loadUsers()
         } catch (err) {
-            alert('Error al revocar acceso.')
+            toast.error('Error al revocar acceso.')
         } finally {
             setLoading(false)
         }

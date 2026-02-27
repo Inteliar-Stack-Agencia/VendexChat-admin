@@ -1,7 +1,7 @@
 import { Suspense, lazy } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
-import ToastContainer from './components/common/Toast'
+import { Toaster } from 'sonner'
 import RouteLoader from './components/common/RouteLoader'
 
 // Layout (Estáticos para mayor estabilidad en el core)
@@ -83,7 +83,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <ToastContainer />
+        <Toaster position="top-right" richColors closeButton />
         <Suspense fallback={<RouteLoader />}>
           <Routes>
             {/* Rutas públicas (Auth) */}

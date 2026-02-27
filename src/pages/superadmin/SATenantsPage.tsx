@@ -1,83 +1,36 @@
-import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
-import { Search, Filter, MoreHorizontal, Store, CheckCircle, Clock, ChevronLeft, ChevronRight, X, RefreshCw, Send, Trash2 } from 'lucide-react'
-import { superadminApi } from '../../services/api'
-import { Tenant } from '../../types'
+import { useState } from 'react'
+import { Search, Filter, ChevronLeft, ChevronRight } from 'lucide-react'
+import { useTenants } from '../../hooks/useTenants'
+import SACreateTenantModal from './SACreateTenantModal'
 import SADeleteTenantModal from './SADeleteTenantModal'
-import { showToast } from '../../components/common/Toast'
+import TenantTableRow from './components/TenantTableRow'
 
 export default function SATenantsPage() {
-    const [searchTerm, setSearchTerm] = useState('')
-    const [statusFilter, setStatusFilter] = useState('all')
-    const [tenants, setTenants] = useState<Tenant[]>([])
-    const [total, setTotal] = useState(0)
-    const [loading, setLoading] = useState(true)
+    const {
+        tenants,
+        total,
+        loading,
+        saving,
+        searchTerm,
+        setSearchTerm,
+        statusFilter,
+        setStatusFilter,
+        createTenant,
+        deleteTenant
+    } = useTenants()
+
     const [showModal, setShowModal] = useState(false)
-    const [saving, setSaving] = useState(false)
-    const [newTenant, setNewTenant] = useState({ name: '', slug: '', email: '', country: 'Argentina', plan_type: 'free' })
-    const [selectedTenantForDelete, setSelectedTenantForDelete] = useState<Tenant | null>(null)
+    const [selectedTenantForDelete, setSelectedTenantForDelete] = useState<any | null>(null)
 
-    const loadTenants = () => {
-        setLoading(true)
-        superadminApi.listTenants({ q: searchTerm, status: statusFilter })
-            .then(res => {
-                setTenants(res.data)
-                setTotal(res.total)
-            })
-            .finally(() => setLoading(false))
+    const handleCreateConfirm = async (data: any) => {
+        const success = await createTenant(data)
+        if (success) setShowModal(false)
     }
 
-    useEffect(() => {
-        const delayDebounceFn = setTimeout(() => {
-            loadTenants()
-        }, 500)
-
-        return () => clearTimeout(delayDebounceFn)
-    }, [searchTerm, statusFilter])
-
-    const handleCreate = async () => {
-        if (!newTenant.name || !newTenant.slug) return
-        setSaving(true)
-        try {
-            await superadminApi.createTenant({
-                name: newTenant.name,
-                slug: newTenant.slug.toLowerCase().replace(/\s+/g, '-'),
-                email: newTenant.email,
-                country: newTenant.country,
-                plan_type: newTenant.plan_type,
-                is_active: true
-            })
-            setShowModal(false)
-            setNewTenant({ name: '', slug: '', email: '', country: 'Argentina', plan_type: 'free' })
-            loadTenants()
-        } catch (err: any) {
-            console.error('Error creating tenant:', err)
-            alert('Error al crear la tienda: ' + (err.message || 'El slug podría estar duplicado o falta la columna "country" en la base de datos.'))
-        } finally {
-            setSaving(false)
-        }
-    }
-
-    const getStatusBadge = (tenant: Tenant) => {
-        if (tenant.is_active) {
-            return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-600 border border-emerald-100"><CheckCircle className="w-3 h-3" /> Online</span>
-        }
-        return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-600 border border-rose-100"><X className="w-3 h-3" /> Offline</span>
-    }
-
-    const getPlanBadge = (tenant: Tenant) => {
-        const plan = (tenant.metadata?.plan_type || 'free').toLowerCase();
-        const styles: Record<string, string> = {
-            free: 'bg-slate-100 text-slate-500 border-slate-200',
-            pro: 'bg-indigo-50 text-indigo-600 border-indigo-100',
-            vip: 'bg-amber-50 text-amber-600 border-amber-100',
-            ultra: 'bg-purple-50 text-purple-600 border-purple-100'
-        };
-        return (
-            <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-widest border ${styles[plan] || styles.free}`}>
-                {plan}
-            </span>
-        );
+    const handleDeleteConfirm = async () => {
+        if (!selectedTenantForDelete) return
+        const success = await deleteTenant(selectedTenantForDelete.id)
+        if (success) setSelectedTenantForDelete(null)
     }
 
     return (
@@ -148,55 +101,11 @@ export default function SATenantsPage() {
                         </thead>
                         <tbody className="divide-y divide-slate-50">
                             {tenants.map((tenant) => (
-                                <tr key={tenant.id} className="group hover:bg-slate-50/50 transition-colors">
-                                    <td className="px-8 py-6">
-                                        <div className="flex items-center gap-4">
-                                            <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400 group-hover:bg-indigo-600 group-hover:text-white transition-all">
-                                                <Store className="w-5 h-5" />
-                                            </div>
-                                            <div>
-                                                <p className="font-bold text-slate-900">{tenant.name}</p>
-                                                <p className="text-[10px] text-slate-400 font-medium">{new Date(tenant.created_at || '').toLocaleDateString()}</p>
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td className="px-8 py-6">
-                                        <code className="text-[10px] font-bold text-slate-400 italic">/{tenant.slug}</code>
-                                    </td>
-                                    <td className="px-8 py-6">
-                                        <span className="text-xs font-bold text-slate-600 flex items-center gap-1.5">
-                                            {tenant.country === 'Argentina' ? '🇦🇷' :
-                                                tenant.country === 'Chile' ? '🇨🇱' :
-                                                    tenant.country === 'México' ? '🇲🇽' :
-                                                        tenant.country === 'Uruguay' ? '🇺🇾' :
-                                                            tenant.country === 'Colombia' ? '🇨🇴' :
-                                                                tenant.country === 'España' ? '🇪🇸' : '🌐'} {tenant.country || 'N/A'}
-                                        </span>
-                                    </td>
-                                    <td className="px-8 py-5">
-                                        {getStatusBadge(tenant)}
-                                    </td>
-                                    <td className="px-8 py-5 text-center">
-                                        {getPlanBadge(tenant)}
-                                    </td>
-                                    <td className="px-8 py-5 text-right">
-                                        <div className="flex items-center justify-end gap-2">
-                                            <button
-                                                onClick={() => setSelectedTenantForDelete(tenant)}
-                                                className="p-2 rounded-lg hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-colors"
-                                                title="Eliminar Tienda"
-                                            >
-                                                <Trash2 className="w-4 h-4" />
-                                            </button>
-                                            <Link
-                                                to={`/sa/tenants/${tenant.id}`}
-                                                className="inline-block p-2 rounded-lg hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors"
-                                            >
-                                                <MoreHorizontal className="w-5 h-5" />
-                                            </Link>
-                                        </div>
-                                    </td>
-                                </tr>
+                                <TenantTableRow
+                                    key={tenant.id}
+                                    tenant={tenant}
+                                    onDelete={setSelectedTenantForDelete}
+                                />
                             ))}
                         </tbody>
                     </table>
@@ -216,116 +125,18 @@ export default function SATenantsPage() {
                 </div>
             </div>
 
-            {/* Create Modal */}
-            {showModal && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
-                    <div className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden border border-slate-100 flex flex-col scale-100 animate-in zoom-in-95 duration-300">
-                        <div className="p-8 border-b border-slate-50 flex items-center justify-between">
-                            <h3 className="text-xl font-bold text-slate-900">Nueva Tienda Manual</h3>
-                            <button onClick={() => setShowModal(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-400">
-                                <X className="w-6 h-6" />
-                            </button>
-                        </div>
-                        <div className="p-8 space-y-6">
-                            <div>
-                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Nombre del Negocio</label>
-                                <input
-                                    type="text"
-                                    className="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
-                                    placeholder="Ej: Tienda de Pepe"
-                                    value={newTenant.name}
-                                    onChange={(e) => setNewTenant(t => ({ ...t, name: e.target.value, slug: e.target.value.toLowerCase().replace(/\s+/g, '-') }))}
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Slug (URL)</label>
-                                <div className="flex items-center gap-1 bg-slate-50 rounded-xl px-4 py-3">
-                                    <span className="text-slate-400 font-bold">/</span>
-                                    <input
-                                        type="text"
-                                        className="flex-1 bg-transparent border-0 p-0 font-bold text-slate-900 focus:ring-0 outline-none"
-                                        placeholder="tienda-de-pepe"
-                                        value={newTenant.slug}
-                                        onChange={(e) => setNewTenant(t => ({ ...t, slug: e.target.value }))}
-                                    />
-                                </div>
-                            </div>
-                            <div>
-                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Email del Propietario</label>
-                                <input
-                                    type="email"
-                                    className="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 font-medium text-slate-900 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
-                                    placeholder="pepe@email.com"
-                                    value={newTenant.email}
-                                    onChange={(e) => setNewTenant(t => ({ ...t, email: e.target.value }))}
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">País</label>
-                                <select
-                                    className="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
-                                    value={newTenant.country}
-                                    onChange={(e) => setNewTenant(t => ({ ...t, country: e.target.value }))}
-                                >
-                                    <option value="Argentina">🇦🇷 Argentina</option>
-                                    <option value="Chile">🇨🇱 Chile</option>
-                                    <option value="Uruguay">🇺🇾 Uruguay</option>
-                                    <option value="México">🇲🇽 México</option>
-                                    <option value="Colombia">🇨🇴 Colombia</option>
-                                    <option value="España">🇪🇸 España</option>
-                                    <option value="Otros">Otro / Internacional</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Plan de Suscripción</label>
-                                <select
-                                    className="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-100 transition-all outline-none uppercase"
-                                    value={newTenant.plan_type}
-                                    onChange={(e) => setNewTenant(t => ({ ...t, plan_type: e.target.value }))}
-                                >
-                                    <option value="free">FREE</option>
-                                    <option value="pro">PRO (Trial 15d)</option>
-                                    <option value="vip">VIP</option>
-                                    <option value="ultra">ULTRA (Bespoke)</option>
-                                </select>
-                            </div>
-                            <div className="bg-amber-50 p-4 rounded-xl border border-amber-100 flex gap-3">
-                                <div className="w-8 h-8 rounded-lg bg-amber-500 flex items-center justify-center shrink-0">
-                                    <RefreshCw className="w-5 h-5 text-white animate-spin-slow" />
-                                </div>
-                                <p className="text-[10px] text-amber-700 font-medium leading-relaxed">
-                                    <strong className="block uppercase tracking-widest mb-0.5">Flujo de Acceso:</strong>
-                                    Al dar de alta la tienda, se enviará automáticamente un <strong>email de invitación</strong> al dueño para que cree su contraseña e ingrese al sistema.
-                                </p>
-                            </div>
-                            <button
-                                onClick={handleCreate}
-                                disabled={saving || !newTenant.name || !newTenant.slug || !newTenant.email}
-                                className="w-full bg-indigo-600 text-white font-bold py-4 rounded-2xl hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-100 flex items-center justify-center gap-2 group disabled:opacity-50"
-                            >
-                                {saving ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />}
-                                Dar de Alta Tienda
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            <SACreateTenantModal
+                isOpen={showModal}
+                onClose={() => setShowModal(false)}
+                onConfirm={handleCreateConfirm}
+                isSaving={saving}
+            />
 
-            {/* Delete Modal */}
             {selectedTenantForDelete && (
                 <SADeleteTenantModal
                     tenant={selectedTenantForDelete}
                     onClose={() => setSelectedTenantForDelete(null)}
-                    onConfirm={async () => {
-                        try {
-                            await superadminApi.deleteTenant(selectedTenantForDelete.id)
-                            showToast('success', 'Tienda eliminada permanentemente')
-                            setSelectedTenantForDelete(null)
-                            loadTenants()
-                        } catch (err) {
-                            throw err // Pass to modal for error handling
-                        }
-                    }}
+                    onConfirm={handleDeleteConfirm}
                 />
             )}
         </div>

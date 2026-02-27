@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Settings, Shield, CreditCard, RefreshCw, Save, AlertCircle, Plus, X } from 'lucide-react'
 import { superadminApi } from '../../services/api'
+import { toast } from 'sonner'
 
 export default function SASettingsPage() {
     const [settings, setSettings] = useState({
@@ -25,7 +26,7 @@ export default function SASettingsPage() {
         setSaving(true)
         try {
             await superadminApi.updateGlobalSettings(settings)
-            alert('Configuración global actualizada con éxito.')
+            toast.success('Configuración global actualizada con éxito.')
         } finally {
             setSaving(false)
         }
@@ -41,10 +42,12 @@ export default function SASettingsPage() {
             setShowModal(false)
             setNewGateway({ provider: 'stripe', public_key: '', secret_key: '' })
             superadminApi.listGateways(true).then(setGateways)
-            alert('Pasarela conectada con éxito.')
+            toast.success('Pasarela conectada con éxito.')
         } catch (err: any) {
             console.error('Error connecting gateway:', err)
-            alert('Error al conectar la pasarela: ' + (err.message || 'Error desconocido'))
+            toast.error('Error al conectar la pasarela', {
+                description: err.message || 'Error desconocido'
+            })
         } finally {
             setSaving(false)
         }
