@@ -109,16 +109,29 @@ export default function SubscriptionPage() {
                                 <p className="text-indigo-200 text-[10px] font-black uppercase tracking-widest">Plan Actual</p>
                                 <div className="flex items-center gap-2">
                                     <h3 className="text-2xl font-black uppercase tracking-tight">VENDEx {currentSub.plan_type}</h3>
-                                    <div className="px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/30 text-[10px] font-black uppercase text-emerald-400">
-                                        {currentSub.status === 'active' ? `Activo (${currentSub.billing_cycle === 'annual' ? 'Anual' : 'Mensual'})` : currentSub.status}
+                                    <div className={`px-2 py-0.5 rounded-full border text-[10px] font-black uppercase ${currentSub.status === 'active'
+                                        ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400'
+                                        : currentSub.status === 'trial'
+                                            ? 'bg-amber-500/20 border-amber-500/30 text-amber-400'
+                                            : 'bg-slate-500/20 border-slate-500/30 text-slate-400'
+                                        }`}>
+                                        {currentSub.status === 'active'
+                                            ? `Activo (${currentSub.billing_cycle === 'annual' ? 'Anual' : 'Mensual'})`
+                                            : currentSub.status === 'trial'
+                                                ? `Prueba PRO (${Math.max(0, Math.ceil((new Date(currentSub.current_period_end!).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)))} días)`
+                                                : currentSub.status}
                                     </div>
                                 </div>
                             </div>
                         </div>
                         <div className="flex items-center gap-8">
                             <div className="text-right hidden sm:block">
-                                <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest">Próximo Cobro</p>
-                                <p className="text-lg font-bold">{currentSub.current_period_end ? new Date(currentSub.current_period_end).toLocaleDateString() : 'N/A'}</p>
+                                <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest">
+                                    {currentSub.status === 'trial' ? 'Vence el' : 'Próximo Cobro'}
+                                </p>
+                                <p className="text-lg font-bold">
+                                    {currentSub.current_period_end ? new Date(currentSub.current_period_end).toLocaleDateString() : 'N/A'}
+                                </p>
                             </div>
                             <Button variant="secondary" className="bg-white text-slate-900 border-0 font-black uppercase text-[10px] tracking-widest px-6">
                                 Gestionar Suscripción

@@ -229,6 +229,7 @@ export interface Subscription {
   discount_percentage: number
   is_manual: boolean
   internal_notes: string | null
+  current_period_start: string | null
   current_period_end: string | null
   cancel_at_period_end: boolean
   stripe_subscription_id?: string

@@ -18,6 +18,7 @@ interface AuthContextType {
   refreshSubscription: () => Promise<void>
   selectedStoreId: string | null
   selectStore: (storeId: string) => void
+  storesCount: number
 }
 
 const AuthContext = createContext<AuthContextType | null>(null)
@@ -32,6 +33,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [subscription, setSubscription] = useState<Subscription | null>(null)
   const [token, setToken] = useState<string | null>(localStorage.getItem('vendexchat_token'))
   const [selectedStoreId, setSelectedStoreId] = useState<string | null>(localStorage.getItem('vendexchat_selected_store'))
+  const [storesCount, setStoresCount] = useState<number>(0)
   const [loading, setLoading] = useState(true)
 
   // 1. Restauración inicial y Sincronización en tiempo real
@@ -158,6 +160,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (user && user.role !== 'superadmin') {
       refreshSubscription()
+
+      // También cargar conteo de tiendas para la UI
+      authApi.getMyStores().then(stores => {
+        setStoresCount(stores.length)
+      }).catch(err => console.error('Error fetching stores count:', err))
     }
   }, [user, refreshSubscription])
 
@@ -176,6 +183,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         refreshSubscription,
         selectedStoreId,
         selectStore,
+        storesCount,
       }}
     >
       {children}

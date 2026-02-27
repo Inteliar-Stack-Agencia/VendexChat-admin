@@ -35,7 +35,9 @@ export default function SATenantDetailPage() {
     const [editingSlug, setEditingSlug] = useState(false)
     const [newSlug, setNewSlug] = useState('')
     const [savingSlug, setSavingSlug] = useState(false)
-    const [aiPrompt, setAiPrompt] = useState('')
+    const [editAiPrompt, setEditAiPrompt] = useState('')
+    const [editAnnounceActive, setEditAnnounceActive] = useState(false)
+    const [editAnnounceText, setEditAnnounceText] = useState('')
     const [savingPrompt, setSavingPrompt] = useState(false)
     const [savingPlan, setSavingPlan] = useState(false)
     const [showCloneModal, setShowCloneModal] = useState(false)
@@ -56,7 +58,9 @@ export default function SATenantDetailPage() {
                     setNewSlug(t.slug)
                     setNewDomain(t.custom_domain || '')
                     // Pick from metadata as primary source for prompt
-                    setAiPrompt(t.metadata?.ai_prompt || t.ai_prompt || '')
+                    setEditAiPrompt(t.metadata?.ai_prompt || t.ai_prompt || '')
+                    setEditAnnounceActive(t.metadata?.announcement_active === true || t.metadata?.announcement_active === "true")
+                    setEditAnnounceText(t.metadata?.announcement_text || '')
                     // Load gateways for this tenant
                     superadminApi.listTenantGateways(t.id).then(setTenantGateways).catch(console.error)
                 })
@@ -143,7 +147,7 @@ export default function SATenantDetailPage() {
         try {
             const updatedMetadata = {
                 ...(tenant.metadata || {}),
-                ai_prompt: aiPrompt || null
+                ai_prompt: editAiPrompt || null
             }
             await superadminApi.updateTenant(id, { metadata: updatedMetadata })
             setTenant({ ...tenant, metadata: updatedMetadata })
@@ -263,7 +267,7 @@ export default function SATenantDetailPage() {
                     </div>
 
                     {/* AI Prompt Restriction Section */}
-                    <div key={`ai-prompt-${tenant.id}-${aiPrompt ? 'filled' : 'empty'}`} className="bg-white rounded-[2rem] border border-indigo-100 shadow-sm overflow-hidden">
+                    <div key={`ai-prompt-${tenant.id}-${editAiPrompt ? 'filled' : 'empty'}`} className="bg-white rounded-[2rem] border border-indigo-100 shadow-sm overflow-hidden">
                         <div className="p-8 border-b border-indigo-50 bg-indigo-50/30 flex items-center justify-between">
                             <div className="flex items-center gap-3">
                                 <div className="p-2 bg-indigo-100 rounded-xl text-indigo-600">
@@ -278,8 +282,8 @@ export default function SATenantDetailPage() {
                         <div className="p-8 space-y-4">
                             <p className="text-xs text-slate-400 font-medium leading-relaxed">Este prompt define la personalidad y conocimientos del bot. El dueño de la tienda no tiene acceso a este campo y solo puede verse desde esta consola global.</p>
                             <textarea
-                                value={aiPrompt}
-                                onChange={(e) => setAiPrompt(e.target.value)}
+                                value={editAiPrompt}
+                                onChange={(e) => setEditAiPrompt(e.target.value)}
                                 className="w-full h-48 px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all placeholder:text-slate-300"
                                 placeholder="Introduce las instrucciones del sistema para la IA (ej: Eres un asistente experto en ventas...)"
                             />
@@ -609,6 +613,34 @@ export default function SATenantDetailPage() {
                             <Activity className="w-4 h-4" /> {tenant.is_active ? 'Suspender Merchant' : 'Activar Merchant'}
                         </button>
 
+                    </div>
+
+                    {/* Anuncio de Tienda */}
+                    <div className="pt-6 border-t border-slate-100">
+                        <div className="flex items-center justify-between mb-4">
+                            <div>
+                                <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight">Anuncio de Tienda</h3>
+                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Banner informativo específico para este comercio</p>
+                            </div>
+                            <label className="relative inline-flex items-center cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    className="sr-only peer"
+                                    checked={editAnnounceActive}
+                                    onChange={(e) => setEditAnnounceActive(e.target.checked)}
+                                />
+                                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                            </label>
+                        </div>
+                        {editAnnounceActive && (
+                            <textarea
+                                value={editAnnounceText}
+                                onChange={(e) => setEditAnnounceText(e.target.value)}
+                                placeholder="Ej: ¡Oferta relámpago! 20% OFF en toda la tienda hoy."
+                                className="w-full px-4 py-3 bg-slate-50 border-2 border-slate-100 rounded-2xl text-sm font-medium focus:border-indigo-500 focus:bg-white transition-all outline-none resize-none"
+                                rows={3}
+                            />
+                        )}
                     </div>
 
                     {/* Danger Zone */}

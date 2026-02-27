@@ -108,7 +108,7 @@ export default function StatsPage() {
                     productMap[name] = { 'Producto': name, 'Cantidad Vendida': 0, 'Total Recaudado': 0 }
                 }
                 productMap[name]['Cantidad Vendida'] += item.quantity || 0
-                productMap[name]['Total Recaudado'] += (item.quantity * item.unit_price) || 0
+                productMap[name]['Total Recaudado'] += (item.quantity * (item.price || 0)) || 0
             })
             exportToExcel(Object.values(productMap), 'Reporte_Top_Productos')
         } catch (err) {

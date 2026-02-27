@@ -26,7 +26,8 @@ import {
   Bell,
   HelpCircle,
   Globe,
-  Wand2
+  Wand2,
+  Calendar
 } from 'lucide-react'
 import { Card, LoadingSpinner, Badge, Button } from '../../components/common'
 import { dashboardApi, tenantApi } from '../../services/api'
@@ -70,11 +71,60 @@ export default function DashboardPage() {
 
   const storefrontUrl = `${import.meta.env.VITE_STOREFRONT_URL}/${tenant?.slug}`
   const currentPlan = subscription?.plan_type || 'free'
+  const isTrial = subscription?.status === 'trial'
+
+  // Calcular días restantes de prueba
+  const trialDaysLeft = subscription?.current_period_end
+    ? Math.max(0, Math.ceil((new Date(subscription.current_period_end).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)))
+    : 0
 
   if (loading) return <LoadingSpinner text="Cargando dashboard..." />
 
   return (
     <div className="space-y-6 animate-fade-in">
+      {/* Trial Countdown Banner */}
+      {isTrial && (
+        <div className={`p-4 rounded-2xl shadow-lg flex flex-col md:flex-row items-center justify-between gap-4 border transition-all duration-500 ${trialDaysLeft > 0
+          ? 'bg-gradient-to-r from-emerald-600 to-teal-700 text-white border-emerald-500/20'
+          : 'bg-gradient-to-r from-rose-600 to-rose-700 text-white border-rose-500/20 animate-pulse'
+          }`}>
+          <div className="flex items-center gap-4">
+            <div className={`p-3 rounded-xl backdrop-blur-sm ${trialDaysLeft > 0 ? 'bg-white/10' : 'bg-white/20'}`}>
+              {trialDaysLeft > 0 ? (
+                <Calendar className="w-6 h-6 text-emerald-100" />
+              ) : (
+                <AlertTriangle className="w-6 h-6 text-rose-100" />
+              )}
+            </div>
+            <div>
+              <h3 className="text-lg font-bold">
+                {trialDaysLeft > 0 ? 'Período de Prueba PRO Activo' : 'Prueba PRO Finalizada'}
+              </h3>
+              <p className={`${trialDaysLeft > 0 ? 'text-emerald-50/80' : 'text-rose-50/80'} text-sm`}>
+                {trialDaysLeft > 0 ? (
+                  <>Te quedan <span className="font-bold text-white uppercase">{trialDaysLeft} días</span> para disfrutar de todas las funciones premium.</>
+                ) : (
+                  <>Tu tiempo de prueba ha terminado. Activa tu plan para seguir usando las herramientas PRO.</>
+                )}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <Link to="/subscription">
+              <Button
+                variant="secondary"
+                size="sm"
+                className={`border-none font-bold uppercase tracking-widest text-[10px] px-6 py-2.5 shadow-lg ${trialDaysLeft > 0
+                  ? 'bg-white text-emerald-700 hover:bg-emerald-50'
+                  : 'bg-white text-rose-700 hover:bg-rose-50'
+                  }`}
+              >
+                {trialDaysLeft > 0 ? 'Activar Suscripción' : 'Ver Planes y Precios'}
+              </Button>
+            </Link>
+          </div>
+        </div>
+      )}
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>

@@ -96,7 +96,7 @@ export default function OrdersPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-200 bg-gray-50">
-                  <th className="text-left px-4 py-3 font-medium text-gray-500">#</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-500">Nº Pedido</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-500">Cliente</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-500 hidden sm:table-cell">WhatsApp</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-500">Total</th>
@@ -110,7 +110,7 @@ export default function OrdersPage() {
                   const statusConf = orderStatusConfig[order.status]
                   return (
                     <tr key={order.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 font-medium text-gray-900">{order.order_number}</td>
+                      <td className="px-4 py-3 font-medium text-gray-900">#{order.order_number || order.id.slice(0, 8)}</td>
                       <td className="px-4 py-3 text-gray-900">{order.customer_name}</td>
                       <td className="px-4 py-3 text-gray-600 hidden sm:table-cell">{order.customer_whatsapp}</td>
                       <td className="px-4 py-3 font-medium text-gray-900">{formatPrice(order.total)}</td>

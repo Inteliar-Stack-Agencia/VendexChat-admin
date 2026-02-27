@@ -56,25 +56,37 @@ export const getStoreId = async (): Promise<string> => {
     throw new Error('No hay sesión activa')
   }
 
-  // 3. Intentar por perfil
+  // 3. Intentar por perfil (UUID es lo más seguro)
   const { data: profile } = await supabase.from('profiles').select('store_id').eq('id', user.id).single()
   if (profile?.store_id) {
-    console.log('[api] Using store ID from profile:', profile.store_id)
+    console.log('[getStoreId] Success: Using UUID from profile:', profile.store_id)
     return profile.store_id
   }
 
-  // 4. Auto-reparación por slug en metadata
+  // 4. Auto-reparación por slug en metadata (FALLBACK)
   const metaSlug = user.user_metadata?.slug
   if (metaSlug) {
+    console.log('[getStoreId] Fallback: Searching by metaSlug:', metaSlug)
     const { data: store } = await supabase.from('stores').select('id').eq('slug', metaSlug).single()
     if (store) {
-      console.log('getStoreId: Auto-vinculando perfil por slug...', store.id)
-      await supabase.from('profiles').update({ store_id: store.id }).eq('id', user.id)
+      console.log('[getStoreId] Auto-fixing profile with store_id:', store.id)
+      supabase.from('profiles').update({ store_id: store.id }).eq('id', user.id).then(({ error }) => {
+        if (error) console.error('[getStoreId] Failed to save profile sync:', error)
+      })
       return store.id
+    } else {
+      console.warn('[getStoreId] Store not found with metaSlug:', metaSlug)
     }
   }
 
-  throw new Error('Error al identificar la tienda (store_id ausente)')
+  // 5. Último intento: Buscar cualquier tienda que sea dueño (Owner)
+  const { data: anyStore } = await supabase.from('stores').select('id').eq('owner_id', user.id).limit(1).single()
+  if (anyStore) {
+    console.log('[getStoreId] Recovery: Found store via owner_id:', anyStore.id)
+    return anyStore.id
+  }
+
+  throw new Error(`No se pudo identificar la tienda para el usuario: ${user.email}. Por favor, contacta a soporte.`)
 }
 
 // --- Auth ---
@@ -161,9 +173,9 @@ export const authApi = {
       }
     }
 
-    // 3. Fallback: traer TODAS las tiendas visibles para el usuario
-    //    (si es superadmin, o si encontramos pocas tiendas por los métodos anteriores)
-    if (profile?.role === 'superadmin' || allStores.length < 2) {
+    // 3. Si es superadmin y no tiene tiendas asignadas, o quiere ver todas (opcional)
+    // Pero por seguridad, solo lo hacemos si es superadmin explícitamente.
+    if (profile?.role === 'superadmin') {
       const { data: moreStores } = await supabase
         .from('stores')
         .select('*')
@@ -176,6 +188,21 @@ export const authApi = {
             allStores.push(s)
             seenIds.add(s.id)
           }
+        }
+      }
+    }
+
+    // 4. Buscar por owner_id (más seguro que email)
+    const { data: ownerStores } = await supabase
+      .from('stores')
+      .select('*')
+      .eq('owner_id', user.id)
+
+    if (ownerStores) {
+      for (const s of ownerStores) {
+        if (!seenIds.has(s.id)) {
+          allStores.push(s)
+          seenIds.add(s.id)
         }
       }
     }
@@ -308,7 +335,7 @@ export const dashboardApi = {
     // 4. Últimos 5 pedidos (con detalles seleccionados)
     const { data: recentOrders } = await supabase
       .from('orders')
-      .select('id, total, status, customer_name, created_at') // Avoid *
+      .select('id, total, status, customer_name, order_number, created_at') // Added order_number
       .eq('store_id', storeId)
       .order('created_at', { ascending: false })
       .limit(5)
@@ -521,6 +548,14 @@ export const ordersApi = {
     let query = supabase.from('orders').select('*', { count: 'exact' }).eq('store_id', storeId)
     if (params?.status && params.status !== 'all') query = query.eq('status', params.status)
 
+    // Filtros de fecha
+    if ((params as any)?.date_from) {
+      query = query.gte('created_at', (params as any).date_from + 'T00:00:00')
+    }
+    if ((params as any)?.date_to) {
+      query = query.lte('created_at', (params as any).date_to + 'T23:59:59')
+    }
+
     const from = ((params?.page || 1) - 1) * (params?.limit || 10)
     const to = from + (params?.limit || 10) - 1
 
@@ -603,8 +638,8 @@ export const statsApi = {
     if (error) throw error
 
     const totalSales = (data || [])
-      .filter(o => o.status === 'completed' || o.status === 'paid' || o.status === 'delivered')
-      .reduce((acc, curr) => acc + (curr.total || 0), 0)
+      .filter(o => ['completed', 'paid', 'delivered', 'pending'].includes(o.status))
+      .reduce((acc, curr) => acc + (Number(curr.total) || 0), 0)
 
     const totalOrders = (data || []).length
     const avgTicket = totalOrders > 0 ? totalSales / totalOrders : 0
@@ -628,7 +663,7 @@ export const statsApi = {
     const storeId = await getStoreId()
     const { data, error } = await supabase
       .from('order_items')
-      .select('quantity, unit_price, product_id, products(name), orders!inner(store_id)')
+      .select('quantity, price, product_id, products(name), orders!inner(store_id, status)')
       .eq('orders.store_id', storeId)
 
     if (error) throw error
@@ -639,7 +674,7 @@ export const statsApi = {
     const storeId = await getStoreId()
     const { data, error } = await supabase
       .from('orders')
-      .select('customer_name, customer_whatsapp, total, created_at')
+      .select('customer_name, customer_whatsapp, order_number, total, created_at')
       .eq('store_id', storeId)
 
     if (error) throw error
@@ -829,7 +864,7 @@ export const superadminApi = {
       .eq('status', 'active')
 
     const mrr = activeSubs?.reduce((acc, sub) => {
-      const price = sub.plan_type === 'premium' ? 35 : sub.plan_type === 'pro' ? 15 : 0
+      const price = sub.plan_type === 'premium' ? 35 : sub.plan_type === 'pro' ? 15 : sub.plan_type === 'vip' ? 25 : 0
       return acc + price
     }, 0) || 0
 
@@ -1006,7 +1041,7 @@ export const superadminApi = {
 
     // 3. Create subscription: Default 15-day PRO trial
     const trialEndDate = new Date()
-    trialEndDate.setDate(trialEndDate.getDate() + 15)
+    trialEndDate.setDate(trialEndDate.getDate() + 25)
 
     await supabase.from('subscriptions').upsert({
       store_id: storeId,

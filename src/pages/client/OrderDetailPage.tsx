@@ -156,7 +156,7 @@ export default function OrderDetailPage() {
             <ArrowLeft className="w-5 h-5 text-gray-600" />
           </button>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Pedido #{order.order_number}</h1>
+            <h1 className="text-2xl font-bold text-gray-900">Pedido #{order.order_number || order.id.slice(0, 8)}</h1>
             <p className="text-sm text-gray-500">{formatDate(order.created_at)}</p>
           </div>
         </div>

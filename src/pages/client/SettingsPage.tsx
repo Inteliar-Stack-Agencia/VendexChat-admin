@@ -14,7 +14,7 @@ const TABS = [
   { id: 'orders', label: 'Pedidos', icon: LayoutGrid },
   { id: 'customization', label: 'Diseño', icon: Palette },
   { id: 'printer', label: 'Impresora', icon: Printer },
-  { id: 'payments', label: 'Pagos', icon: CreditCard, hidden: true },
+  { id: 'payments', label: 'Pagos', icon: CreditCard },
   { id: 'account', label: 'Cuenta', icon: ShieldCheck },
 ]
 
@@ -600,6 +600,10 @@ export default function SettingsPage() {
                           <option value="Zap">Rayo (Rápido)</option>
                           <option value="Clock">Reloj (Horario)</option>
                           <option value="Shield">Escudo (Seguro)</option>
+                          <option value="Box">Paquete (Hermético)</option>
+                          <option value="Calendar">Calendario (Pack)</option>
+                          <option value="MapPin">Mapa (Ubicación)</option>
+                          <option value="Phone">Teléfono (Contacto)</option>
                         </select>
                       </div>
                       <div className="space-y-1 flex-[2]">

@@ -25,6 +25,12 @@ export default function SelectStorePage() {
             try {
                 const myStores = await authApi.getMyStores()
                 setStores(myStores)
+
+                // Si solo hay una tienda y NO es superadmin, seleccionar automáticamente e ir al dashboard
+                if (myStores.length === 1 && user?.role !== 'superadmin') {
+                    console.log('[SelectStore] Auto-selecting only available store:', myStores[0].id)
+                    handleSelect(myStores[0].id)
+                }
             } catch (err) {
                 console.error('Error loading stores:', err)
             } finally {
