@@ -6,7 +6,7 @@ import { Button } from './common'
 
 interface FeatureGuardProps {
     children: ReactNode
-    feature: 'analytics' | 'coupons' | 'white-label' | 'bot' | 'logistics' | 'pro-tools' | 'marketing' | 'custom-domain' | 'ai-importer' | 'ai-analyst'
+    feature: 'analytics' | 'coupons' | 'white-label' | 'bot' | 'logistics' | 'pro-tools' | 'marketing' | 'custom-domain' | 'ai-importer' | 'ai-intelligence' | 'ai-analyst'
     minPlan?: 'pro' | 'vip' | 'ultra'
     fallback?: 'blur' | 'hide' | 'message'
 }
@@ -56,7 +56,14 @@ export default function FeatureGuard({
                         </div>
                         <h4 className="font-bold text-slate-900 uppercase text-xs tracking-widest mb-1">Módulo Bloqueado</h4>
                         <p className="text-[11px] text-slate-500 font-medium mb-4">
-                            Requiere plan <span className="text-indigo-600 font-bold uppercase">{minPlan}</span> para acceder a {feature === 'analytics' ? 'estadísticas avanzadas' : 'esta función'}.
+                            Requiere plan <span className="text-indigo-600 font-bold uppercase">{minPlan}</span> para acceder a {
+                                feature === 'analytics' ? 'panel de métricas y ventas' :
+                                    feature === 'bot' ? 'asistente automático de WhatsApp' :
+                                        feature === 'logistics' ? 'gestión de repartos y zonas' :
+                                            feature === 'ai-importer' ? 'carga masiva de productos con IA' :
+                                                feature === 'ai-intelligence' ? 'análisis de datos con IA' :
+                                                    feature === 'custom-domain' ? 'dominio propio personalizado' : 'esta función'
+                            }.
                         </p>
                         <Link to="/subscription">
                             <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase tracking-widest text-[10px] py-2 px-4 flex items-center gap-2">
@@ -78,7 +85,13 @@ export default function FeatureGuard({
             <div>
                 <h3 className="text-xl font-black uppercase tracking-tight">Módulo Exclusivo {minPlan.toUpperCase()}</h3>
                 <p className="text-indigo-100 text-sm mt-2 max-w-sm font-medium">
-                    Actualiza tu cuenta para desbloquear {feature === 'analytics' ? 'gráficos real-time' : 'herramientas de marketing'} y llevar tu tienda al siguiente nivel.
+                    Actualiza tu cuenta para desbloquear {
+                        feature === 'analytics' ? 'gráficos de rendimiento y ventas real-time' :
+                            feature === 'bot' ? 'el BOT que responde y vende por ti 24/7' :
+                                feature === 'logistics' ? 'optimización de rutas y logística de envíos' :
+                                    feature === 'ai-intelligence' ? 'inteligencia de datos para predecir demanda' :
+                                        feature === 'ai-importer' ? 'digitalización de catálogos fotos a productos vía IA' : 'herramientas profesionales'
+                    } y llevar tu tienda al siguiente nivel.
                 </p>
             </div>
             <Link to="/subscription">
