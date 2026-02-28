@@ -50,6 +50,7 @@ export const getStoreId = async (): Promise<string> => {
         if (store) {
             _lastSyncedStoreId = store.id
             supabase.from('profiles').update({ store_id: store.id }).eq('id', user.id)
+                .then(() => {}, (e) => console.warn('[getStoreId] Profile update failed (non-blocking):', e))
             return store.id
         }
     }

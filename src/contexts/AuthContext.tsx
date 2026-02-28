@@ -138,7 +138,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const logout = useCallback(() => {
-    supabase.auth.signOut().catch(() => { })
+    supabase.auth.signOut().catch((err) => { console.error('[AuthContext] signOut failed:', err) })
     localStorage.removeItem('vendexchat_token')
     localStorage.removeItem('vendexchat_selected_store')
     setToken(null)
