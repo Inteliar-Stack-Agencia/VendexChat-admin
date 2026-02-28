@@ -120,7 +120,7 @@ export default function SATenantDetailPage() {
                 <div className="space-y-8">
                     <TenantCriticalActions
                         tenant={tenant}
-                        onToggleStatus={() => updateTenant({ is_active: !tenant.is_active })}
+                        onToggleStatus={async () => { await updateTenant({ is_active: !tenant.is_active }) }}
                         onImpersonate={impersonate}
                         onDelete={deleteTenant}
                     />
@@ -143,7 +143,7 @@ export default function SATenantDetailPage() {
                                 </div>
                                 <div className="min-w-0">
                                     <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">WhatsApp</p>
-                                    <p className="text-sm font-bold text-slate-900">+{tenant.whatsapp || tenant.phone || 'N/A'}</p>
+                                    <p className="text-sm font-bold text-slate-900">+{tenant.whatsapp || 'N/A'}</p>
                                 </div>
                             </div>
                         </div>

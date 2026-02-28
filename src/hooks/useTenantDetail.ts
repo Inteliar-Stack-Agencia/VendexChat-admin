@@ -34,7 +34,7 @@ export function useTenantDetail(id: string | undefined) {
     }
 
     const updateTenant = async (data: Partial<Tenant>) => {
-        if (!tenant || !id) return
+        if (!tenant || !id) return false
         setSavingState('general', true)
         try {
             await superadminApi.updateTenant(id, data)
@@ -50,7 +50,7 @@ export function useTenantDetail(id: string | undefined) {
     }
 
     const updateMetadata = async (metadata: any) => {
-        if (!tenant || !id) return
+        if (!tenant || !id) return false
         setSavingState('metadata', true)
         try {
             const updatedMetadata = { ...(tenant.metadata || {}), ...metadata }
@@ -67,7 +67,7 @@ export function useTenantDetail(id: string | undefined) {
     }
 
     const changePlan = async (targetPlan: string) => {
-        if (!tenant || !id) return
+        if (!tenant || !id) return false
         setSavingState('plan', true)
         try {
             const updatedMetadata = { ...(tenant.metadata || {}), plan_type: targetPlan }
@@ -90,7 +90,7 @@ export function useTenantDetail(id: string | undefined) {
     }
 
     const connectGateway = async (provider: string, config: any) => {
-        if (!tenant) return
+        if (!tenant) return false
         setSavingState('gateway', true)
         try {
             const result = await superadminApi.connectTenantGateway(tenant.id, provider, config)
@@ -107,7 +107,7 @@ export function useTenantDetail(id: string | undefined) {
 
     const disconnectGateway = async (gatewayId: string | number) => {
         try {
-            await superadminApi.disconnectTenantGateway(gatewayId)
+            await superadminApi.disconnectTenantGateway(String(gatewayId))
             setTenantGateways(prev => prev.filter(g => g.id !== gatewayId))
             showToast('success', 'Pasarela desconectada.')
             return true
@@ -128,7 +128,7 @@ export function useTenantDetail(id: string | undefined) {
     }
 
     const deleteTenant = async () => {
-        if (!id) return
+        if (!id) return false
         try {
             await superadminApi.deleteTenant(id)
             showToast('success', 'Tienda eliminada.')

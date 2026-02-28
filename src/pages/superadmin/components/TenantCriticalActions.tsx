@@ -81,7 +81,7 @@ export default function TenantCriticalActions({ tenant, onToggleStatus, onImpers
                 <SADeleteTenantModal
                     tenant={tenant}
                     onClose={() => setShowDelete(false)}
-                    onConfirm={onDelete}
+                    onConfirm={async () => { await onDelete() }}
                 />
             )}
         </div>
