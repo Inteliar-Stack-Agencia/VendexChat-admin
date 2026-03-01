@@ -34,5 +34,18 @@ export const customersApi = {
             .single()
         if (error) throw error
         return data
+    },
+
+    getOrdersByWhatsapp: async (whatsapp: string) => {
+        const storeId = await getStoreId()
+        const clean = whatsapp.replace(/\D/g, '')
+        const { data, error } = await supabase
+            .from('orders')
+            .select('id, order_number, total, status, created_at')
+            .eq('store_id', storeId)
+            .ilike('customer_whatsapp', `%${clean}%`)
+            .order('created_at', { ascending: false })
+        if (error) throw error
+        return data || []
     }
 }

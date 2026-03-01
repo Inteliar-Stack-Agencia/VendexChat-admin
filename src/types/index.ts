@@ -201,10 +201,17 @@ export interface DashboardStats {
 // --- Superadmin ---
 export interface SuperadminDashboard {
   total_stores: number
-  total_orders: number
-  total_revenue: number
-  new_registrations_week: number
-  stores: Tenant[]
+  active_stores: number
+  new_stores_7d: number
+  mrr_estimated: number
+  recent_activity: any[]
+  failed_payments: number
+  pending_actions: number
+  // Legacy fields kept for backwards-compatibility with old dashboard component
+  total_orders?: number
+  total_revenue?: number
+  new_registrations_week?: number
+  stores?: Tenant[]
 }
 
 export interface SuperadminUser {

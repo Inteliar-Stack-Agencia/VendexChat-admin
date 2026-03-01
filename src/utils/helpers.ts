@@ -44,10 +44,18 @@ export function generateSlug(text: string): string {
     .replace(/^-+|-+$/g, '')          // Quitar guiones al inicio y final
 }
 
-// Generar link de WhatsApp
+// Generar link de WhatsApp (con soporte para números argentinos sin código de país)
 export function whatsappLink(phone: string, message?: string): string {
-  const cleanPhone = phone.replace(/\D/g, '')
-  const url = `https://wa.me/${cleanPhone}`
+  let clean = phone.replace(/\D/g, '')
+  // Si el número tiene 10 dígitos (formato local argentino sin código de país),
+  // agregar +54 9 (prefijo para móviles en Argentina via WhatsApp)
+  if (clean.length === 10) {
+    clean = `549${clean}`
+  } else if (clean.length === 11 && clean.startsWith('9')) {
+    // Tiene el 9 de móvil pero le falta el 54
+    clean = `54${clean}`
+  }
+  const url = `https://wa.me/${clean}`
   return message ? `${url}?text=${encodeURIComponent(message)}` : url
 }
 

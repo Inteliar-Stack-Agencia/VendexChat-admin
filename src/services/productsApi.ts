@@ -27,7 +27,7 @@ export const productsApi = {
             data: (data || []).map(p => ({
                 ...p,
                 category_name: (p as any).categories?.name
-            })) as Product[],
+            })) as unknown as Product[],
             total: count || 0,
             page: params?.page || 1,
             limit: params?.limit || 10,
