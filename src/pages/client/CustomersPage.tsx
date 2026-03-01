@@ -1,99 +1,22 @@
 import { useState, useEffect } from 'react'
-import {
-    Users, Search, MessageSquare, ClipboardList, ShoppingBag,
-    TrendingUp, UserCheck, DollarSign, Bot, Sparkles, Copy, CheckCircle2
-} from 'lucide-react'
+import { Users, Search, MessageSquare, ClipboardList, ShoppingBag, TrendingUp, UserCheck, DollarSign } from 'lucide-react'
 import { Card, LoadingSpinner, EmptyState, Modal, Button, showToast } from '../../components/common'
 import { customersApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import { formatPrice, formatShortDate, whatsappLink, orderStatusConfig } from '../../utils/helpers'
-
-// --- Etiquetas automáticas basadas en comportamiento ---
-function getCustomerTags(customer: any, allCustomers: any[]) {
-    const tags: { label: string; color: string; bg: string }[] = []
-    const days = customer.last_order_at
-        ? Math.floor((Date.now() - new Date(customer.last_order_at).getTime()) / 86400000)
-        : 999
-
-    // VIP: top 20% por gasto (requiere al menos 5 clientes para tener sentido)
-    if (allCustomers.length >= 5) {
-        const sorted = [...allCustomers].sort((a, b) => Number(b.total_spent) - Number(a.total_spent))
-        const vipIdx = Math.max(0, Math.ceil(allCustomers.length * 0.2) - 1)
-        if (Number(customer.total_spent) >= Number(sorted[vipIdx]?.total_spent) && Number(customer.total_spent) > 0) {
-            tags.push({ label: '⭐ VIP', color: 'text-yellow-800', bg: 'bg-yellow-100' })
-        }
-    }
-
-    // Inactivo: sin pedir hace 60+ días
-    if (days >= 60) {
-        tags.push({ label: '😴 Inactivo', color: 'text-red-700', bg: 'bg-red-100' })
-    // En riesgo: 20-59 días y tenía historial
-    } else if (days >= 20 && customer.total_orders >= 2) {
-        tags.push({ label: '⚠️ En riesgo', color: 'text-orange-700', bg: 'bg-orange-100' })
-    }
-
-    // Frecuente: 3+ pedidos y activo
-    if (customer.total_orders >= 3 && days < 60) {
-        tags.push({ label: '🔄 Frecuente', color: 'text-blue-700', bg: 'bg-blue-100' })
-    } else if (customer.total_orders === 1) {
-        tags.push({ label: '🆕 Nuevo', color: 'text-emerald-700', bg: 'bg-emerald-100' })
-    }
-
-    return tags
-}
-
-// --- Días desde el último pedido ---
-function getDaysSince(lastOrderAt: string | null): number | null {
-    if (!lastOrderAt) return null
-    return Math.floor((Date.now() - new Date(lastOrderAt).getTime()) / 86400000)
-}
-
-// --- Llamada a Pollinations (mismo patrón que AIAssistantPage) ---
-async function callAI(systemPrompt: string, userContent: string): Promise<string> {
-    const response = await fetch('https://text.pollinations.ai/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            messages: [
-                { role: 'system', content: systemPrompt },
-                { role: 'user', content: userContent }
-            ],
-            model: 'openai'
-        })
-    })
-    if (!response.ok) throw new Error('Error en IA')
-    return response.text()
-}
-
-const TAG_FILTERS = ['Todos', 'VIP', 'Frecuente', 'En riesgo', 'Inactivo', 'Nuevo']
 
 export default function CustomersPage() {
     const { selectedStoreId } = useAuth()
     const [customers, setCustomers] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
     const [search, setSearch] = useState('')
-    const [tagFilter, setTagFilter] = useState('Todos')
     const [selectedCustomer, setSelectedCustomer] = useState<any | null>(null)
-
-    // Estado de modales
     const [isEditingNotes, setIsEditingNotes] = useState(false)
     const [isViewingOrders, setIsViewingOrders] = useState(false)
-    const [isAIAnalysis, setIsAIAnalysis] = useState(false)
-    const [isAIMessage, setIsAIMessage] = useState(false)
-
-    // Notas
     const [notes, setNotes] = useState('')
     const [saving, setSaving] = useState(false)
-
-    // Pedidos del cliente
     const [customerOrders, setCustomerOrders] = useState<any[]>([])
     const [loadingOrders, setLoadingOrders] = useState(false)
-
-    // IA
-    const [aiAnalysisText, setAiAnalysisText] = useState('')
-    const [aiMessageText, setAiMessageText] = useState('')
-    const [loadingAI, setLoadingAI] = useState(false)
-    const [copied, setCopied] = useState(false)
 
     useEffect(() => {
         loadCustomers()
@@ -115,7 +38,7 @@ export default function CustomersPage() {
             showToast('success', 'Notas actualizadas')
             setIsEditingNotes(false)
             loadCustomers()
-        } catch {
+        } catch (err) {
             showToast('error', 'No se pudieron guardar las notas')
         } finally {
             setSaving(false)
@@ -129,82 +52,19 @@ export default function CustomersPage() {
         try {
             const orders = await customersApi.getOrdersByWhatsapp(customer.whatsapp)
             setCustomerOrders(orders)
-        } catch {
+        } catch (err) {
             showToast('error', 'No se pudieron cargar los pedidos')
         } finally {
             setLoadingOrders(false)
         }
     }
 
-    const handleAIAnalysis = async (customer: any) => {
-        setSelectedCustomer(customer)
-        setAiAnalysisText('')
-        setIsAIAnalysis(true)
-        setLoadingAI(true)
-        const days = getDaysSince(customer.last_order_at) ?? 'desconocido'
-        const avgTicket = customer.total_orders > 0
-            ? (Number(customer.total_spent) / customer.total_orders).toFixed(0)
-            : 0
-        try {
-            const text = await callAI(
-                `Eres un analista de CRM experto para una tienda online latinoamericana. Analiza el perfil del cliente y genera un resumen de 3-4 oraciones que incluya: comportamiento de compra, valor para el negocio, y una recomendación concreta de acción. Escribe en español, tono profesional pero cálido.`,
-                `Cliente: ${customer.name}
-Pedidos totales: ${customer.total_orders}
-Total gastado: $${Number(customer.total_spent).toLocaleString('es-AR')}
-Ticket promedio: $${Number(avgTicket).toLocaleString('es-AR')}
-Días desde último pedido: ${days}
-Notas internas: ${customer.notes || 'ninguna'}`
-            )
-            setAiAnalysisText(text)
-        } catch {
-            showToast('error', 'Error al consultar la IA')
-            setIsAIAnalysis(false)
-        } finally {
-            setLoadingAI(false)
-        }
-    }
+    const filteredCustomers = customers.filter(c =>
+        c.name.toLowerCase().includes(search.toLowerCase()) ||
+        c.whatsapp.includes(search)
+    )
 
-    const handleAIMessage = async (customer: any) => {
-        setSelectedCustomer(customer)
-        setAiMessageText('')
-        setIsAIMessage(true)
-        setLoadingAI(true)
-        const days = getDaysSince(customer.last_order_at) ?? 'varios'
-        try {
-            const text = await callAI(
-                `Eres un experto en marketing conversacional para ecommerce latinoamericano. Genera un mensaje de WhatsApp personalizado, cálido y natural (NO genérico ni corporativo) para reconectar con el cliente. El mensaje debe ser corto (máximo 3 oraciones), usar el nombre del cliente, y tener un call-to-action sutil. Responde SOLO con el texto del mensaje, listo para copiar y enviar. No uses asteriscos ni markdown.`,
-                `Nombre del cliente: ${customer.name}
-Pedidos realizados: ${customer.total_orders}
-Días sin comprar: ${days}
-Notas del vendedor: ${customer.notes || 'ninguna'}`
-            )
-            setAiMessageText(text)
-        } catch {
-            showToast('error', 'Error al consultar la IA')
-            setIsAIMessage(false)
-        } finally {
-            setLoadingAI(false)
-        }
-    }
-
-    const handleCopy = (text: string) => {
-        navigator.clipboard.writeText(text)
-        setCopied(true)
-        setTimeout(() => setCopied(false), 2000)
-    }
-
-    // Filtrado por búsqueda y etiqueta
-    const filtered = customers.filter(c => {
-        const matchSearch =
-            c.name.toLowerCase().includes(search.toLowerCase()) ||
-            c.whatsapp.includes(search)
-        if (!matchSearch) return false
-        if (tagFilter === 'Todos') return true
-        const tags = getCustomerTags(c, customers)
-        return tags.some(t => t.label.includes(tagFilter))
-    })
-
-    // Métricas
+    // Métricas calculadas en el cliente
     const totalSpent = customers.reduce((acc, c) => acc + (Number(c.total_spent) || 0), 0)
     const totalOrders = customers.reduce((acc, c) => acc + (Number(c.total_orders) || 0), 0)
     const avgTicket = totalOrders > 0 ? totalSpent / totalOrders : 0
@@ -212,7 +72,9 @@ Notas del vendedor: ${customer.notes || 'ninguna'}`
 
     return (
         <div className="space-y-6">
-            <h1 className="text-2xl font-bold text-gray-900">Clientes (CRM)</h1>
+            <div className="flex items-center justify-between">
+                <h1 className="text-2xl font-bold text-gray-900">Clientes (CRM)</h1>
+            </div>
 
             {/* Tarjetas de resumen */}
             {!loading && customers.length > 0 && (
@@ -264,41 +126,23 @@ Notas del vendedor: ${customer.notes || 'ninguna'}`
                 </div>
             )}
 
-            {/* Búsqueda + filtros por etiqueta */}
+            {/* Búsqueda */}
             <Card>
-                <div className="flex flex-col gap-3">
-                    <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                        <input
-                            type="text"
-                            placeholder="Buscar por nombre o WhatsApp..."
-                            value={search}
-                            onChange={(e) => setSearch(e.target.value)}
-                            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                        />
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                        {TAG_FILTERS.map(tag => (
-                            <button
-                                key={tag}
-                                onClick={() => setTagFilter(tag)}
-                                className={`px-3 py-1 rounded-full text-xs font-semibold transition-all border ${
-                                    tagFilter === tag
-                                        ? 'bg-indigo-600 text-white border-indigo-600'
-                                        : 'bg-white text-gray-600 border-gray-300 hover:border-indigo-400 hover:text-indigo-600'
-                                }`}
-                            >
-                                {tag}
-                            </button>
-                        ))}
-                    </div>
+                <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input
+                        type="text"
+                        placeholder="Buscar por nombre o WhatsApp..."
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
                 </div>
             </Card>
 
-            {/* Tabla */}
             {loading ? (
                 <LoadingSpinner text="Cargando clientes..." />
-            ) : filtered.length === 0 ? (
+            ) : filteredCustomers.length === 0 ? (
                 <EmptyState
                     icon={<Users className="w-16 h-16" />}
                     title="No hay clientes"
@@ -318,102 +162,69 @@ Notas del vendedor: ${customer.notes || 'ninguna'}`
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
-                                {filtered.map((customer) => {
-                                    const tags = getCustomerTags(customer, customers)
-                                    const days = getDaysSince(customer.last_order_at)
-                                    const daysColor = days === null
-                                        ? 'text-gray-400'
-                                        : days < 7 ? 'text-emerald-600'
-                                        : days < 30 ? 'text-amber-600'
-                                        : 'text-red-500'
-                                    return (
-                                        <tr key={customer.id} className="hover:bg-gray-50 transition-colors">
-                                            <td className="px-6 py-4">
-                                                <div className="flex flex-col gap-1">
-                                                    <span className="font-bold text-gray-900">{customer.name}</span>
-                                                    {tags.length > 0 && (
-                                                        <div className="flex flex-wrap gap-1">
-                                                            {tags.map(tag => (
-                                                                <span
-                                                                    key={tag.label}
-                                                                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${tag.bg} ${tag.color}`}
-                                                                >
-                                                                    {tag.label}
-                                                                </span>
-                                                            ))}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <div className="flex flex-col">
-                                                    <span className="text-gray-600 font-medium">{customer.whatsapp}</span>
-                                                    <span className={`text-[10px] font-medium ${daysColor}`}>
-                                                        {days !== null ? `Hace ${days} días` : 'Sin pedidos'}
-                                                    </span>
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-4 text-center">
-                                                <span className="bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full font-bold text-xs">
-                                                    {customer.total_orders}
+                                {filteredCustomers.map((customer) => (
+                                    <tr key={customer.id} className="hover:bg-gray-50 transition-colors group">
+                                        <td className="px-6 py-4">
+                                            <div className="flex flex-col">
+                                                <span className="font-bold text-gray-900">{customer.name}</span>
+                                                <span className="text-[10px] text-gray-400 font-medium">
+                                                    Último: {customer.last_order_at ? formatShortDate(customer.last_order_at) : 'N/A'}
                                                 </span>
-                                            </td>
-                                            <td className="px-6 py-4 text-right">
-                                                <span className="text-gray-900 font-bold">
-                                                    {formatPrice(Number(customer.total_spent))}
-                                                </span>
-                                            </td>
-                                            <td className="px-6 py-4 text-right">
-                                                <div className="flex items-center justify-end gap-1">
-                                                    <button
-                                                        onClick={() => { setSelectedCustomer(customer); setNotes(customer.notes || ''); setIsEditingNotes(true) }}
-                                                        className="p-2 rounded-lg hover:bg-white hover:shadow-sm text-slate-400 hover:text-indigo-600 transition-all border border-transparent hover:border-indigo-100"
-                                                        title="Notas internas"
-                                                    >
-                                                        <ClipboardList className="w-4 h-4" />
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleViewOrders(customer)}
-                                                        className="p-2 rounded-lg hover:bg-white hover:shadow-sm text-slate-400 hover:text-amber-600 transition-all border border-transparent hover:border-amber-100"
-                                                        title="Ver pedidos"
-                                                    >
-                                                        <ShoppingBag className="w-4 h-4" />
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleAIAnalysis(customer)}
-                                                        className="p-2 rounded-lg hover:bg-white hover:shadow-sm text-slate-400 hover:text-violet-600 transition-all border border-transparent hover:border-violet-100"
-                                                        title="Análisis IA del cliente"
-                                                    >
-                                                        <Bot className="w-4 h-4" />
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleAIMessage(customer)}
-                                                        className="p-2 rounded-lg hover:bg-white hover:shadow-sm text-slate-400 hover:text-pink-600 transition-all border border-transparent hover:border-pink-100"
-                                                        title="Generar mensaje WhatsApp con IA"
-                                                    >
-                                                        <Sparkles className="w-4 h-4" />
-                                                    </button>
-                                                    <a
-                                                        href={whatsappLink(customer.whatsapp)}
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        className="p-2 rounded-lg hover:bg-white hover:shadow-sm text-emerald-600 transition-all border border-transparent hover:border-emerald-100"
-                                                        title="Enviar WhatsApp"
-                                                    >
-                                                        <MessageSquare className="w-4 h-4" />
-                                                    </a>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    )
-                                })}
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <span className="text-gray-600 font-medium">{customer.whatsapp}</span>
+                                        </td>
+                                        <td className="px-6 py-4 text-center">
+                                            <span className="bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full font-bold text-xs">
+                                                {customer.total_orders}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 text-right">
+                                            <span className="text-gray-900 font-bold">
+                                                {formatPrice(Number(customer.total_spent))}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 text-right">
+                                            <div className="flex items-center justify-end gap-2">
+                                                <button
+                                                    onClick={() => {
+                                                        setSelectedCustomer(customer)
+                                                        setNotes(customer.notes || '')
+                                                        setIsEditingNotes(true)
+                                                    }}
+                                                    className="p-2 rounded-lg hover:bg-white hover:shadow-sm text-slate-400 hover:text-indigo-600 transition-all border border-transparent hover:border-indigo-100"
+                                                    title="Notas del cliente"
+                                                >
+                                                    <ClipboardList className="w-4 h-4" />
+                                                </button>
+                                                <button
+                                                    onClick={() => handleViewOrders(customer)}
+                                                    className="p-2 rounded-lg hover:bg-white hover:shadow-sm text-slate-400 hover:text-amber-600 transition-all border border-transparent hover:border-amber-100"
+                                                    title="Ver pedidos"
+                                                >
+                                                    <ShoppingBag className="w-4 h-4" />
+                                                </button>
+                                                <a
+                                                    href={whatsappLink(customer.whatsapp)}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="p-2 rounded-lg hover:bg-white hover:shadow-sm text-emerald-600 transition-all border border-transparent hover:border-emerald-100"
+                                                    title="Enviar WhatsApp"
+                                                >
+                                                    <MessageSquare className="w-4 h-4" />
+                                                </a>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
                             </tbody>
                         </table>
                     </div>
                 </Card>
             )}
 
-            {/* Modal: Notas */}
+            {/* Modal de Notas */}
             <Modal
                 isOpen={isEditingNotes}
                 onClose={() => setIsEditingNotes(false)}
@@ -433,14 +244,19 @@ Notas del vendedor: ${customer.notes || 'ninguna'}`
                     </div>
                     <div className="flex justify-end gap-3">
                         <Button variant="outline" onClick={() => setIsEditingNotes(false)}>Cancelar</Button>
-                        <Button variant="primary" onClick={handleUpdateNotes} loading={saving} className="bg-indigo-600 hover:bg-indigo-700">
+                        <Button
+                            variant="primary"
+                            onClick={handleUpdateNotes}
+                            loading={saving}
+                            className="bg-indigo-600 hover:bg-indigo-700"
+                        >
                             Guardar Notas
                         </Button>
                     </div>
                 </div>
             </Modal>
 
-            {/* Modal: Historial de pedidos */}
+            {/* Modal Ver Pedidos del cliente */}
             <Modal
                 isOpen={isViewingOrders}
                 onClose={() => { setIsViewingOrders(false); setCustomerOrders([]) }}
@@ -471,82 +287,6 @@ Notas del vendedor: ${customer.notes || 'ninguna'}`
                                 </div>
                             )
                         })}
-                    </div>
-                )}
-            </Modal>
-
-            {/* Modal: Análisis IA */}
-            <Modal
-                isOpen={isAIAnalysis}
-                onClose={() => setIsAIAnalysis(false)}
-                title={`Análisis IA · ${selectedCustomer?.name}`}
-            >
-                {loadingAI ? (
-                    <div className="flex flex-col items-center gap-3 py-10">
-                        <Bot className="w-10 h-10 text-violet-500 animate-pulse" />
-                        <p className="text-sm text-gray-500">Analizando perfil del cliente...</p>
-                    </div>
-                ) : (
-                    <div className="space-y-4">
-                        <div className="p-4 bg-violet-50 border border-violet-100 rounded-2xl">
-                            <p className="text-sm text-gray-700 leading-relaxed">{aiAnalysisText}</p>
-                        </div>
-                        <div className="flex justify-end">
-                            <button
-                                onClick={() => handleCopy(aiAnalysisText)}
-                                className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition-all"
-                            >
-                                {copied
-                                    ? <><CheckCircle2 className="w-4 h-4 text-emerald-600" /> Copiado</>
-                                    : <><Copy className="w-4 h-4" /> Copiar</>
-                                }
-                            </button>
-                        </div>
-                    </div>
-                )}
-            </Modal>
-
-            {/* Modal: Mensaje WhatsApp con IA */}
-            <Modal
-                isOpen={isAIMessage}
-                onClose={() => setIsAIMessage(false)}
-                title={`Mensaje WhatsApp · ${selectedCustomer?.name}`}
-            >
-                {loadingAI ? (
-                    <div className="flex flex-col items-center gap-3 py-10">
-                        <Sparkles className="w-10 h-10 text-pink-500 animate-pulse" />
-                        <p className="text-sm text-gray-500">Generando mensaje personalizado...</p>
-                    </div>
-                ) : (
-                    <div className="space-y-4">
-                        <p className="text-xs text-gray-400 font-semibold uppercase tracking-widest">
-                            Mensaje generado por IA — revisá antes de enviar
-                        </p>
-                        <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl">
-                            <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">
-                                {aiMessageText}
-                            </p>
-                        </div>
-                        <div className="flex items-center justify-between gap-3">
-                            <a
-                                href={whatsappLink(selectedCustomer?.whatsapp || '', aiMessageText)}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl transition-all"
-                            >
-                                <MessageSquare className="w-4 h-4" />
-                                Abrir en WhatsApp
-                            </a>
-                            <button
-                                onClick={() => handleCopy(aiMessageText)}
-                                className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition-all"
-                            >
-                                {copied
-                                    ? <><CheckCircle2 className="w-4 h-4 text-emerald-600" /> Copiado</>
-                                    : <><Copy className="w-4 h-4" /> Copiar</>
-                                }
-                            </button>
-                        </div>
                     </div>
                 )}
             </Modal>

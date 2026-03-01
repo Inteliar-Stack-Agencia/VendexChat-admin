@@ -24,6 +24,7 @@ const CategoriesPage = lazy(() => import('./pages/client/CategoriesPage'))
 const OrdersPage = lazy(() => import('./pages/client/OrdersPage'))
 const OrderDetailPage = lazy(() => import('./pages/client/OrderDetailPage'))
 const CustomersPage = lazy(() => import('./pages/client/CustomersPage'))
+const CrmIaPage = lazy(() => import('./pages/client/CrmIaPage'))
 const CouponsPage = lazy(() => import('./pages/client/CouponsPage'))
 const CouponFormPage = lazy(() => import('./pages/client/CouponFormPage'))
 const SchedulePage = lazy(() => import('./pages/client/SchedulePage'))
@@ -110,6 +111,7 @@ export default function App() {
               <Route path="/orders" element={<OrdersPage />} />
               <Route path="/orders/:id" element={<OrderDetailPage />} />
               <Route path="/customers" element={<CustomersPage />} />
+              <Route path="/crm-ia" element={<CrmIaPage />} />
               <Route path="/coupons" element={<CouponsPage />} />
               <Route path="/coupons/new" element={<CouponFormPage />} />
               <Route path="/coupons/edit/:id" element={<CouponFormPage />} />

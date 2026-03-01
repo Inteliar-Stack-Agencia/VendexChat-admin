@@ -119,14 +119,19 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                   <FolderOpen className="w-5 h-5" />
                   Categorías
                 </NavLink>
+                <NavLink to="/customers" className={linkClass} onClick={onClose}>
+                  <Users className="w-5 h-5" />
+                  Clientes
+                  <span className="ml-auto text-[8px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded font-black uppercase">PRO</span>
+                </NavLink>
               </div>
 
               <div className="pt-2 pb-2">
                 <p className="px-4 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Módulos PRO</p>
-                <NavLink to="/customers" className={linkClass} onClick={onClose}>
+                <NavLink to="/crm-ia" className={linkClass} onClick={onClose}>
                   <Brain className="w-5 h-5" />
                   CRM IA
-                  <span className="ml-auto text-[8px] bg-violet-100 text-violet-600 px-1.5 py-0.5 rounded font-black uppercase">PRO</span>
+                  <span className="ml-auto text-[8px] bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded font-black uppercase">VIP</span>
                 </NavLink>
                 <NavLink to="/bot" className={linkClass} onClick={onClose}>
                   <Bot className="w-5 h-5" />
