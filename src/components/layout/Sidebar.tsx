@@ -22,7 +22,7 @@ import {
   Wand2,
   BarChart3,
   Sparkles,
-  Printer
+  Brain
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -119,18 +119,15 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                   <FolderOpen className="w-5 h-5" />
                   Categorías
                 </NavLink>
-                <NavLink to="/customers" className={linkClass} onClick={onClose}>
-                  <Users className="w-5 h-5" />
-                  Clientes
-                </NavLink>
-                <NavLink to="/settings#printer" className={linkClass} onClick={onClose}>
-                  <Printer className="w-5 h-5" />
-                  Impresora
-                </NavLink>
               </div>
 
               <div className="pt-2 pb-2">
                 <p className="px-4 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Módulos PRO</p>
+                <NavLink to="/customers" className={linkClass} onClick={onClose}>
+                  <Brain className="w-5 h-5" />
+                  CRM IA
+                  <span className="ml-auto text-[8px] bg-violet-100 text-violet-600 px-1.5 py-0.5 rounded font-black uppercase">PRO</span>
+                </NavLink>
                 <NavLink to="/bot" className={linkClass} onClick={onClose}>
                   <Bot className="w-5 h-5" />
                   VENDEx Bot
