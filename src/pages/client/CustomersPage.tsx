@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
-import { Users, Search, MessageSquare, ClipboardList } from 'lucide-react'
+import { Users, Search, MessageSquare, ClipboardList, ShoppingBag, TrendingUp, UserCheck, DollarSign } from 'lucide-react'
 import { Card, LoadingSpinner, EmptyState, Modal, Button, showToast } from '../../components/common'
 import { customersApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
+import { formatPrice, formatShortDate, whatsappLink, orderStatusConfig } from '../../utils/helpers'
 
 export default function CustomersPage() {
     const { selectedStoreId } = useAuth()
@@ -11,8 +12,11 @@ export default function CustomersPage() {
     const [search, setSearch] = useState('')
     const [selectedCustomer, setSelectedCustomer] = useState<any | null>(null)
     const [isEditingNotes, setIsEditingNotes] = useState(false)
+    const [isViewingOrders, setIsViewingOrders] = useState(false)
     const [notes, setNotes] = useState('')
     const [saving, setSaving] = useState(false)
+    const [customerOrders, setCustomerOrders] = useState<any[]>([])
+    const [loadingOrders, setLoadingOrders] = useState(false)
 
     useEffect(() => {
         loadCustomers()
@@ -41,10 +45,30 @@ export default function CustomersPage() {
         }
     }
 
+    const handleViewOrders = async (customer: any) => {
+        setSelectedCustomer(customer)
+        setIsViewingOrders(true)
+        setLoadingOrders(true)
+        try {
+            const orders = await customersApi.getOrdersByWhatsapp(customer.whatsapp)
+            setCustomerOrders(orders)
+        } catch (err) {
+            showToast('error', 'No se pudieron cargar los pedidos')
+        } finally {
+            setLoadingOrders(false)
+        }
+    }
+
     const filteredCustomers = customers.filter(c =>
         c.name.toLowerCase().includes(search.toLowerCase()) ||
         c.whatsapp.includes(search)
     )
+
+    // Métricas calculadas en el cliente
+    const totalSpent = customers.reduce((acc, c) => acc + (Number(c.total_spent) || 0), 0)
+    const totalOrders = customers.reduce((acc, c) => acc + (Number(c.total_orders) || 0), 0)
+    const avgTicket = totalOrders > 0 ? totalSpent / totalOrders : 0
+    const frecuentes = customers.filter(c => c.total_orders > 1).length
 
     return (
         <div className="space-y-6">
@@ -52,6 +76,57 @@ export default function CustomersPage() {
                 <h1 className="text-2xl font-bold text-gray-900">Clientes (CRM)</h1>
             </div>
 
+            {/* Tarjetas de resumen */}
+            {!loading && customers.length > 0 && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <Card>
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 bg-indigo-50 rounded-lg">
+                                <Users className="w-5 h-5 text-indigo-600" />
+                            </div>
+                            <div>
+                                <p className="text-xs text-gray-500 font-medium">Total clientes</p>
+                                <p className="text-xl font-bold text-gray-900">{customers.length}</p>
+                            </div>
+                        </div>
+                    </Card>
+                    <Card>
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 bg-emerald-50 rounded-lg">
+                                <DollarSign className="w-5 h-5 text-emerald-600" />
+                            </div>
+                            <div>
+                                <p className="text-xs text-gray-500 font-medium">Total facturado</p>
+                                <p className="text-xl font-bold text-gray-900">{formatPrice(totalSpent)}</p>
+                            </div>
+                        </div>
+                    </Card>
+                    <Card>
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 bg-amber-50 rounded-lg">
+                                <TrendingUp className="w-5 h-5 text-amber-600" />
+                            </div>
+                            <div>
+                                <p className="text-xs text-gray-500 font-medium">Ticket promedio</p>
+                                <p className="text-xl font-bold text-gray-900">{formatPrice(avgTicket)}</p>
+                            </div>
+                        </div>
+                    </Card>
+                    <Card>
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 bg-purple-50 rounded-lg">
+                                <UserCheck className="w-5 h-5 text-purple-600" />
+                            </div>
+                            <div>
+                                <p className="text-xs text-gray-500 font-medium">Frecuentes</p>
+                                <p className="text-xl font-bold text-gray-900">{frecuentes}</p>
+                            </div>
+                        </div>
+                    </Card>
+                </div>
+            )}
+
+            {/* Búsqueda */}
             <Card>
                 <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -83,7 +158,7 @@ export default function CustomersPage() {
                                     <th className="text-left px-6 py-4">WhatsApp</th>
                                     <th className="text-center px-6 py-4">Pedidos</th>
                                     <th className="text-right px-6 py-4">Total Invertido</th>
-                                    <th className="text-right px-6 py-4 text-gray-500">Acciones</th>
+                                    <th className="text-right px-6 py-4">Acciones</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
@@ -92,17 +167,23 @@ export default function CustomersPage() {
                                         <td className="px-6 py-4">
                                             <div className="flex flex-col">
                                                 <span className="font-bold text-gray-900">{customer.name}</span>
-                                                <span className="text-[10px] text-gray-400 font-medium">Último: {customer.last_order_at ? new Date(customer.last_order_at).toLocaleDateString() : 'N/A'}</span>
+                                                <span className="text-[10px] text-gray-400 font-medium">
+                                                    Último: {customer.last_order_at ? formatShortDate(customer.last_order_at) : 'N/A'}
+                                                </span>
                                             </div>
                                         </td>
                                         <td className="px-6 py-4">
                                             <span className="text-gray-600 font-medium">{customer.whatsapp}</span>
                                         </td>
                                         <td className="px-6 py-4 text-center">
-                                            <span className="bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full font-bold text-xs">{customer.total_orders}</span>
+                                            <span className="bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full font-bold text-xs">
+                                                {customer.total_orders}
+                                            </span>
                                         </td>
                                         <td className="px-6 py-4 text-right">
-                                            <span className="text-gray-900 font-bold">${customer.total_spent}</span>
+                                            <span className="text-gray-900 font-bold">
+                                                {formatPrice(Number(customer.total_spent))}
+                                            </span>
                                         </td>
                                         <td className="px-6 py-4 text-right">
                                             <div className="flex items-center justify-end gap-2">
@@ -117,8 +198,15 @@ export default function CustomersPage() {
                                                 >
                                                     <ClipboardList className="w-4 h-4" />
                                                 </button>
+                                                <button
+                                                    onClick={() => handleViewOrders(customer)}
+                                                    className="p-2 rounded-lg hover:bg-white hover:shadow-sm text-slate-400 hover:text-amber-600 transition-all border border-transparent hover:border-amber-100"
+                                                    title="Ver pedidos"
+                                                >
+                                                    <ShoppingBag className="w-4 h-4" />
+                                                </button>
                                                 <a
-                                                    href={`https://wa.me/${customer.whatsapp.replace(/\D/g, '')}`}
+                                                    href={whatsappLink(customer.whatsapp)}
                                                     target="_blank"
                                                     rel="noopener noreferrer"
                                                     className="p-2 rounded-lg hover:bg-white hover:shadow-sm text-emerald-600 transition-all border border-transparent hover:border-emerald-100"
@@ -166,6 +254,41 @@ export default function CustomersPage() {
                         </Button>
                     </div>
                 </div>
+            </Modal>
+
+            {/* Modal Ver Pedidos del cliente */}
+            <Modal
+                isOpen={isViewingOrders}
+                onClose={() => { setIsViewingOrders(false); setCustomerOrders([]) }}
+                title={`Pedidos de ${selectedCustomer?.name}`}
+            >
+                {loadingOrders ? (
+                    <LoadingSpinner text="Cargando pedidos..." />
+                ) : customerOrders.length === 0 ? (
+                    <p className="text-sm text-gray-500 text-center py-6">No se encontraron pedidos registrados.</p>
+                ) : (
+                    <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+                        {customerOrders.map((order) => {
+                            const statusCfg = orderStatusConfig[order.status] || orderStatusConfig.pending
+                            return (
+                                <div key={order.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100">
+                                    <div>
+                                        <p className="text-sm font-bold text-gray-800">#{order.order_number}</p>
+                                        <p className="text-xs text-gray-400">{formatShortDate(order.created_at)}</p>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <span className={`text-xs font-semibold px-2 py-1 rounded-full ${statusCfg.bg} ${statusCfg.color}`}>
+                                            {statusCfg.label}
+                                        </span>
+                                        <span className="text-sm font-bold text-gray-900">
+                                            {formatPrice(Number(order.total))}
+                                        </span>
+                                    </div>
+                                </div>
+                            )
+                        })}
+                    </div>
+                )}
             </Modal>
         </div>
     )
