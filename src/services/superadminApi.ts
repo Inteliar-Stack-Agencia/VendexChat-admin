@@ -486,7 +486,6 @@ export const superadminApi = {
                 address: sourceStore.address,
                 primary_color: sourceStore.primary_color,
                 metadata: sourceStore.metadata,
-                ai_prompt: sourceStore.ai_prompt,
                 physical_schedule: sourceStore.physical_schedule,
                 online_schedule: sourceStore.online_schedule,
                 delivery_cost: sourceStore.delivery_cost,
