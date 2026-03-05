@@ -131,7 +131,7 @@ function BotConfigPageInner() {
         try {
             const t = await tenantApi.getMe()
             setTenant(t)
-            setAiPrompt(t.ai_prompt || '')
+            setAiPrompt(t.metadata?.ai_prompt || t.ai_prompt || '')
             const savedConfig = t.metadata?.bot_config
             if (savedConfig) {
                 setConfig({ ...DEFAULT_CONFIG, ...savedConfig })
@@ -148,9 +148,9 @@ function BotConfigPageInner() {
         setSaving(true)
         try {
             await tenantApi.updateMe({
-                ai_prompt: aiPrompt,
                 metadata: {
                     ...tenant.metadata,
+                    ai_prompt: aiPrompt,
                     bot_config: config,
                 },
             })

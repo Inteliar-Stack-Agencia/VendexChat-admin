@@ -98,7 +98,7 @@ export default function DashboardPage() {
       .then(([statsData, tenantData]) => {
         setStats(statsData)
         setTenant(tenantData)
-        const saved = tenantData.ai_prompt || ''
+        const saved = tenantData.metadata?.ai_prompt || tenantData.ai_prompt || ''
         const prompt = saved || generatePromptTemplate(tenantData)
         setAiPrompt(prompt)
         setAiPromptDraft(prompt)
@@ -125,7 +125,7 @@ export default function DashboardPage() {
   const handleSavePrompt = async () => {
     setSavingPrompt(true)
     try {
-      await tenantApi.updateMe({ ai_prompt: aiPromptDraft })
+      await tenantApi.updateMe({ metadata: { ...(tenant?.metadata || {}), ai_prompt: aiPromptDraft } })
       setAiPrompt(aiPromptDraft)
       setIsEditing(false)
       showToast('success', 'Asistente actualizado')

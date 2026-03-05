@@ -9,7 +9,7 @@ interface TenantAiConfigProps {
 }
 
 export default function TenantAiConfig({ tenant, onUpdatePrompt, isSaving }: TenantAiConfigProps) {
-    const [prompt, setPrompt] = useState(tenant.metadata?.ai_prompt || tenant.ai_prompt || '')
+    const [prompt, setPrompt] = useState(tenant.metadata?.ai_prompt || '')
 
     const handleSave = async () => {
         await onUpdatePrompt(prompt)
