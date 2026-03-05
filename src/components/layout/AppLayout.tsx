@@ -33,10 +33,7 @@ export default function AppLayout() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col pt-2">
-      {/* SMALL DEBUG INDICATOR IF NEEDED (SUBTLE) */}
-      <div className="fixed top-0 left-0 bg-slate-900 text-white text-[6px] px-1 opacity-20 hover:opacity-100 z-[999]">
-        ID: {selectedStoreId || 'NULL'}
-      </div>
+
       {isImpersonating && (
         <div className="bg-slate-900 border-b border-white/10 px-6 py-2 flex items-center justify-between animate-in slide-in-from-top duration-500 relative z-[60]">
           <div className="flex items-center gap-3">
