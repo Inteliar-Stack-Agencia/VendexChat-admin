@@ -125,12 +125,18 @@ export default function DashboardPage() {
   const handleSavePrompt = async () => {
     setSavingPrompt(true)
     try {
-      await tenantApi.updateMe({ metadata: { ...(tenant?.metadata || {}), ai_prompt: aiPromptDraft } })
+      const updatedMetadata = { ...(tenant?.metadata || {}), ai_prompt: aiPromptDraft }
+      const updated = await tenantApi.updateMe({ metadata: updatedMetadata })
       setAiPrompt(aiPromptDraft)
+      if (updated && tenant) {
+        setTenant({ ...tenant, metadata: updatedMetadata })
+      }
       setIsEditing(false)
       showToast('success', 'Asistente actualizado')
-    } catch {
-      showToast('error', 'Error al guardar')
+    } catch (err) {
+      console.error('[handleSavePrompt] Error al guardar:', err)
+      const msg = err instanceof Error ? err.message : 'Error al guardar'
+      showToast('error', msg)
     } finally {
       setSavingPrompt(false)
     }
