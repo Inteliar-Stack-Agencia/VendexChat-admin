@@ -98,7 +98,7 @@ export default function DashboardPage() {
       .then(([statsData, tenantData]) => {
         setStats(statsData)
         setTenant(tenantData)
-        const saved = tenantData.metadata?.ai_prompt || tenantData.ai_prompt || ''
+        const saved = (tenantData.metadata?.ai_prompt as string | undefined) || tenantData.ai_prompt || ''
         const prompt = saved || generatePromptTemplate(tenantData)
         setAiPrompt(prompt)
         setAiPromptDraft(prompt)
@@ -151,7 +151,58 @@ export default function DashboardPage() {
     ? Math.max(0, Math.ceil((new Date(subscription.current_period_end).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)))
     : 0
 
-  if (loading) return <LoadingSpinner text="Cargando dashboard..." />
+  if (loading) return (
+    <div className="space-y-6 animate-pulse">
+      {/* Header skeleton */}
+      <div className="flex items-center justify-between">
+        <div className="space-y-2">
+          <div className="h-7 w-32 bg-gray-200 rounded-lg" />
+          <div className="h-4 w-56 bg-gray-100 rounded-lg" />
+        </div>
+        <div className="h-9 w-36 bg-gray-200 rounded-lg" />
+      </div>
+      {/* KPI Cards skeleton */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {[1, 2, 3].map(i => (
+          <div key={i} className="p-6 border border-gray-100 rounded-xl shadow-sm bg-white">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-gray-100 rounded-lg" />
+              <div className="space-y-2">
+                <div className="h-3 w-24 bg-gray-100 rounded" />
+                <div className="h-7 w-16 bg-gray-200 rounded" />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      {/* Quick access skeleton */}
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+        {[1, 2, 3, 4, 5, 6].map(i => (
+          <div key={i} className="h-28 bg-gray-100 rounded-2xl" />
+        ))}
+      </div>
+      {/* Orders + Stock skeleton */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {[1, 2].map(i => (
+          <div key={i} className="border border-gray-100 rounded-xl overflow-hidden bg-white">
+            <div className="h-8 bg-gray-50 border-b border-gray-100 mx-4 my-3 rounded" />
+            {[1, 2, 3].map(j => (
+              <div key={j} className="flex items-center justify-between p-4 border-b border-gray-50 last:border-0">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-gray-100 rounded-lg" />
+                  <div className="space-y-1.5">
+                    <div className="h-3 w-28 bg-gray-200 rounded" />
+                    <div className="h-3 w-20 bg-gray-100 rounded" />
+                  </div>
+                </div>
+                <div className="h-3 w-16 bg-gray-200 rounded" />
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 
   return (
     <div className="space-y-6 animate-fade-in">

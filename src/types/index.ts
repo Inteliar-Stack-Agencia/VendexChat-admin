@@ -252,8 +252,8 @@ export interface DashboardStats {
   orders_today: number
   sales_today: number
   active_products: number
-  recent_orders: Order[]
-  low_stock_products: Product[]
+  recent_orders: Pick<Order, 'id' | 'total' | 'status' | 'customer_name' | 'order_number' | 'created_at'>[]
+  low_stock_products: Pick<Product, 'id' | 'name' | 'stock' | 'image_url'>[]
 }
 
 // --- Superadmin ---

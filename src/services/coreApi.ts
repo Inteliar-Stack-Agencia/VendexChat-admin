@@ -26,14 +26,10 @@ export const getStoreId = async (): Promise<string> => {
     if (!user) throw new Error('No hay sesión activa')
 
     if (activeStoreId) {
-        // SYNC: Mantener profiles.store_id en sync con localStorage si cambió
-        try {
-            await supabase.from('profiles').update({ store_id: activeStoreId }).eq('id', user.id)
-            _lastSyncedStoreId = activeStoreId
-            console.log('[getStoreId] Profile store_id synced to:', activeStoreId)
-        } catch (e) {
-            console.warn('[getStoreId] Profile sync failed (non-blocking):', e)
-        }
+        // SYNC: Mantener profiles.store_id en sync con localStorage — fire-and-forget (no-bloqueante)
+        supabase.from('profiles').update({ store_id: activeStoreId }).eq('id', user.id)
+            .then(() => { _lastSyncedStoreId = activeStoreId }, (e) => console.warn('[getStoreId] Profile sync failed (non-blocking):', e))
+        _lastSyncedStoreId = activeStoreId
         return activeStoreId
     }
 
