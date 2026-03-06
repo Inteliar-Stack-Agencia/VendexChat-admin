@@ -500,6 +500,7 @@ export default function ProductsPage() {
                 onChange={(e) => { setCategoryFilter(e.target.value); setPage(1) }}
                 className="px-4 py-3 bg-slate-50 border-2 border-slate-100 rounded-2xl text-[10px] font-black uppercase tracking-widest text-slate-600 focus:border-indigo-500 transition-all cursor-pointer"
               >
+                <option value="">Todas las categorías</option>
                 {categories.map((c) => (
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
