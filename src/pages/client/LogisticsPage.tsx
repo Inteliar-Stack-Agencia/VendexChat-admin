@@ -68,8 +68,8 @@ function LogisticsPageInner() {
         try {
             const t = await tenantApi.getMe()
             setTenant(t)
-            setZones(t.metadata?.delivery_zones || [])
-            setDrivers(t.metadata?.delivery_drivers || [])
+            setZones((t.metadata?.delivery_zones ?? []) as DeliveryZone[])
+            setDrivers((t.metadata?.delivery_drivers ?? []) as Driver[])
         } catch {
             showToast('error', 'Error al cargar configuración')
         } finally {
@@ -87,8 +87,8 @@ function LogisticsPageInner() {
             // Enrich with metadata delivery fields
             const enriched: DeliveryOrder[] = deliveryOrders.map((o) => ({
                 ...o,
-                delivery_driver: o.metadata?.delivery_driver || '',
-                delivery_status: o.metadata?.delivery_status || 'pending',
+                delivery_driver: (o.metadata?.delivery_driver as string | undefined) || '',
+                delivery_status: (o.metadata?.delivery_status as DeliveryOrder['delivery_status'] | undefined) || 'pending',
             }))
             setOrders(enriched)
         } catch {
@@ -297,11 +297,10 @@ function LogisticsPageInner() {
                     <button
                         key={id}
                         onClick={() => setActiveTab(id)}
-                        className={`flex items-center gap-2 px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${
-                            activeTab === id
-                                ? 'bg-white text-emerald-600 shadow-sm'
-                                : 'text-slate-500 hover:text-slate-700'
-                        }`}
+                        className={`flex items-center gap-2 px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${activeTab === id
+                            ? 'bg-white text-emerald-600 shadow-sm'
+                            : 'text-slate-500 hover:text-slate-700'
+                            }`}
                     >
                         <Icon className="w-3 h-3" />
                         {label}
@@ -483,11 +482,10 @@ function LogisticsPageInner() {
                                                 <td className="px-6 py-4 text-center">
                                                     <button
                                                         onClick={() => handleToggleZone(zone.id)}
-                                                        className={`flex items-center gap-1 mx-auto text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full transition-all ${
-                                                            zone.is_active
-                                                                ? 'bg-emerald-100 text-emerald-700'
-                                                                : 'bg-slate-100 text-slate-400'
-                                                        }`}
+                                                        className={`flex items-center gap-1 mx-auto text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full transition-all ${zone.is_active
+                                                            ? 'bg-emerald-100 text-emerald-700'
+                                                            : 'bg-slate-100 text-slate-400'
+                                                            }`}
                                                     >
                                                         {zone.is_active ? (
                                                             <ToggleRight className="w-3 h-3" />
@@ -643,11 +641,10 @@ function LogisticsPageInner() {
                                     <button
                                         key={d.id}
                                         onClick={() => setSelectedDriver(d.name)}
-                                        className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all ${
-                                            selectedDriver === d.name
-                                                ? 'border-blue-500 bg-blue-50'
-                                                : 'border-slate-200 hover:border-blue-200'
-                                        }`}
+                                        className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all ${selectedDriver === d.name
+                                            ? 'border-blue-500 bg-blue-50'
+                                            : 'border-slate-200 hover:border-blue-200'
+                                            }`}
                                     >
                                         <div className="w-8 h-8 bg-violet-100 rounded-lg flex items-center justify-center">
                                             <User className="w-4 h-4 text-violet-600" />

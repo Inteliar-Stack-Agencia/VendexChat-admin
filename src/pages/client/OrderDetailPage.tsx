@@ -60,7 +60,7 @@ export default function OrderDetailPage() {
   if (!order) return null
 
   const statusConf = orderStatusConfig[order.status]
-  const printerSettings = (tenant as any)?.metadata?.printer || {}
+  const printerSettings = ((tenant?.metadata?.printer ?? {}) as { width?: string; header?: string; footer?: string; show_order_number?: boolean })
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
@@ -110,14 +110,14 @@ export default function OrderDetailPage() {
           <p className="font-bold uppercase mb-1">Cliente:</p>
           <p>{order.customer_name}</p>
           <p>{order.customer_whatsapp}</p>
-          {order.metadata?.company_name && <p>Empresa: {order.metadata.company_name}</p>}
+          {(order.metadata?.company_name as string | undefined) && <p>Empresa: {order.metadata?.company_name as string}</p>}
         </div>
 
         <div className="mb-2 border-t border-dashed border-gray-400 pt-2">
           <p className="font-bold uppercase mb-1">Detalles:</p>
           <p>Tipo: {order.customer_address ? 'Envío' : 'Retiro'}</p>
           {order.customer_address && <p>DIR: {order.customer_address}</p>}
-          <p>Pago: {order.metadata?.payment_method || 'Consultar'}</p>
+          <p>Pago: {(order.metadata?.payment_method as string | undefined) || 'Consultar'}</p>
         </div>
 
         <div className="border-t border-dashed border-gray-400 py-2 mb-2">
@@ -173,10 +173,10 @@ export default function OrderDetailPage() {
             <span className="text-gray-500">Nombre:</span>
             <span className="ml-2 font-medium text-gray-900">{order.customer_name}</span>
           </div>
-          {order.metadata?.company_name && (
+          {(order.metadata?.company_name as string | undefined) && (
             <div>
               <span className="text-gray-500">Empresa:</span>
-              <span className="ml-2 font-medium text-gray-900">{order.metadata.company_name}</span>
+              <span className="ml-2 font-medium text-gray-900">{order.metadata?.company_name as string}</span>
             </div>
           )}
           <div>

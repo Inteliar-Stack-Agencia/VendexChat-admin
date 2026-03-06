@@ -99,7 +99,7 @@ export default function DashboardPage() {
         setStats(statsData)
         setTenant(tenantData)
         const saved = (tenantData.metadata?.ai_prompt as string | undefined) || tenantData.ai_prompt || ''
-        const prompt = saved || generatePromptTemplate(tenantData)
+        const prompt: string = saved || generatePromptTemplate(tenantData)
         setAiPrompt(prompt)
         setAiPromptDraft(prompt)
       })

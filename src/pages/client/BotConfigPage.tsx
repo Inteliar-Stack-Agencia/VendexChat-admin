@@ -81,8 +81,8 @@ function buildSystemPrompt(config: BotConfig, aiPrompt: string, storeName: strin
     const faqsText =
         config.faqs.length > 0
             ? `\n\nRESPUESTAS PREDEFINIDAS (úsalas cuando el cliente haga estas preguntas):\n${config.faqs
-                  .map((f) => `P: ${f.question}\nR: ${f.answer}`)
-                  .join('\n\n')}`
+                .map((f) => `P: ${f.question}\nR: ${f.answer}`)
+                .join('\n\n')}`
             : ''
 
     return `Eres el asistente virtual de "${storeName}". Eres ${personalityMap[config.personality]}.
@@ -131,8 +131,8 @@ function BotConfigPageInner() {
         try {
             const t = await tenantApi.getMe()
             setTenant(t)
-            setAiPrompt(t.metadata?.ai_prompt || t.ai_prompt || '')
-            const savedConfig = t.metadata?.bot_config
+            setAiPrompt(String(t.metadata?.ai_prompt || t.ai_prompt || ''))
+            const savedConfig = t.metadata?.bot_config as Partial<BotConfig> | undefined
             if (savedConfig) {
                 setConfig({ ...DEFAULT_CONFIG, ...savedConfig })
             }
@@ -222,11 +222,10 @@ function BotConfigPageInner() {
                     {/* Toggle ON/OFF */}
                     <button
                         onClick={() => setConfig((p) => ({ ...p, enabled: !p.enabled }))}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-xl font-black text-xs uppercase tracking-widest transition-all border ${
-                            config.enabled
-                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                : 'bg-slate-100 text-slate-500 border-slate-200'
-                        }`}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-xl font-black text-xs uppercase tracking-widest transition-all border ${config.enabled
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            : 'bg-slate-100 text-slate-500 border-slate-200'
+                            }`}
                     >
                         {config.enabled ? (
                             <ToggleRight className="w-5 h-5" />
@@ -269,11 +268,10 @@ function BotConfigPageInner() {
                     <button
                         key={id}
                         onClick={() => setActiveTab(id)}
-                        className={`flex items-center gap-2 px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${
-                            activeTab === id
-                                ? 'bg-white text-indigo-600 shadow-sm'
-                                : 'text-slate-500 hover:text-slate-700'
-                        }`}
+                        className={`flex items-center gap-2 px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${activeTab === id
+                            ? 'bg-white text-indigo-600 shadow-sm'
+                            : 'text-slate-500 hover:text-slate-700'
+                            }`}
                     >
                         <Icon className="w-3 h-3" />
                         {label}
@@ -331,11 +329,10 @@ function BotConfigPageInner() {
                                             personality: opt.value as BotConfig['personality'],
                                         }))
                                     }
-                                    className={`p-4 rounded-2xl border-2 text-left transition-all ${
-                                        config.personality === opt.value
-                                            ? 'border-indigo-500 bg-indigo-50'
-                                            : 'border-slate-200 hover:border-indigo-200 bg-white'
-                                    }`}
+                                    className={`p-4 rounded-2xl border-2 text-left transition-all ${config.personality === opt.value
+                                        ? 'border-indigo-500 bg-indigo-50'
+                                        : 'border-slate-200 hover:border-indigo-200 bg-white'
+                                        }`}
                                 >
                                     <div className="text-2xl mb-2">{opt.icon}</div>
                                     <div className="font-black text-slate-900 text-sm">{opt.label}</div>
@@ -493,11 +490,10 @@ function BotConfigPageInner() {
                                     </div>
                                 )}
                                 <div
-                                    className={`rounded-2xl px-4 py-3 max-w-xs shadow-sm ${
-                                        msg.role === 'user'
-                                            ? 'bg-indigo-600 text-white rounded-br-sm'
-                                            : 'bg-white border border-slate-200 text-slate-700 rounded-bl-sm'
-                                    }`}
+                                    className={`rounded-2xl px-4 py-3 max-w-xs shadow-sm ${msg.role === 'user'
+                                        ? 'bg-indigo-600 text-white rounded-br-sm'
+                                        : 'bg-white border border-slate-200 text-slate-700 rounded-bl-sm'
+                                        }`}
                                 >
                                     <p className="text-sm whitespace-pre-wrap">{msg.text}</p>
                                     {msg.role === 'bot' && (
