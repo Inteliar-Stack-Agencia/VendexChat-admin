@@ -8,7 +8,7 @@ export const productsApi = {
         const storeId = await getStoreId()
         const limit = params?.limit || 50
 
-        let query = supabase.from('products').select('id, name, description, price, image_url, stock, is_active, category_id, sort_order, store_id, is_featured, created_at, categories(name)', { count: 'exact' }).eq('store_id', storeId)
+        let query = supabase.from('products').select('id, name, description, price, image_url, stock, unlimited_stock, is_active, category_id, sort_order, store_id, is_featured, created_at, categories(name)', { count: 'estimated' }).eq('store_id', storeId)
 
         if (params?.search) query = query.ilike('name', `%${params.search}%`)
         if (params?.category_id) query = query.eq('category_id', params.category_id)
