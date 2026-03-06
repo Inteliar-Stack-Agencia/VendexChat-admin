@@ -103,8 +103,8 @@ function CrmIaPageInner() {
 
     const loadCustomers = () => {
         setLoading(true)
-        customersApi.list()
-            .then(setCustomers)
+        customersApi.list({ limit: 200 })
+            .then(res => setCustomers(res.data))
             .catch(console.error)
             .finally(() => setLoading(false))
     }
@@ -285,8 +285,8 @@ Notas del vendedor: ${customer.notes || 'ninguna'}`
                                 key={tag}
                                 onClick={() => setTagFilter(tag)}
                                 className={`px-3 py-1 rounded-full text-xs font-semibold transition-all border ${tagFilter === tag
-                                        ? 'bg-indigo-600 text-white border-indigo-600'
-                                        : 'bg-white text-gray-600 border-gray-300 hover:border-indigo-400 hover:text-indigo-600'
+                                    ? 'bg-indigo-600 text-white border-indigo-600'
+                                    : 'bg-white text-gray-600 border-gray-300 hover:border-indigo-400 hover:text-indigo-600'
                                     }`}
                             >
                                 {tag}

@@ -2,17 +2,36 @@ import { supabase } from '../supabaseClient'
 import { getStoreId } from './coreApi'
 
 export const customersApi = {
-    list: async () => {
+    list: async (params?: { page?: number; limit?: number; search?: string }) => {
         const storeId = await getStoreId()
+        const limit = params?.limit || 50
+        const page = params?.page || 1
 
-        const { data, error } = await supabase
+        let query = supabase
             .from('customers')
-            .select('*')
+            .select('*', { count: 'exact' })
             .eq('store_id', storeId)
+
+        if (params?.search) {
+            query = query.or(`name.ilike.%${params.search}%,whatsapp.ilike.%${params.search}%`)
+        }
+
+        const from = (page - 1) * limit
+        const to = from + limit - 1
+
+        const { data, error, count } = await query
+            .range(from, to)
             .order('last_order_at', { ascending: false })
 
         if (error) throw error
-        return data || []
+
+        return {
+            data: data || [],
+            total: count || 0,
+            page,
+            limit,
+            total_pages: Math.ceil((count || 0) / limit)
+        }
     },
 
     get: async (id: string) => {

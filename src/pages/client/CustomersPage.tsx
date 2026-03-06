@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Users, Search, MessageSquare, ClipboardList, ShoppingBag, TrendingUp, UserCheck, DollarSign } from 'lucide-react'
-import { Card, LoadingSpinner, EmptyState, Modal, Button, showToast } from '../../components/common'
+import { Card, LoadingSpinner, EmptyState, Modal, Button, showToast, Pagination } from '../../components/common'
 import { customersApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import { formatPrice, formatShortDate, whatsappLink, orderStatusConfig } from '../../utils/helpers'
@@ -11,6 +11,9 @@ export default function CustomersPage() {
     const [customers, setCustomers] = useState<Customer[]>([])
     const [loading, setLoading] = useState(true)
     const [search, setSearch] = useState('')
+    const [debouncedSearch, setDebouncedSearch] = useState('')
+    const [page, setPage] = useState(1)
+    const [totalPages, setTotalPages] = useState(1)
     const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
     const [isEditingNotes, setIsEditingNotes] = useState(false)
     const [isViewingOrders, setIsViewingOrders] = useState(false)
@@ -19,14 +22,26 @@ export default function CustomersPage() {
     const [customerOrders, setCustomerOrders] = useState<{ id: string; order_number: number; total: number; status: string; created_at: string }[]>([])
     const [loadingOrders, setLoadingOrders] = useState(false)
 
+    // Debounce search
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedSearch(search)
+            setPage(1)
+        }, 500)
+        return () => clearTimeout(timer)
+    }, [search])
+
     useEffect(() => {
         loadCustomers()
-    }, [selectedStoreId])
+    }, [selectedStoreId, debouncedSearch, page])
 
     const loadCustomers = () => {
         setLoading(true)
-        customersApi.list()
-            .then(setCustomers)
+        customersApi.list({ page, limit: 50, search: debouncedSearch })
+            .then(res => {
+                setCustomers(res.data)
+                setTotalPages(res.total_pages)
+            })
             .catch(console.error)
             .finally(() => setLoading(false))
     }
@@ -60,10 +75,8 @@ export default function CustomersPage() {
         }
     }
 
-    const filteredCustomers = customers.filter(c =>
-        c.name.toLowerCase().includes(search.toLowerCase()) ||
-        c.whatsapp.includes(search)
-    )
+    // Métricas calculadas en el cliente (solo sobre la página actual o aproximadas)
+    // Nota: Para precisión absoluta deberían venir del servidor, pero para feedback visual sirve.
 
     // Métricas calculadas en el cliente
     const totalSpent = customers.reduce((acc, c) => acc + (Number(c.total_spent) || 0), 0)
@@ -141,9 +154,34 @@ export default function CustomersPage() {
                 </div>
             </Card>
 
-            {loading ? (
-                <LoadingSpinner text="Cargando clientes..." />
-            ) : filteredCustomers.length === 0 ? (
+            {loading && customers.length === 0 ? (
+                <Card padding={false}>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                            <thead>
+                                <tr className="border-b border-gray-200 bg-gray-50 uppercase text-[10px] font-black tracking-widest text-gray-400">
+                                    <th className="text-left px-6 py-4">Cliente</th>
+                                    <th className="text-left px-6 py-4">WhatsApp</th>
+                                    <th className="text-center px-6 py-4">Pedidos</th>
+                                    <th className="text-right px-6 py-4">Total Invertido</th>
+                                    <th className="text-right px-6 py-4">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                                {[...Array(5)].map((_, i) => (
+                                    <tr key={i} className="animate-pulse">
+                                        <td className="px-6 py-4"><div className="h-4 w-32 bg-slate-100 rounded mb-1" /><div className="h-3 w-20 bg-slate-50 rounded" /></td>
+                                        <td className="px-6 py-4"><div className="h-4 w-24 bg-slate-100 rounded" /></td>
+                                        <td className="px-6 py-4"><div className="h-6 w-10 bg-slate-100 rounded-full mx-auto" /></td>
+                                        <td className="px-6 py-4 text-right"><div className="h-4 w-16 bg-slate-100 rounded ml-auto" /></td>
+                                        <td className="px-6 py-4 text-right"><div className="h-8 w-24 bg-slate-50 rounded-lg ml-auto" /></td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </Card>
+            ) : customers.length === 0 ? (
                 <EmptyState
                     icon={<Users className="w-16 h-16" />}
                     title="No hay clientes"
@@ -163,7 +201,7 @@ export default function CustomersPage() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
-                                {filteredCustomers.map((customer) => (
+                                {customers.map((customer) => (
                                     <tr key={customer.id} className="hover:bg-gray-50 transition-colors group">
                                         <td className="px-6 py-4">
                                             <div className="flex flex-col">
@@ -222,6 +260,11 @@ export default function CustomersPage() {
                             </tbody>
                         </table>
                     </div>
+                    {totalPages > 1 && (
+                        <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-center">
+                            <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
+                        </div>
+                    )}
                 </Card>
             )}
 

@@ -65,17 +65,31 @@ function LogisticsPageInner() {
 
     const loadData = async () => {
         setLoading(true)
-        try {
-            const t = await tenantApi.getMe()
+        setLoadingOrders(true)
+
+        // Carga en paralelo de configuración y pedidos
+        Promise.all([
+            tenantApi.getMe(),
+            ordersApi.list({ status: 'confirmed', limit: 50 })
+        ]).then(([t, res]) => {
             setTenant(t)
             setZones((t.metadata?.delivery_zones ?? []) as DeliveryZone[])
             setDrivers((t.metadata?.delivery_drivers ?? []) as Driver[])
-        } catch {
-            showToast('error', 'Error al cargar configuración')
-        } finally {
+
+            // Procesar pedidos confirmados (delivery_address)
+            const deliveryOrders = res.data.filter((o) => o.customer_address)
+            const enriched: DeliveryOrder[] = deliveryOrders.map((o) => ({
+                ...o,
+                delivery_driver: (o.metadata?.delivery_driver as string | undefined) || '',
+                delivery_status: (o.metadata?.delivery_status as DeliveryOrder['delivery_status'] | undefined) || 'pending',
+            }))
+            setOrders(enriched)
+        }).catch(() => {
+            showToast('error', 'Error al cargar datos de logística')
+        }).finally(() => {
             setLoading(false)
-        }
-        loadOrders()
+            setLoadingOrders(false)
+        })
     }
 
     const loadOrders = async () => {
@@ -209,7 +223,8 @@ function LogisticsPageInner() {
         }
     }
 
-    if (loading) return <LoadingSpinner text="Cargando logística..." />
+    // if (loading) return <LoadingSpinner text="Cargando logística..." />
+    // Ya no bloqueamos toda la pantalla, dejamos que las cards y tabs carguen con skeletons o vacíos
 
     // Stats
     const pendingCount = orders.filter((o) => o.delivery_status === 'pending').length
@@ -237,52 +252,29 @@ function LogisticsPageInner() {
                 </Button>
             </div>
 
-            {/* KPI Cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <Card className="p-5">
-                    <div className="flex items-center gap-3">
-                        <div className="p-2 bg-amber-50 rounded-xl">
-                            <Clock className="w-5 h-5 text-amber-500" />
+                {[
+                    { label: 'Pendientes', icon: Clock, color: 'amber', value: pendingCount },
+                    { label: 'En Reparto', icon: Truck, color: 'blue', value: dispatchedCount },
+                    { label: 'Zonas activas', icon: MapPin, color: 'emerald', value: activeZones },
+                    { label: 'Repartidores', icon: User, color: 'violet', value: drivers.length }
+                ].map((kpi, i) => (
+                    <Card key={i} className="p-5">
+                        <div className="flex items-center gap-3">
+                            <div className={`p-2 bg-${kpi.color}-50 rounded-xl`}>
+                                <kpi.icon className={`w-5 h-5 text-${kpi.color}-500`} />
+                            </div>
+                            <div className="flex-1">
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{kpi.label}</p>
+                                {loading ? (
+                                    <div className="h-6 w-8 bg-slate-100 animate-pulse rounded mt-1" />
+                                ) : (
+                                    <p className="text-2xl font-black text-slate-900">{kpi.value}</p>
+                                )}
+                            </div>
                         </div>
-                        <div>
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Pendientes</p>
-                            <p className="text-2xl font-black text-slate-900">{pendingCount}</p>
-                        </div>
-                    </div>
-                </Card>
-                <Card className="p-5">
-                    <div className="flex items-center gap-3">
-                        <div className="p-2 bg-blue-50 rounded-xl">
-                            <Truck className="w-5 h-5 text-blue-500" />
-                        </div>
-                        <div>
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">En Reparto</p>
-                            <p className="text-2xl font-black text-slate-900">{dispatchedCount}</p>
-                        </div>
-                    </div>
-                </Card>
-                <Card className="p-5">
-                    <div className="flex items-center gap-3">
-                        <div className="p-2 bg-emerald-50 rounded-xl">
-                            <MapPin className="w-5 h-5 text-emerald-500" />
-                        </div>
-                        <div>
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Zonas activas</p>
-                            <p className="text-2xl font-black text-slate-900">{activeZones}</p>
-                        </div>
-                    </div>
-                </Card>
-                <Card className="p-5">
-                    <div className="flex items-center gap-3">
-                        <div className="p-2 bg-violet-50 rounded-xl">
-                            <User className="w-5 h-5 text-violet-500" />
-                        </div>
-                        <div>
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Repartidores</p>
-                            <p className="text-2xl font-black text-slate-900">{drivers.length}</p>
-                        </div>
-                    </div>
-                </Card>
+                    </Card>
+                ))}
             </div>
 
             {/* Tabs */}
@@ -313,11 +305,22 @@ function LogisticsPageInner() {
                 ))}
             </div>
 
-            {/* ---- Tab: Cola de Despacho ---- */}
             {activeTab === 'queue' && (
                 <div className="space-y-3">
-                    {loadingOrders ? (
-                        <LoadingSpinner text="Cargando pedidos confirmados..." />
+                    {loadingOrders && orders.length === 0 ? (
+                        [...Array(3)].map((_, i) => (
+                            <Card key={i} className="p-5 animate-pulse">
+                                <div className="flex items-center gap-4">
+                                    <div className="flex-1 space-y-2">
+                                        <div className="h-4 w-24 bg-slate-100 rounded" />
+                                        <div className="h-3 w-48 bg-slate-50 rounded" />
+                                        <div className="h-3 w-32 bg-slate-50 rounded" />
+                                    </div>
+                                    <div className="h-4 w-16 bg-slate-100 rounded" />
+                                    <div className="h-8 w-32 bg-slate-50 rounded-xl" />
+                                </div>
+                            </Card>
+                        ))
                     ) : orders.length === 0 ? (
                         <Card className="p-12 flex flex-col items-center text-center">
                             <Truck className="w-12 h-12 text-slate-200 mb-3" />

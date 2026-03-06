@@ -151,7 +151,8 @@ export default function StatsPage() {
         }
     }
 
-    if (loading && !overview) return <LoadingSpinner text="Analizando datos..." />
+    // Renderizado base omitiendo el return prematuro del spinner bloqueante
+    // if (loading && !overview) return <LoadingSpinner text="Analizando datos..." />
 
     return (
         <div className="space-y-6 animate-fade-in">
@@ -183,9 +184,13 @@ export default function StatsPage() {
                         <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl">
                             <TrendingUp className="w-6 h-6" />
                         </div>
-                        <div>
+                        <div className="flex-1">
                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Total Ventas</p>
-                            <p className="text-2xl font-black text-slate-900">{formatPrice(overview?.totalSales || 0)}</p>
+                            {loading && !overview ? (
+                                <div className="h-8 w-32 bg-slate-100 animate-pulse rounded mt-1" />
+                            ) : (
+                                <p className="text-2xl font-black text-slate-900">{formatPrice(overview?.totalSales || 0)}</p>
+                            )}
                         </div>
                     </div>
                 </Card>
@@ -195,9 +200,13 @@ export default function StatsPage() {
                         <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl">
                             <ShoppingCart className="w-6 h-6" />
                         </div>
-                        <div>
+                        <div className="flex-1">
                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Cant. Pedidos</p>
-                            <p className="text-2xl font-black text-slate-900">{overview?.totalOrders || 0}</p>
+                            {loading && !overview ? (
+                                <div className="h-8 w-16 bg-slate-100 animate-pulse rounded mt-1" />
+                            ) : (
+                                <p className="text-2xl font-black text-slate-900">{overview?.totalOrders || 0}</p>
+                            )}
                         </div>
                     </div>
                 </Card>
@@ -207,9 +216,13 @@ export default function StatsPage() {
                         <div className="p-3 bg-amber-50 text-amber-600 rounded-xl">
                             <BarChart3 className="w-6 h-6" />
                         </div>
-                        <div>
+                        <div className="flex-1">
                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Ticket Promedio</p>
-                            <p className="text-2xl font-black text-slate-900">{formatPrice(overview?.avgTicket || 0)}</p>
+                            {loading && !overview ? (
+                                <div className="h-8 w-24 bg-slate-100 animate-pulse rounded mt-1" />
+                            ) : (
+                                <p className="text-2xl font-black text-slate-900">{formatPrice(overview?.avgTicket || 0)}</p>
+                            )}
                         </div>
                     </div>
                 </Card>

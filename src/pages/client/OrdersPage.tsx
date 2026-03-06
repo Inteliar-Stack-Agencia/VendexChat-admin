@@ -82,8 +82,38 @@ export default function OrdersPage() {
       </Card>
 
       {/* Tabla */}
-      {loading ? (
-        <LoadingSpinner text="Cargando pedidos..." />
+      {/* Tabla con Skeleton o Datos */}
+      {loading && orders.length === 0 ? (
+        <Card padding={false}>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-200 bg-gray-50">
+                  <th className="text-left px-4 py-3 font-medium text-gray-500">Nº Pedido</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-500">Cliente</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-500 hidden sm:table-cell">WhatsApp</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-500">Total</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-500">Estado</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-500 hidden sm:table-cell">Fecha</th>
+                  <th className="text-right px-4 py-3 font-medium text-gray-500">Acciones</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {[...Array(5)].map((_, i) => (
+                  <tr key={i} className="animate-pulse">
+                    <td className="px-4 py-4"><div className="h-4 w-16 bg-slate-100 rounded" /></td>
+                    <td className="px-4 py-4"><div className="h-4 w-32 bg-slate-100 rounded" /></td>
+                    <td className="px-4 py-4 hidden sm:table-cell"><div className="h-4 w-24 bg-slate-100 rounded" /></td>
+                    <td className="px-4 py-4"><div className="h-4 w-20 bg-slate-100 rounded" /></td>
+                    <td className="px-4 py-4"><div className="h-6 w-24 bg-slate-100 rounded-full" /></td>
+                    <td className="px-4 py-4 hidden sm:table-cell"><div className="h-4 w-24 bg-slate-100 rounded" /></td>
+                    <td className="px-4 py-4"><div className="h-8 w-8 bg-slate-50 rounded ml-auto" /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
       ) : orders.length === 0 ? (
         <EmptyState
           icon={<ShoppingCart className="w-16 h-16" />}

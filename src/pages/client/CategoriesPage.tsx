@@ -131,8 +131,29 @@ export default function CategoriesPage() {
         </Button>
       </div>
 
-      {loading ? (
-        <LoadingSpinner text="Cargando categorías..." />
+      {loading && categories.length === 0 ? (
+        <Card padding={false}>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-200 bg-gray-50 text-[10px] font-black uppercase tracking-widest text-gray-400">
+                <th className="px-4 py-3 text-center w-24">Orden</th>
+                <th className="text-left px-4 py-3">Nombre</th>
+                <th className="text-left px-4 py-3 hidden sm:table-cell">Productos</th>
+                <th className="text-right px-4 py-3">Acciones</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {[...Array(3)].map((_, i) => (
+                <tr key={i} className="animate-pulse">
+                  <td className="px-4 py-4 flex flex-col items-center gap-1"><div className="h-4 w-4 bg-slate-50 rounded" /><div className="h-4 w-4 bg-slate-50 rounded" /></td>
+                  <td className="px-4 py-4"><div className="h-4 w-32 bg-slate-100 rounded" /></td>
+                  <td className="px-4 py-4 hidden sm:table-cell"><div className="h-4 w-12 bg-slate-50 rounded" /></td>
+                  <td className="px-4 py-4 text-right"><div className="h-8 w-16 bg-slate-50 rounded ml-auto" /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Card>
       ) : categories.length === 0 ? (
         <EmptyState
           icon={<FolderOpen className="w-16 h-16" />}
