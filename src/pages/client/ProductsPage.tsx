@@ -178,6 +178,7 @@ export default function ProductsPage() {
   const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [page, setPage] = useState(1)
@@ -198,12 +199,52 @@ export default function ProductsPage() {
     })
   )
 
-  const loadProducts = useCallback(async () => {
+  // Debounce search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search)
+      setPage(1)
+    }, 500)
+    return () => clearTimeout(timer)
+  }, [search])
+
+  const loadInitialData = useCallback(async () => {
     const requestId = ++requestCount.current
     setLoading(true)
     try {
-      const params: Record<string, unknown> = { page, limit: 100 }
-      if (search) params.search = search
+      // 1. Cargar categorías y productos en paralelo
+      const [categoriesRes, productsRes] = await Promise.all([
+        categoriesApi.list(),
+        productsApi.list({ page: 1, limit: 50, search: debouncedSearch || undefined })
+      ])
+
+      if (requestId !== requestCount.current) return
+
+      setCategories(categoriesRes)
+      setProducts(productsRes.data)
+      setTotalPages(productsRes.total_pages)
+
+      // 2. Setear filtro de categoría inicial si no hay uno
+      if (categoriesRes.length > 0 && !categoryFilter) {
+        setCategoryFilter(categoriesRes[0].id)
+      }
+    } catch (err) {
+      console.error('Error cargando datos iniciales:', err)
+      showToast('error', 'Error al cargar datos')
+    } finally {
+      if (requestId === requestCount.current) {
+        setLoading(false)
+      }
+    }
+  }, [selectedStoreId, debouncedSearch])
+
+  const loadProducts = useCallback(async () => {
+    if (loading) return // Evitar doble carga si ya estamos en loadInitialData
+    const requestId = ++requestCount.current
+    setLoading(true)
+    try {
+      const params: Record<string, unknown> = { page, limit: 50 }
+      if (debouncedSearch) params.search = debouncedSearch
       if (categoryFilter) params.category_id = categoryFilter
 
       const res = await productsApi.list(params as Parameters<typeof productsApi.list>[0])
@@ -223,18 +264,16 @@ export default function ProductsPage() {
   }, [page, search, categoryFilter, selectedStoreId])
 
   useEffect(() => {
-    if (categories.length > 0 && !categoryFilter) return
-    loadProducts()
-  }, [loadProducts, categories.length])
+    loadInitialData()
+  }, [loadInitialData])
 
   useEffect(() => {
-    categoriesApi.list().then(res => {
-      setCategories(res)
-      if (res.length > 0 && !categoryFilter) {
-        setCategoryFilter(res[0].id)
-      }
-    }).catch(console.error)
-  }, [selectedStoreId]) // Refrescar cuando cambia la tienda
+    // Solo cargar productos si NO es el primer montaje (que ya lo hace loadInitialData)
+    // o si el cambio viene de página/filtro
+    if (categories.length > 0) {
+      loadProducts()
+    }
+  }, [page, categoryFilter])
 
   const handleUpdateStatus = async (product: Product, newStatus: 'visible' | 'no-stock' | 'hidden') => {
     setUpdatingId(product.id)
@@ -518,9 +557,46 @@ export default function ProductsPage() {
         </div>
       )}
 
-      {/* Tabla de productos */}
-      {loading ? (
-        <LoadingSpinner text="Cargando catálogo..." />
+      {/* Skeleton Loading o Tabla */}
+      {loading && products.length === 0 ? (
+        <Card padding={false} className="border-indigo-100 shadow-2xl shadow-indigo-50/30 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-50 text-[10px] font-black uppercase text-slate-400 tracking-widest border-b border-slate-100">
+                  <th className="px-6 py-4 w-10"></th>
+                  <th className="px-6 py-4 text-center w-24">Orden</th>
+                  <th className="text-left px-6 py-4">Producto</th>
+                  <th className="text-left px-6 py-4 hidden sm:table-cell">Categoría</th>
+                  <th className="text-left px-6 py-4">Precio</th>
+                  <th className="text-left px-6 py-4">Estado</th>
+                  <th className="text-right px-6 py-4">Editar</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {[...Array(5)].map((_, i) => (
+                  <tr key={i} className="animate-pulse">
+                    <td className="px-6 py-4"><div className="w-5 h-5 bg-slate-100 rounded" /></td>
+                    <td className="px-6 py-4 text-center"><div className="w-8 h-4 bg-slate-100 rounded mx-auto" /></td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 bg-slate-100 rounded-xl" />
+                        <div className="space-y-2">
+                          <div className="w-32 h-4 bg-slate-100 rounded" />
+                          <div className="w-48 h-3 bg-slate-100 rounded" />
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 hidden sm:table-cell"><div className="w-20 h-4 bg-slate-100 rounded" /></td>
+                    <td className="px-6 py-4"><div className="w-16 h-4 bg-slate-100 rounded" /></td>
+                    <td className="px-6 py-4"><div className="w-24 h-8 bg-slate-100 rounded-xl" /></td>
+                    <td className="px-6 py-4 text-right"><div className="w-10 h-10 bg-slate-100 rounded-xl ml-auto" /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
       ) : filteredProducts.length === 0 ? (
         <EmptyState
           title="No hay productos"

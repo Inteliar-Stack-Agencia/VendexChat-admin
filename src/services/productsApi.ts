@@ -6,14 +6,15 @@ import { normalizeProductData } from '../utils/helpers'
 export const productsApi = {
     list: async (params?: { page?: number; limit?: number; search?: string; category_id?: number | string }) => {
         const storeId = await getStoreId()
+        const limit = params?.limit || 50
 
         let query = supabase.from('products').select('id, name, description, price, image_url, stock, is_active, category_id, sort_order, store_id, is_featured, created_at, categories(name)', { count: 'exact' }).eq('store_id', storeId)
 
         if (params?.search) query = query.ilike('name', `%${params.search}%`)
         if (params?.category_id) query = query.eq('category_id', params.category_id)
 
-        const from = ((params?.page || 1) - 1) * (params?.limit || 10)
-        const to = from + (params?.limit || 10) - 1
+        const from = ((params?.page || 1) - 1) * limit
+        const to = from + limit - 1
 
         const { data, error, count } = await query
             .range(from, to)
@@ -30,8 +31,8 @@ export const productsApi = {
             })) as unknown as Product[],
             total: count || 0,
             page: params?.page || 1,
-            limit: params?.limit || 10,
-            total_pages: Math.ceil((count || 0) / (params?.limit || 10))
+            limit: limit,
+            total_pages: Math.ceil((count || 0) / limit)
         }
     },
 
