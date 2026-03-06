@@ -208,42 +208,58 @@ export default function ProductsPage() {
     return () => clearTimeout(timer)
   }, [search])
 
-  const loadAllData = useCallback(async () => {
+  // Ref para controlar la categoría inicial sin disparar re-renders en cascada
+  const initializedRef = useRef(false)
+
+  const loadProductsOnly = useCallback(async (catId?: string, pg?: number) => {
     const requestId = ++requestCount.current
     setLoading(true)
     try {
-      // Carga en paralelo: categorías + productos (sin filtro de categoría)
-      const [categoriesRes, productsRes] = await Promise.all([
-        categoriesApi.list(),
-        productsApi.list({
-          page,
-          limit: 50,
-          search: debouncedSearch || undefined,
-          category_id: categoryFilter || undefined
-        })
-      ])
-
+      const params: Parameters<typeof productsApi.list>[0] = {
+        page: pg ?? page,
+        limit: 50,
+        search: debouncedSearch || undefined,
+        category_id: catId ?? categoryFilter ?? undefined
+      }
+      const res = await productsApi.list(params)
       if (requestId !== requestCount.current) return
-
-      setCategories(categoriesRes)
-      setProducts(productsRes.data)
-      setTotalPages(productsRes.total_pages)
+      setProducts(res.data)
+      setTotalPages(res.total_pages)
     } catch (err) {
       console.error('Error cargando productos:', err)
       showToast('error', 'Error al cargar productos')
     } finally {
-      // Siempre liberar el loading, incluso si hubo error
       setLoading(false)
     }
-  }, [selectedStoreId, debouncedSearch, categoryFilter, statusFilter, page])
+  }, [page, debouncedSearch, categoryFilter, selectedStoreId])
 
-  // Un solo useEffect que carga todo
+  // Carga inicial: categorías primero (rápido), luego productos de la primera categoría
   useEffect(() => {
-    loadAllData()
-  }, [selectedStoreId, debouncedSearch, categoryFilter, page])
+    initializedRef.current = false
+    setProducts([])
+    setLoading(true)
+    categoriesApi.list().then(cats => {
+      setCategories(cats)
+      const firstCatId = cats[0]?.id ?? ''
+      setCategoryFilter(String(firstCatId))
+      initializedRef.current = true
+      // Cargamos productos de la primera categoría directamente
+      loadProductsOnly(String(firstCatId), 1)
+    }).catch(err => {
+      console.error('Error cargando categorías:', err)
+      setLoading(false)
+    })
+  }, [selectedStoreId])
 
-  // Alias para compatibilidad con botones que llaman loadProducts()
-  const loadProducts = loadAllData
+  // Recarga cuando cambia categoría, página o búsqueda (después de la carga inicial)
+  useEffect(() => {
+    if (!initializedRef.current) return
+    loadProductsOnly()
+  }, [categoryFilter, page, debouncedSearch])
+
+  // Alias para botones
+  const loadProducts = loadProductsOnly
+  const loadAllData = loadProductsOnly
 
   const handleUpdateStatus = async (product: Product, newStatus: 'visible' | 'no-stock' | 'hidden') => {
     setUpdatingId(product.id)
