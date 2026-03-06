@@ -103,7 +103,10 @@ export default function DashboardPage() {
         setAiPrompt(prompt)
         setAiPromptDraft(prompt)
       })
-      .catch(console.error)
+      .catch((err) => {
+        console.error('[DashboardPage] Error cargando datos:', err)
+        // Si falla, mostramos el dashboard vacío (no infinite skeleton)
+      })
       .finally(() => setLoading(false))
   }, [selectedStoreId])
 

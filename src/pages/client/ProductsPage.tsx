@@ -212,10 +212,10 @@ export default function ProductsPage() {
     const requestId = ++requestCount.current
     setLoading(true)
     try {
-      // 1. Cargar categorías y productos en paralelo
+      // Cargar categorías y productos en paralelo
       const [categoriesRes, productsRes] = await Promise.all([
         categoriesApi.list(),
-        productsApi.list({ page: 1, limit: 50, search: debouncedSearch || undefined })
+        productsApi.list({ page: 1, limit: 50, search: debouncedSearch || undefined, category_id: categoryFilter || undefined })
       ])
 
       if (requestId !== requestCount.current) return
@@ -224,7 +224,7 @@ export default function ProductsPage() {
       setProducts(productsRes.data)
       setTotalPages(productsRes.total_pages)
 
-      // 2. Setear filtro de categoría inicial si no hay uno
+      // Setear filtro de categoría inicial si no hay uno todavía
       if (categoriesRes.length > 0 && !categoryFilter) {
         setCategoryFilter(categoriesRes[0].id)
       }
@@ -236,10 +236,9 @@ export default function ProductsPage() {
         setLoading(false)
       }
     }
-  }, [selectedStoreId, debouncedSearch])
+  }, [selectedStoreId, debouncedSearch, categoryFilter])
 
   const loadProducts = useCallback(async () => {
-    if (loading) return // Evitar doble carga si ya estamos en loadInitialData
     const requestId = ++requestCount.current
     setLoading(true)
     try {
@@ -261,15 +260,15 @@ export default function ProductsPage() {
         setLoading(false)
       }
     }
-  }, [page, search, categoryFilter, selectedStoreId])
+  }, [page, debouncedSearch, categoryFilter, selectedStoreId])
 
+  // Carga inicial: solo cuando cambia el store o el search debounced
   useEffect(() => {
     loadInitialData()
-  }, [loadInitialData])
+  }, [selectedStoreId, debouncedSearch])
 
+  // Carga al cambiar página o filtro de categoría (solo despues de la carga inicial)
   useEffect(() => {
-    // Solo cargar productos si NO es el primer montaje (que ya lo hace loadInitialData)
-    // o si el cambio viene de página/filtro
     if (categories.length > 0) {
       loadProducts()
     }
