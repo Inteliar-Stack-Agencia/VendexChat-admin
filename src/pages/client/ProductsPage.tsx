@@ -208,14 +208,19 @@ export default function ProductsPage() {
     return () => clearTimeout(timer)
   }, [search])
 
-  const loadInitialData = useCallback(async () => {
+  const loadAllData = useCallback(async () => {
     const requestId = ++requestCount.current
     setLoading(true)
     try {
-      // Cargar categorías y productos en paralelo
+      // Carga en paralelo: categorías + productos (sin filtro de categoría)
       const [categoriesRes, productsRes] = await Promise.all([
         categoriesApi.list(),
-        productsApi.list({ page: 1, limit: 50, search: debouncedSearch || undefined, category_id: categoryFilter || undefined })
+        productsApi.list({
+          page,
+          limit: 50,
+          search: debouncedSearch || undefined,
+          category_id: categoryFilter || undefined
+        })
       ])
 
       if (requestId !== requestCount.current) return
@@ -223,56 +228,22 @@ export default function ProductsPage() {
       setCategories(categoriesRes)
       setProducts(productsRes.data)
       setTotalPages(productsRes.total_pages)
-
-      // Setear filtro de categoría inicial si no hay uno todavía
-      if (categoriesRes.length > 0 && !categoryFilter) {
-        setCategoryFilter(categoriesRes[0].id)
-      }
-    } catch (err) {
-      console.error('Error cargando datos iniciales:', err)
-      showToast('error', 'Error al cargar datos')
-    } finally {
-      if (requestId === requestCount.current) {
-        setLoading(false)
-      }
-    }
-  }, [selectedStoreId, debouncedSearch, categoryFilter])
-
-  const loadProducts = useCallback(async () => {
-    const requestId = ++requestCount.current
-    setLoading(true)
-    try {
-      const params: Record<string, unknown> = { page, limit: 50 }
-      if (debouncedSearch) params.search = debouncedSearch
-      if (categoryFilter) params.category_id = categoryFilter
-
-      const res = await productsApi.list(params as Parameters<typeof productsApi.list>[0])
-
-      if (requestId !== requestCount.current) return
-
-      setProducts(res.data)
-      setTotalPages(res.total_pages)
     } catch (err) {
       console.error('Error cargando productos:', err)
       showToast('error', 'Error al cargar productos')
     } finally {
-      if (requestId === requestCount.current) {
-        setLoading(false)
-      }
+      // Siempre liberar el loading, incluso si hubo error
+      setLoading(false)
     }
-  }, [page, debouncedSearch, categoryFilter, selectedStoreId])
+  }, [selectedStoreId, debouncedSearch, categoryFilter, statusFilter, page])
 
-  // Carga inicial: solo cuando cambia el store o el search debounced
+  // Un solo useEffect que carga todo
   useEffect(() => {
-    loadInitialData()
-  }, [selectedStoreId, debouncedSearch])
+    loadAllData()
+  }, [selectedStoreId, debouncedSearch, categoryFilter, page])
 
-  // Carga al cambiar página o filtro de categoría (solo despues de la carga inicial)
-  useEffect(() => {
-    if (categories.length > 0) {
-      loadProducts()
-    }
-  }, [page, categoryFilter])
+  // Alias para compatibilidad con botones que llaman loadProducts()
+  const loadProducts = loadAllData
 
   const handleUpdateStatus = async (product: Product, newStatus: 'visible' | 'no-stock' | 'hidden') => {
     setUpdatingId(product.id)
