@@ -13,9 +13,25 @@ import {
 } from 'lucide-react'
 import { Card, Button, Badge, LoadingSpinner, showToast } from '../../components/common'
 import { superadminApi } from '../../services/api'
+import type { TrendPoint } from '../../types'
+
+interface PaymentRow {
+    id: string;
+    tenant: string | null;
+    plan: string;
+    amount: number;
+    status: string;
+    date: string;
+}
+
+interface LiquidationData {
+    revenue_trend: TrendPoint[];
+    totals: Awaited<ReturnType<typeof superadminApi.overview>>;
+    recent_payments: PaymentRow[];
+}
 
 export default function SALiquidationsPage() {
-    const [data, setData] = useState<any>(null)
+    const [data, setData] = useState<LiquidationData | null>(null)
     const [loading, setLoading] = useState(true)
 
     useEffect(() => {
@@ -37,7 +53,7 @@ export default function SALiquidationsPage() {
                         { date: '2024-02-18', value: 14200 },
                     ],
                     totals: overview,
-                    recent_payments: orders.data.map((o: any) => ({
+                    recent_payments: orders.data.map((o) => ({
                         id: o.id,
                         tenant: o.store_name,
                         plan: 'Order',
@@ -119,7 +135,7 @@ export default function SALiquidationsPage() {
                     </div>
 
                     <div className="h-64 flex items-end gap-3 px-2">
-                        {data.revenue_trend.map((d: any, i: number) => (
+                        {data.revenue_trend.map((d: TrendPoint, i: number) => (
                             <div key={i} className="flex-1 flex flex-col items-center gap-3 group">
                                 <div
                                     className="w-full bg-indigo-50 rounded-xl group-hover:bg-indigo-600 transition-all cursor-pointer relative"
@@ -176,7 +192,7 @@ export default function SALiquidationsPage() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-50 text-sm">
-                            {data.recent_payments.map((p: any) => (
+                            {data.recent_payments.map((p: PaymentRow) => (
                                 <tr key={p.id} className="group hover:bg-slate-50/50 transition-colors">
                                     <td className="px-8 py-5">
                                         <div className="flex items-center gap-3">

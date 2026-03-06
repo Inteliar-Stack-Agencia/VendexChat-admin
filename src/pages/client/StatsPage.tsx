@@ -22,7 +22,12 @@ import { showToast } from '../../components/common/Toast'
 export default function StatsPage() {
     const { selectedStoreId } = useAuth()
     const [loading, setLoading] = useState(true)
-    const [overview, setOverview] = useState<any>(null)
+    const [overview, setOverview] = useState<{
+        totalSales: number;
+        totalOrders: number;
+        avgTicket: number;
+        orders: { total: number | null; created_at: string | null; status: string | null }[];
+    } | null>(null)
     const [exporting, setExporting] = useState<string | null>(null)
     const [range, setRange] = useState<'7d' | '30d' | 'all'>('30d')
 
@@ -43,7 +48,7 @@ export default function StatsPage() {
         }
     }
 
-    const exportToExcel = (data: any[], fileName: string) => {
+    const exportToExcel = (data: Record<string, unknown>[], fileName: string) => {
         try {
             if (data.length === 0) {
                 showToast('error', 'No hay datos para exportar')
@@ -64,11 +69,11 @@ export default function StatsPage() {
         setExporting('orders')
         try {
             const res = await statsApi.getOverview('all')
-            const data = res.orders.map((o: any) => ({
-                'ID Pedido': o.id.slice(0, 8),
-                'Fecha': formatDate(o.created_at),
-                'Estado': o.status,
-                'Total': o.total
+            const data = res.orders.map((o, i: number) => ({
+                'ID Pedido': `ORD-${i + 1}`,
+                'Fecha': formatDate(o.created_at || ''),
+                'Estado': o.status || '',
+                'Total': o.total || 0
             }))
             exportToExcel(data, 'Reporte_Pedidos')
         } catch (err) {
@@ -82,7 +87,7 @@ export default function StatsPage() {
         setExporting('zones')
         try {
             const data = await statsApi.getOrdersByZone()
-            const formatted = data.map((o: any) => ({
+            const formatted = data.map((o: { created_at: string; delivery_address: string; total: number; status: string }) => ({
                 'Fecha': formatDate(o.created_at),
                 'Zona/Dirección': o.delivery_address,
                 'Total': o.total,
@@ -101,14 +106,15 @@ export default function StatsPage() {
         try {
             const data = await statsApi.getTopProducts()
             // Agrupar por producto
-            const productMap: Record<string, any> = {}
-            data.forEach((item: any) => {
-                const name = item.products?.name || 'Desconocido'
+            const productMap: Record<string, { 'Producto': string; 'Cantidad Vendida': number; 'Total Recaudado': number }> = {}
+            data.forEach((item: { products?: { name: string }[] | { name: string } | null; quantity: number | null; price?: number | null }) => {
+                const prod = item.products
+                const name = (Array.isArray(prod) ? prod[0]?.name : prod?.name) || 'Desconocido'
                 if (!productMap[name]) {
                     productMap[name] = { 'Producto': name, 'Cantidad Vendida': 0, 'Total Recaudado': 0 }
                 }
                 productMap[name]['Cantidad Vendida'] += item.quantity || 0
-                productMap[name]['Total Recaudado'] += (item.quantity * (item.price || 0)) || 0
+                productMap[name]['Total Recaudado'] += ((item.quantity || 0) * (item.price || 0)) || 0
             })
             exportToExcel(Object.values(productMap), 'Reporte_Top_Productos')
         } catch (err) {
@@ -123,8 +129,8 @@ export default function StatsPage() {
         try {
             const data = await statsApi.getTopCustomers()
             // Agrupar por cliente
-            const customerMap: Record<string, any> = {}
-            data.forEach((o: any) => {
+            const customerMap: Record<string, { 'Cliente': string; 'WhatsApp': string; 'Cant. Pedidos': number; 'Total Compras': number }> = {}
+            data.forEach((o: { customer_whatsapp: string; customer_name: string; total: number }) => {
                 const key = o.customer_whatsapp || o.customer_name
                 if (!customerMap[key]) {
                     customerMap[key] = {
@@ -137,7 +143,7 @@ export default function StatsPage() {
                 customerMap[key]['Cant. Pedidos'] += 1
                 customerMap[key]['Total Compras'] += o.total || 0
             })
-            exportToExcel(Object.values(customerMap).sort((a: any, b: any) => b['Total Compras'] - a['Total Compras']), 'Reporte_Clientes')
+            exportToExcel(Object.values(customerMap).sort((a, b) => b['Total Compras'] - a['Total Compras']), 'Reporte_Clientes')
         } catch (err) {
             showToast('error', 'Error al obtener datos de clientes')
         } finally {
@@ -251,7 +257,15 @@ export default function StatsPage() {
     )
 }
 
-function ReportCard({ title, description, icon: Icon, onDownload, loading }: any) {
+interface ReportCardProps {
+    title: string;
+    description: string;
+    icon: React.ElementType;
+    onDownload: () => void;
+    loading: boolean;
+}
+
+function ReportCard({ title, description, icon: Icon, onDownload, loading }: ReportCardProps) {
     return (
         <Card className="group hover:border-emerald-200 transition-all duration-300">
             <div className="flex items-start justify-between">

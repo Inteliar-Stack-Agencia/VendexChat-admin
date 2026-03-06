@@ -79,7 +79,7 @@ export const productsApi = {
     },
 
     update: async (id: string | number, data: Partial<ProductFormData>) => {
-        const updateData: any = { ...data }
+        const updateData: Partial<ProductFormData> = { ...data }
 
         if (data.name !== undefined || data.description !== undefined) {
             const normalized = normalizeProductData(

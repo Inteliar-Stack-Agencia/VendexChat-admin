@@ -78,7 +78,7 @@ export default function TenantsPage() {
     setSubSaving(true) // Show loading state inside modal while fetching
     try {
       const { data: sub } = await superadminApi.listSubscriptions().then(subs => ({
-        data: subs.find((s: any) => s.store_id === tenant.id)
+        data: subs.find((s: { store_id: string | null }) => s.store_id === tenant.id)
       }))
 
       if (sub) {
@@ -108,9 +108,9 @@ export default function TenantsPage() {
     setSubSaving(true)
     try {
       await superadminApi.updateSubscription(selectedStoreForSub.id, {
-        plan_type: subFormPlan,
-        status: subFormStatus,
-        billing_cycle: subFormCycle,
+        plan_type: subFormPlan as 'free' | 'pro' | 'vip' | 'ultra',
+        status: subFormStatus as 'active' | 'past_due' | 'canceled' | 'trial',
+        billing_cycle: subFormCycle as 'monthly' | 'annual',
         current_period_end: subFormEnd || null,
         internal_notes: subFormNotes,
         is_manual: true

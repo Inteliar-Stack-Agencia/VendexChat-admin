@@ -19,6 +19,8 @@ export default function MPPaymentBrick({ plan, billingCycle, storeId, onSuccess,
         amount,
     }
 
+    // El SDK de MercadoPago no exporta IPaymentBrickCustomization en todas las versiones
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const customization: any = {
         paymentMethods: {
             ticket: 'all',
@@ -29,6 +31,7 @@ export default function MPPaymentBrick({ plan, billingCycle, storeId, onSuccess,
         },
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const onSubmit = async ({ selectedPaymentMethod, formData }: any) => {
         return new Promise((resolve, reject) => {
             fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/mercadopago-webhook`, {
@@ -63,7 +66,7 @@ export default function MPPaymentBrick({ plan, billingCycle, storeId, onSuccess,
         })
     }
 
-    const onError = (error: any) => {
+    const onError = (error: unknown) => {
         console.error('Error Brick:', error)
         showToast('error', 'Error al cargar la pasarela de pagos.')
     }

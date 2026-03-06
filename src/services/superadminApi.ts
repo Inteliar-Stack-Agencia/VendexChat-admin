@@ -1,5 +1,5 @@
 import { supabase } from '../supabaseClient'
-import type { Tenant } from '../types'
+import type { Tenant, RecentActivity, GatewayConfig, GlobalStats, StoreStatEntry, Subscription } from '../types'
 
 export const superadminApi = {
     overview: async (): Promise<{
@@ -7,7 +7,7 @@ export const superadminApi = {
         active_stores: number;
         new_stores_7d: number;
         mrr_estimated: number;
-        recent_activity: any[];
+        recent_activity: RecentActivity[];
         failed_payments: number;
         pending_actions: number;
     }> => {
@@ -86,7 +86,7 @@ export const superadminApi = {
         return data as Tenant
     },
 
-    updateTenant: async (id: string | number, data: any) => {
+    updateTenant: async (id: string | number, data: Partial<Tenant>) => {
         const { data: updated, error } = await supabase.from('stores').update(data).eq('id', id).select().single()
         if (error) throw error
         return updated as Tenant
@@ -208,17 +208,17 @@ export const superadminApi = {
         if (error) throw error
         return (data || []).map(u => ({
             ...u,
-            store_name: u.stores ? (u.stores as any).name : null
+            store_name: u.stores ? (u.stores as { name: string }).name : null
         }))
     },
 
-    createUser: async (data: any) => {
+    createUser: async (data: Record<string, unknown>) => {
         const { data: newUser, error } = await supabase.from('profiles').insert(data).select().single()
         if (error) throw error
         return newUser
     },
 
-    updateUser: async (id: string | number, data: any) => {
+    updateUser: async (id: string | number, data: Record<string, unknown>) => {
         const { data: updated, error } = await supabase.from('profiles').update(data).eq('id', id).select().single()
         if (error) throw error
         return updated
@@ -243,13 +243,13 @@ export const superadminApi = {
         return {
             data: (data || []).map(o => ({
                 ...o,
-                store_name: (o as any).stores?.name
+                store_name: (o as { stores?: { name: string } }).stores?.name
             })),
             total: count || 0
         }
     },
 
-    getGlobalStats: async (): Promise<any> => {
+    getGlobalStats: async (): Promise<GlobalStats> => {
         const dates = Array.from({ length: 7 }, (_, i) => {
             const d = new Date()
             d.setDate(d.getDate() - (6 - i))
@@ -297,11 +297,12 @@ export const superadminApi = {
             .from('orders')
             .select('total, store_id, stores(name)')
 
-        const storeMap: Record<string, any> = {}
-        storeStats?.forEach((o: any) => {
+        const storeMap: Record<string, StoreStatEntry> = {}
+        storeStats?.forEach((o) => {
             const id = o.store_id
             if (!id) return
-            if (!storeMap[id]) storeMap[id] = { name: o.stores?.name, sales: 0, orders: 0 }
+            const storeJoin = o as unknown as { stores?: { name: string } }
+            if (!storeMap[id]) storeMap[id] = { name: storeJoin.stores?.name ?? '', sales: 0, orders: 0 }
             storeMap[id].sales += o.total || 0
             storeMap[id].orders += 1
         })
@@ -327,13 +328,13 @@ export const superadminApi = {
     getGlobalSettings: async () => {
         const { data, error } = await supabase.from('global_settings').select('*')
         if (error) throw error
-        return (data || []).reduce((acc: any, curr: any) => {
+        return (data || []).reduce<Record<string, unknown>>((acc, curr) => {
             acc[curr.key] = curr.value
             return acc
         }, {})
     },
 
-    updateGlobalSettings: async (settings: any) => {
+    updateGlobalSettings: async (settings: Record<string, unknown>) => {
         const updates = Object.entries(settings).map(([key, value]) => ({
             key,
             value,
@@ -357,7 +358,7 @@ export const superadminApi = {
         return data
     },
 
-    connectGateway: async (provider: string, config: any, isMaster: boolean = false) => {
+    connectGateway: async (provider: string, config: GatewayConfig, isMaster: boolean = false) => {
         const { data, error } = await supabase
             .from('gateways')
             .upsert({
@@ -400,7 +401,7 @@ export const superadminApi = {
         return data || []
     },
 
-    connectTenantGateway: async (storeId: string, provider: string, config: any) => {
+    connectTenantGateway: async (storeId: string, provider: string, config: GatewayConfig) => {
         const { data, error } = await supabase
             .from('gateways')
             .upsert({
@@ -430,7 +431,7 @@ export const superadminApi = {
         if (error) throw error
         return (data || []).map(s => ({
             ...s,
-            store_name: (s as any).stores?.name
+            store_name: (s as unknown as { stores?: { name: string } }).stores?.name
         }))
     },
 
@@ -446,7 +447,7 @@ export const superadminApi = {
         window.location.href = '/sa/overview'
     },
 
-    updateSubscription: async (storeId: string, data: any) => {
+    updateSubscription: async (storeId: string, data: Partial<Subscription>) => {
         const { data: updated, error } = await supabase
             .from('subscriptions')
             .upsert({ store_id: storeId, ...data }, { onConflict: 'store_id' })
@@ -471,7 +472,7 @@ export const superadminApi = {
             email: data.email,
             country: sourceStore.country || 'Argentina',
             is_active: true,
-            plan_type: (sourceStore.metadata as any)?.plan_type || 'free'
+            plan_type: sourceStore.metadata?.plan_type || 'free'
         })
 
         await supabase

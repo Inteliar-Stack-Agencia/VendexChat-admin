@@ -1,7 +1,8 @@
 import { supabase } from '../supabaseClient'
+import type { User } from '@supabase/supabase-js'
 
 // Cache volátil en memoria para evitar llamadas redundantes de getUser en la misma sesión
-let _cachedUser: any = null
+let _cachedUser: User | null = null
 let _lastSyncedStoreId: string | null = null
 
 export const getStoreId = async (): Promise<string> => {
@@ -50,7 +51,7 @@ export const getStoreId = async (): Promise<string> => {
         if (store) {
             _lastSyncedStoreId = store.id
             supabase.from('profiles').update({ store_id: store.id }).eq('id', user.id)
-                .then(() => {}, (e) => console.warn('[getStoreId] Profile update failed (non-blocking):', e))
+                .then(() => { }, (e) => console.warn('[getStoreId] Profile update failed (non-blocking):', e))
             return store.id
         }
     }

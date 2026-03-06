@@ -239,7 +239,7 @@ export default function ProductsPage() {
   const handleUpdateStatus = async (product: Product, newStatus: 'visible' | 'no-stock' | 'hidden') => {
     setUpdatingId(product.id)
     try {
-      let updates: any = {}
+      let updates: Partial<Pick<Product, 'is_active' | 'unlimited_stock' | 'stock'>> = {}
       if (newStatus === 'visible') {
         updates = { is_active: true, unlimited_stock: true }
       } else if (newStatus === 'no-stock') {
@@ -251,9 +251,9 @@ export default function ProductsPage() {
       await productsApi.update(product.id, updates)
       setProducts(prev => prev.map(p => p.id === product.id ? { ...p, ...updates } : p))
       showToast('success', 'Estado actualizado')
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[ToggleProduct]', err)
-      showToast('error', err?.message || 'Error al actualizar estado')
+      showToast('error', err instanceof Error ? err.message : 'Error al actualizar estado')
     } finally {
       setUpdatingId(null)
     }

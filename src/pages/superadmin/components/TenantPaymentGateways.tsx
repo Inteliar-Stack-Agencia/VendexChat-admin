@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { CreditCard, CheckCircle, RefreshCw } from 'lucide-react'
+import type { PaymentGateway, GatewayConfig } from '../../../types'
 
 interface TenantPaymentGatewaysProps {
-    gateways: any[]
-    onConnect: (provider: string, config: any) => Promise<boolean>
+    gateways: PaymentGateway[]
+    onConnect: (provider: string, config: GatewayConfig) => Promise<boolean>
     onDisconnect: (id: string | number) => Promise<boolean>
     isSaving: boolean
 }

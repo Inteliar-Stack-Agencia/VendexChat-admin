@@ -1,19 +1,20 @@
 import { Link } from 'react-router-dom'
 import { CheckCircle2, Circle, Store, Package, CreditCard, ChevronRight } from 'lucide-react'
 import { Card } from '../common'
+import type { Tenant, DashboardStats } from '../../types'
 
 interface OnboardingStep {
     id: string
     label: string
     description: string
-    icon: any
+    icon: React.ElementType
     path: string
     isCompleted: boolean
 }
 
 interface OnboardingChecklistProps {
-    tenant: any
-    stats: any
+    tenant: Tenant | null
+    stats: DashboardStats | null
 }
 
 export default function OnboardingChecklist({ tenant, stats }: OnboardingChecklistProps) {
@@ -79,8 +80,8 @@ export default function OnboardingChecklist({ tenant, stats }: OnboardingCheckli
                     {steps.map((step) => (
                         <Link key={step.id} to={step.path}>
                             <div className={`p-4 rounded-xl border transition-all duration-300 group hover:shadow-md ${step.isCompleted
-                                    ? 'bg-white border-emerald-100'
-                                    : 'bg-white border-slate-100 hover:border-indigo-200'
+                                ? 'bg-white border-emerald-100'
+                                : 'bg-white border-slate-100 hover:border-indigo-200'
                                 }`}>
                                 <div className="flex items-start justify-between mb-3">
                                     <div className={`p-2 rounded-lg ${step.isCompleted ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-50 text-slate-400 group-hover:text-indigo-600'

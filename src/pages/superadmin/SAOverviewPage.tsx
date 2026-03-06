@@ -55,7 +55,7 @@ export default function SAOverviewPage() {
                                 </div>
                             ))
                         ) : data?.recent_activity && data.recent_activity.length > 0 ? (
-                            data.recent_activity.map((activity: any, i: number) => (
+                            data.recent_activity.map((activity: { name: string; created_at: string; is_active: boolean }, i: number) => (
                                 <div key={i} className="flex items-center gap-4 group">
                                     <div className="w-12 h-12 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 group-hover:bg-indigo-600 group-hover:text-white transition-all duration-300">
                                         <Store className="w-5 h-5 text-slate-400 group-hover:text-white" />

@@ -147,9 +147,9 @@ export default function ProductFormPage() {
       }
 
       navigate('/products')
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error al guardar producto:', err)
-      const msg = err?.message || (typeof err === 'string' ? err : 'Error al guardar')
+      const msg = err instanceof Error ? err.message : 'Error al guardar'
       showToast('error', msg)
     } finally {
       setSaving(false)

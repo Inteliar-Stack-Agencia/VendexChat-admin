@@ -181,9 +181,9 @@ export default function BulkPriceEditorPage() {
             )
             setEditedPrices({})
             showToast('success', `${updates.length} precios actualizados correctamente`)
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('Error saving prices:', err)
-            showToast('error', err?.message || 'Error al guardar precios')
+            showToast('error', err instanceof Error ? err.message : 'Error al guardar precios')
         } finally {
             setSaving(false)
         }

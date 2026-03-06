@@ -4,6 +4,7 @@ import { useTenants } from '../../hooks/useTenants'
 import SACreateTenantModal from './SACreateTenantModal'
 import SADeleteTenantModal from './SADeleteTenantModal'
 import TenantTableRow from './components/TenantTableRow'
+import type { Tenant } from '../../types'
 
 export default function SATenantsPage() {
     const {
@@ -20,9 +21,9 @@ export default function SATenantsPage() {
     } = useTenants()
 
     const [showModal, setShowModal] = useState(false)
-    const [selectedTenantForDelete, setSelectedTenantForDelete] = useState<any | null>(null)
+    const [selectedTenantForDelete, setSelectedTenantForDelete] = useState<Tenant | null>(null)
 
-    const handleCreateConfirm = async (data: any) => {
+    const handleCreateConfirm = async (data: { name: string; slug: string; email: string; country?: string; is_active?: boolean; password?: string; whatsapp?: string; plan_type?: string }) => {
         const success = await createTenant(data)
         if (success) setShowModal(false)
     }

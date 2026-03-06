@@ -46,10 +46,10 @@ export const couponsApi = {
     },
 
     update: async (id: string, data: Partial<CouponFormData>) => {
-        const updateData: any = { ...data }
+        const updateData: Partial<CouponFormData> = { ...data }
         if (data.value) updateData.value = Number(data.value)
         if (data.min_purchase_amount !== undefined) updateData.min_purchase_amount = Number(data.min_purchase_amount)
-        if (data.usage_limit !== undefined) updateData.usage_limit = data.usage_limit ? Number(data.usage_limit) : null
+        if (data.usage_limit !== undefined) (updateData as { usage_limit?: number | string | null }).usage_limit = data.usage_limit ? Number(data.usage_limit) : null
 
         const { data: updated, error } = await supabase
             .from('coupons')

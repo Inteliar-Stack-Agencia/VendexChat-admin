@@ -6,7 +6,7 @@ interface SACloneTenantModalProps {
     sourceTenant: Tenant
     onClose: () => void
     onSuccess: (newTenantId: string) => void
-    onClone: (data: { name: string; slug: string; email: string }) => Promise<any>
+    onClone: (data: { name: string; slug: string; email: string }) => Promise<Tenant>
 }
 
 export default function SACloneTenantModal({ sourceTenant, onClose, onSuccess, onClone }: SACloneTenantModalProps) {
@@ -27,9 +27,9 @@ export default function SACloneTenantModal({ sourceTenant, onClose, onSuccess, o
                 email
             })
             onSuccess(res.id)
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('Clone Error:', err)
-            setError(err.message || 'Error al clonar la tienda. Verifique que el slug no esté en uso.')
+            setError(err instanceof Error ? err.message : 'Error al clonar la tienda. Verifique que el slug no esté en uso.')
         } finally {
             setSaving(false)
         }

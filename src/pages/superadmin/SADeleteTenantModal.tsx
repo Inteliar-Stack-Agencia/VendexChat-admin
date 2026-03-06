@@ -24,9 +24,9 @@ export default function SADeleteTenantModal({ tenant, onClose, onConfirm }: SADe
         setError(null)
         try {
             await onConfirm()
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('Delete Error:', err)
-            setError(err.message || 'Error al intentar eliminar la tienda. Inténtelo de nuevo.')
+            setError(err instanceof Error ? err.message : 'Error al intentar eliminar la tienda. Inténtelo de nuevo.')
             setIsDeleting(false)
         }
     }

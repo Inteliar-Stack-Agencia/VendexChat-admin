@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react'
 import { Shield, UserPlus, MoreHorizontal, User, Mail, ShieldCheck, Trash2 } from 'lucide-react'
 import { superadminApi } from '../../services/api'
 import { toast } from 'sonner'
+import type { SuperadminUser } from '../../types'
 
 export default function SAPermissionsPage() {
-    const [users, setUsers] = useState<any[]>([])
+    const [users, setUsers] = useState<SuperadminUser[]>([])
     const [loading, setLoading] = useState(true)
 
     useEffect(() => {
@@ -14,7 +15,7 @@ export default function SAPermissionsPage() {
     const loadUsers = () => {
         superadminApi.listUsers()
             .then(res => {
-                setUsers(res.filter((u: any) => u.role === 'superadmin'))
+                setUsers(res.filter((u) => u.role === 'superadmin') as SuperadminUser[])
             })
             .finally(() => setLoading(false))
     }
@@ -27,8 +28,8 @@ export default function SAPermissionsPage() {
             await superadminApi.inviteStaff(email)
             toast.success('Usuario promovido a Administrador con éxito.')
             loadUsers()
-        } catch (err: any) {
-            toast.error(err.message || 'Error al invitar admin.')
+        } catch (err: unknown) {
+            toast.error(err instanceof Error ? err.message : 'Error al invitar admin.')
         } finally {
             setLoading(false)
         }

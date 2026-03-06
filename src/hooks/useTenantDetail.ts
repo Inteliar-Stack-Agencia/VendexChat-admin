@@ -1,13 +1,13 @@
 import { useState, useEffect, useCallback } from 'react'
 import { superadminApi } from '../services/api'
-import { Tenant } from '../types'
+import type { Tenant, PaymentGateway, TenantMetadata, GatewayConfig } from '../types'
 import { showToast } from '../components/common/Toast'
 
 export function useTenantDetail(id: string | undefined) {
     const [tenant, setTenant] = useState<Tenant | null>(null)
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState<Record<string, boolean>>({})
-    const [tenantGateways, setTenantGateways] = useState<any[]>([])
+    const [tenantGateways, setTenantGateways] = useState<PaymentGateway[]>([])
 
     const loadTenant = useCallback(async () => {
         if (!id) return
@@ -41,15 +41,15 @@ export function useTenantDetail(id: string | undefined) {
             setTenant({ ...tenant, ...data })
             showToast('success', 'Tienda actualizada correctamente.')
             return true
-        } catch (err: any) {
-            showToast('error', `Error al actualizar: ${err.message}`)
+        } catch (err: unknown) {
+            showToast('error', `Error al actualizar: ${err instanceof Error ? err.message : 'Error desconocido'}`)
             return false
         } finally {
             setSavingState('general', false)
         }
     }
 
-    const updateMetadata = async (metadata: any) => {
+    const updateMetadata = async (metadata: Partial<TenantMetadata>) => {
         if (!tenant || !id) return false
         setSavingState('metadata', true)
         try {
@@ -58,8 +58,8 @@ export function useTenantDetail(id: string | undefined) {
             setTenant({ ...tenant, metadata: updatedMetadata })
             showToast('success', 'Configuración actualizada.')
             return true
-        } catch (err: any) {
-            showToast('error', `Error: ${err.message}`)
+        } catch (err: unknown) {
+            showToast('error', `Error: ${err instanceof Error ? err.message : 'Error desconocido'}`)
             return false
         } finally {
             setSavingState('metadata', false)
@@ -73,7 +73,7 @@ export function useTenantDetail(id: string | undefined) {
             const updatedMetadata = { ...(tenant.metadata || {}), plan_type: targetPlan }
             await superadminApi.updateTenant(id, { metadata: updatedMetadata })
             await superadminApi.updateSubscription(id, {
-                plan_type: targetPlan,
+                plan_type: targetPlan as 'free' | 'pro' | 'vip' | 'ultra',
                 status: 'active',
                 current_period_end: new Date(new Date().setFullYear(new Date().getFullYear() + 10)).toISOString(),
                 billing_cycle: 'annual'
@@ -81,15 +81,15 @@ export function useTenantDetail(id: string | undefined) {
             setTenant({ ...tenant, metadata: updatedMetadata })
             showToast('success', `Plan cambiado a ${targetPlan.toUpperCase()}`)
             return true
-        } catch (err: any) {
-            showToast('error', `Error al cambiar plan: ${err.message}`)
+        } catch (err: unknown) {
+            showToast('error', `Error al cambiar plan: ${err instanceof Error ? err.message : 'Error desconocido'}`)
             return false
         } finally {
             setSavingState('plan', false)
         }
     }
 
-    const connectGateway = async (provider: string, config: any) => {
+    const connectGateway = async (provider: string, config: GatewayConfig) => {
         if (!tenant) return false
         setSavingState('gateway', true)
         try {
@@ -97,7 +97,7 @@ export function useTenantDetail(id: string | undefined) {
             setTenantGateways(prev => [...prev.filter(g => g.provider !== provider), result])
             showToast('success', `Pasarela ${provider} conectada.`)
             return true
-        } catch (err: any) {
+        } catch {
             showToast('error', 'Error al vincular pasarela.')
             return false
         } finally {
@@ -134,8 +134,8 @@ export function useTenantDetail(id: string | undefined) {
             showToast('success', 'Tienda eliminada.')
             window.location.href = '/sa/tenants'
             return true
-        } catch (err: any) {
-            showToast('error', `Error al eliminar: ${err.message}`)
+        } catch (err: unknown) {
+            showToast('error', `Error al eliminar: ${err instanceof Error ? err.message : 'Error desconocido'}`)
             return false
         }
     }

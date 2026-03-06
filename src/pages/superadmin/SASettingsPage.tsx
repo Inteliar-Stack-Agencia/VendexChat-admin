@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Settings, Shield, CreditCard, RefreshCw, Save, AlertCircle, Plus, X } from 'lucide-react'
 import { superadminApi } from '../../services/api'
 import { toast } from 'sonner'
+import type { PaymentGateway } from '../../types'
 
 export default function SASettingsPage() {
     const [settings, setSettings] = useState({
@@ -12,14 +13,14 @@ export default function SASettingsPage() {
         global_announcement_active: false,
         global_announcement_text: ''
     })
-    const [gateways, setGateways] = useState<any[]>([])
+    const [gateways, setGateways] = useState<PaymentGateway[]>([])
     const [showModal, setShowModal] = useState(false)
     const [newGateway, setNewGateway] = useState({ provider: 'stripe', public_key: '', secret_key: '' })
     const [saving, setSaving] = useState(false)
 
     useEffect(() => {
         superadminApi.listGateways(true).then(setGateways).catch(console.error)
-        superadminApi.getGlobalSettings().then(setSettings).catch(console.error)
+        superadminApi.getGlobalSettings().then(res => setSettings(s => ({ ...s, ...(res as typeof s) }))).catch(console.error)
     }, [])
 
     const handleSave = async () => {
@@ -43,10 +44,10 @@ export default function SASettingsPage() {
             setNewGateway({ provider: 'stripe', public_key: '', secret_key: '' })
             superadminApi.listGateways(true).then(setGateways)
             toast.success('Pasarela conectada con éxito.')
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('Error connecting gateway:', err)
             toast.error('Error al conectar la pasarela', {
-                description: err.message || 'Error desconocido'
+                description: err instanceof Error ? err.message : 'Error desconocido'
             })
         } finally {
             setSaving(false)

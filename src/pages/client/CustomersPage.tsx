@@ -4,18 +4,19 @@ import { Card, LoadingSpinner, EmptyState, Modal, Button, showToast } from '../.
 import { customersApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import { formatPrice, formatShortDate, whatsappLink, orderStatusConfig } from '../../utils/helpers'
+import type { Customer } from '../../types'
 
 export default function CustomersPage() {
     const { selectedStoreId } = useAuth()
-    const [customers, setCustomers] = useState<any[]>([])
+    const [customers, setCustomers] = useState<Customer[]>([])
     const [loading, setLoading] = useState(true)
     const [search, setSearch] = useState('')
-    const [selectedCustomer, setSelectedCustomer] = useState<any | null>(null)
+    const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
     const [isEditingNotes, setIsEditingNotes] = useState(false)
     const [isViewingOrders, setIsViewingOrders] = useState(false)
     const [notes, setNotes] = useState('')
     const [saving, setSaving] = useState(false)
-    const [customerOrders, setCustomerOrders] = useState<any[]>([])
+    const [customerOrders, setCustomerOrders] = useState<{ id: string; order_number: number; total: number; status: string; created_at: string }[]>([])
     const [loadingOrders, setLoadingOrders] = useState(false)
 
     useEffect(() => {
@@ -45,7 +46,7 @@ export default function CustomersPage() {
         }
     }
 
-    const handleViewOrders = async (customer: any) => {
+    const handleViewOrders = async (customer: Customer) => {
         setSelectedCustomer(customer)
         setIsViewingOrders(true)
         setLoadingOrders(true)

@@ -2,7 +2,65 @@
 // VENDExChat Admin - Tipos TypeScript
 // ========================================
 
-// --- Usuario y Autenticación ---
+import type { LucideIcon } from 'lucide-react'
+
+// --- Tipos auxiliares ---
+export type { LucideIcon }
+
+export interface TenantMetadata {
+  plan_type?: string;
+  payment_methods?: Record<string, boolean>;
+  [key: string]: unknown;
+}
+
+export interface OrderMetadata {
+  payment_method?: string;
+  payment_status?: string;
+  delivery_type?: string;
+  coupon_code?: string;
+  discount_amount?: number;
+  [key: string]: unknown;
+}
+
+export interface RecentActivity {
+  name: string;
+  created_at: string;
+  is_active: boolean;
+}
+
+export interface GatewayConfig {
+  public_key?: string;
+  secret_key?: string;
+  access_token?: string;
+  [key: string]: unknown;
+}
+
+export interface StoreStatEntry {
+  name: string;
+  sales: number;
+  orders: number;
+}
+
+export interface TrendPoint {
+  date: string;
+  value: number;
+}
+
+export interface TopStore {
+  name: string;
+  sales: string;
+  orders: number;
+  growth: string;
+}
+
+export interface GlobalStats {
+  revenue_trend: TrendPoint[];
+  orders_trend: TrendPoint[];
+  top_stores: TopStore[];
+  revenue_growth: string;
+  orders_growth: string;
+}
+
 // --- Usuario y Autenticación ---
 export interface User {
   id: string // Supabase Auth uses UUID
@@ -61,7 +119,7 @@ export interface Tenant {
   city: string | null
   is_active: boolean;
   coupons_enabled: boolean;
-  metadata?: any;
+  metadata?: TenantMetadata;
   ai_prompt?: string | null;
   low_stock_threshold: number;
   popups: Popup[];
@@ -173,7 +231,7 @@ export interface Order {
   delivery_cost: number
   total: number
   items: OrderItem[]
-  metadata?: any | null
+  metadata?: OrderMetadata | null
   created_at: string
   updated_at: string
 }
@@ -204,7 +262,7 @@ export interface SuperadminDashboard {
   active_stores: number
   new_stores_7d: number
   mrr_estimated: number
-  recent_activity: any[]
+  recent_activity: RecentActivity[]
   failed_payments: number
   pending_actions: number
   // Legacy fields kept for backwards-compatibility with old dashboard component
@@ -218,11 +276,25 @@ export interface SuperadminUser {
   id: string
   email: string
   name: string
+  full_name?: string
   role: string
   store_id: string | null
   store_name?: string
   last_login: string | null
   is_active: boolean
+  created_at: string
+}
+
+export interface Customer {
+  id: string
+  store_id: string
+  name: string
+  whatsapp: string
+  email?: string | null
+  total_orders: number
+  total_spent: number | string
+  last_order_at: string | null
+  notes?: string | null
   created_at: string
 }
 

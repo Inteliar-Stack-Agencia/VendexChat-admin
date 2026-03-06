@@ -8,9 +8,10 @@ import { Card, LoadingSpinner, EmptyState, Modal, Button, showToast } from '../.
 import { customersApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import { formatPrice, formatShortDate, whatsappLink, orderStatusConfig } from '../../utils/helpers'
+import type { Customer } from '../../types'
 
 // --- Etiquetas automáticas basadas en comportamiento ---
-function getCustomerTags(customer: any, allCustomers: any[]) {
+function getCustomerTags(customer: Customer, allCustomers: Customer[]) {
     const tags: { label: string; color: string; bg: string }[] = []
     const days = customer.last_order_at
         ? Math.floor((Date.now() - new Date(customer.last_order_at).getTime()) / 86400000)
@@ -28,7 +29,7 @@ function getCustomerTags(customer: any, allCustomers: any[]) {
     // Inactivo: sin pedir hace 60+ días
     if (days >= 60) {
         tags.push({ label: '😴 Inactivo', color: 'text-red-700', bg: 'bg-red-100' })
-    // En riesgo: 20-59 días y tenía historial
+        // En riesgo: 20-59 días y tenía historial
     } else if (days >= 20 && customer.total_orders >= 2) {
         tags.push({ label: '⚠️ En riesgo', color: 'text-orange-700', bg: 'bg-orange-100' })
     }
@@ -70,11 +71,11 @@ const TAG_FILTERS = ['Todos', 'VIP', 'Frecuente', 'En riesgo', 'Inactivo', 'Nuev
 
 function CrmIaPageInner() {
     const { selectedStoreId } = useAuth()
-    const [customers, setCustomers] = useState<any[]>([])
+    const [customers, setCustomers] = useState<Customer[]>([])
     const [loading, setLoading] = useState(true)
     const [search, setSearch] = useState('')
     const [tagFilter, setTagFilter] = useState('Todos')
-    const [selectedCustomer, setSelectedCustomer] = useState<any | null>(null)
+    const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
 
     // Estado de modales
     const [isEditingNotes, setIsEditingNotes] = useState(false)
@@ -87,7 +88,7 @@ function CrmIaPageInner() {
     const [saving, setSaving] = useState(false)
 
     // Pedidos del cliente
-    const [customerOrders, setCustomerOrders] = useState<any[]>([])
+    const [customerOrders, setCustomerOrders] = useState<{ id: string; order_number: number; total: number; status: string; created_at: string }[]>([])
     const [loadingOrders, setLoadingOrders] = useState(false)
 
     // IA
@@ -123,7 +124,7 @@ function CrmIaPageInner() {
         }
     }
 
-    const handleViewOrders = async (customer: any) => {
+    const handleViewOrders = async (customer: Customer) => {
         setSelectedCustomer(customer)
         setIsViewingOrders(true)
         setLoadingOrders(true)
@@ -137,7 +138,7 @@ function CrmIaPageInner() {
         }
     }
 
-    const handleAIAnalysis = async (customer: any) => {
+    const handleAIAnalysis = async (customer: Customer) => {
         setSelectedCustomer(customer)
         setAiAnalysisText('')
         setIsAIAnalysis(true)
@@ -165,7 +166,7 @@ Notas internas: ${customer.notes || 'ninguna'}`
         }
     }
 
-    const handleAIMessage = async (customer: any) => {
+    const handleAIMessage = async (customer: Customer) => {
         setSelectedCustomer(customer)
         setAiMessageText('')
         setIsAIMessage(true)
@@ -283,11 +284,10 @@ Notas del vendedor: ${customer.notes || 'ninguna'}`
                             <button
                                 key={tag}
                                 onClick={() => setTagFilter(tag)}
-                                className={`px-3 py-1 rounded-full text-xs font-semibold transition-all border ${
-                                    tagFilter === tag
+                                className={`px-3 py-1 rounded-full text-xs font-semibold transition-all border ${tagFilter === tag
                                         ? 'bg-indigo-600 text-white border-indigo-600'
                                         : 'bg-white text-gray-600 border-gray-300 hover:border-indigo-400 hover:text-indigo-600'
-                                }`}
+                                    }`}
                             >
                                 {tag}
                             </button>
@@ -325,8 +325,8 @@ Notas del vendedor: ${customer.notes || 'ninguna'}`
                                     const daysColor = days === null
                                         ? 'text-gray-400'
                                         : days < 7 ? 'text-emerald-600'
-                                        : days < 30 ? 'text-amber-600'
-                                        : 'text-red-500'
+                                            : days < 30 ? 'text-amber-600'
+                                                : 'text-red-500'
                                     return (
                                         <tr key={customer.id} className="hover:bg-gray-50 transition-colors">
                                             <td className="px-6 py-4">

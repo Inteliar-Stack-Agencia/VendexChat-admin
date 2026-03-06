@@ -279,7 +279,7 @@ export default function AIImporterPage() {
 
             if (!Array.isArray(extractedRaw)) throw new Error('La IA no devolvió una lista');
 
-            const extracted: TempProduct[] = extractedRaw.map((item: any) => {
+            const extracted: TempProduct[] = extractedRaw.map((item: { name?: string; price?: number; description?: string }) => {
                 const normalized = normalizeProductData(item.name || 'Sin nombre', item.description || '')
                 return {
                     id: crypto.randomUUID(),

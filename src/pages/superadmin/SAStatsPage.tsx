@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
 import { TrendingUp, DollarSign, ShoppingBag, Store } from 'lucide-react'
 import { superadminApi } from '../../services/api'
+import type { GlobalStats, TrendPoint, TopStore } from '../../types'
 
 export default function SAStatsPage() {
-    const [stats, setStats] = useState<any>(null)
+    const [stats, setStats] = useState<GlobalStats | null>(null)
     const [loading, setLoading] = useState(true)
 
     useEffect(() => {
@@ -38,7 +39,7 @@ export default function SAStatsPage() {
                     </div>
 
                     <div className="h-48 flex items-end gap-2 px-2">
-                        {stats?.revenue_trend.map((d: any, i: number) => (
+                        {stats?.revenue_trend.map((d: TrendPoint, i: number) => (
                             <div key={i} className="flex-1 flex flex-col items-center gap-2 group">
                                 <div
                                     className="w-full bg-indigo-100 rounded-lg group-hover:bg-indigo-600 transition-all cursor-pointer relative"
@@ -67,7 +68,7 @@ export default function SAStatsPage() {
                     </div>
 
                     <div className="h-48 flex items-end gap-2 px-2">
-                        {stats?.orders_trend.map((d: any, i: number) => (
+                        {stats?.orders_trend.map((d: TrendPoint, i: number) => (
                             <div key={i} className="flex-1 flex flex-col items-center gap-2 group">
                                 <div
                                     className="w-full bg-indigo-100 rounded-lg group-hover:bg-indigo-600 transition-all cursor-pointer relative"
@@ -91,7 +92,7 @@ export default function SAStatsPage() {
                 </div>
                 <div className="p-0">
                     {stats?.top_stores && stats.top_stores.length > 0 ? (
-                        stats.top_stores.map((store: any, i: number) => (
+                        stats.top_stores.map((store: TopStore, i: number) => (
                             <div key={i} className="flex items-center justify-between px-8 py-6 border-b border-slate-50 last:border-0 hover:bg-slate-50/50 transition-colors group">
                                 <div className="flex items-center gap-4">
                                     <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center border border-slate-200 group-hover:bg-indigo-600 group-hover:border-indigo-600 transition-colors">

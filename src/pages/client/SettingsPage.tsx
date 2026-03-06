@@ -210,9 +210,9 @@ export default function SettingsPage() {
         }
       } as any)
       showToast('success', 'Información actualizada')
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[SaveGeneral]', err)
-      showToast('error', err?.message || 'Error al guardar general')
+      showToast('error', err instanceof Error ? err.message : 'Error al guardar general')
     } finally {
       setSaving(false)
     }
@@ -232,9 +232,9 @@ export default function SettingsPage() {
       setInstagram(cleanInstagram)
       setFacebook(cleanFacebook)
       showToast('success', 'Contacto actualizado')
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[SaveContact]', err)
-      showToast('error', err?.message || 'Error al guardar contacto')
+      showToast('error', err instanceof Error ? err.message : 'Error al guardar contacto')
     } finally {
       setSaving(false)
     }
@@ -259,9 +259,9 @@ export default function SettingsPage() {
         low_stock_threshold: Number(lowStockThreshold)
       })
       showToast('success', 'Configuración de pedidos actualizada')
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[SaveOrders]', err)
-      showToast('error', err?.message || 'Error al guardar pedidos')
+      showToast('error', err instanceof Error ? err.message : 'Error al guardar pedidos')
     } finally {
       setSaving(false)
     }
@@ -282,9 +282,9 @@ export default function SettingsPage() {
         footer_message: footerMessage,
       })
       showToast('success', 'Personalización actualizada')
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[SaveCustomization]', err)
-      showToast('error', err?.message || 'Error al guardar diseño')
+      showToast('error', err instanceof Error ? err.message : 'Error al guardar diseño')
     } finally {
       setSaving(false)
     }
@@ -389,9 +389,9 @@ export default function SettingsPage() {
 
       handleUpdateTenantState({ metadata: updatedMetadata } as any)
       showToast('success', 'Configuración de impresora actualizada')
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error saving printer settings:', err)
-      showToast('error', err?.message || 'Error al guardar')
+      showToast('error', err instanceof Error ? err.message : 'Error al guardar')
     } finally {
       setSaving(false)
     }
@@ -420,7 +420,7 @@ export default function SettingsPage() {
       }
 
       showToast('success', `${isLogo ? 'Logo' : 'Banner'} subido y guardado correctamente`)
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error uploading image (Settings):', err)
       showToast('error', 'Error al subir la imagen. Verifica el tamaño y formato.')
     } finally {

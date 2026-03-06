@@ -17,7 +17,7 @@ export function useTenants() {
             const res = await superadminApi.listTenants({ q: searchTerm, status: statusFilter })
             setTenants(res.data)
             setTotal(res.total)
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('Error loading tenants:', err)
             toast.error('Error al cargar tiendas')
         } finally {
@@ -33,7 +33,7 @@ export function useTenants() {
         return () => clearTimeout(delayDebounceFn)
     }, [loadTenants])
 
-    const createTenant = async (data: any) => {
+    const createTenant = async (data: { name: string; slug: string; email: string; country?: string; is_active?: boolean; password?: string; whatsapp?: string; plan_type?: string }) => {
         setSaving(true)
         try {
             await superadminApi.createTenant({
@@ -44,10 +44,10 @@ export function useTenants() {
             toast.success('Tienda creada exitosamente')
             loadTenants()
             return true
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('Error creating tenant:', err)
             toast.error('Error al crear la tienda', {
-                description: err.message || 'El slug podría estar duplicado.'
+                description: err instanceof Error ? err.message : 'El slug podría estar duplicado.'
             })
             return false
         } finally {
@@ -61,7 +61,7 @@ export function useTenants() {
             toast.success('Tienda eliminada permanentemente')
             loadTenants()
             return true
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('Error deleting tenant:', err)
             toast.error('Error al eliminar la tienda')
             return false
