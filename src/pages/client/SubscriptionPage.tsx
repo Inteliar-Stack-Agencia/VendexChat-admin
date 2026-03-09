@@ -259,7 +259,7 @@ export default function SubscriptionPage() {
                                     </div>
 
                                     <div className="space-y-3">
-                                        <Button
+                                        <button
                                             onClick={() => {
                                                 if (plan.id === 'ultra') {
                                                     window.open(`https://wa.me/5491100000000?text=Hola! Quiero info sobre el plan VENDEx ULTRA`, '_blank')
@@ -268,21 +268,24 @@ export default function SubscriptionPage() {
                                                 }
                                             }}
                                             disabled={isCurrent || isProcessing}
-                                            loading={isProcessing && selectedPlan?.id === plan.id}
-                                            className={`w-full py-4 rounded-2xl font-black uppercase tracking-widest text-[10px] flex items-center justify-center gap-2 group/btn transition-all ${isCurrent
-                                                ? 'bg-slate-100 text-slate-400 cursor-not-allowed border-0'
+                                            className={`w-full py-4 rounded-2xl font-black uppercase tracking-widest text-[10px] flex items-center justify-center gap-2 group/btn transition-all disabled:opacity-50 disabled:cursor-not-allowed ${isCurrent
+                                                ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
                                                 : isPopular
                                                     ? 'bg-indigo-600 text-white hover:bg-slate-900 shadow-xl shadow-indigo-100 hover:shadow-indigo-200'
                                                     : plan.id === 'vip'
                                                         ? 'bg-amber-500 text-white hover:bg-slate-900 shadow-xl shadow-amber-100 hover:shadow-amber-200'
                                                         : plan.id === 'ultra'
                                                             ? 'bg-purple-600 text-white hover:bg-slate-900 shadow-xl shadow-purple-100 hover:shadow-purple-200'
-                                                            : 'bg-white text-slate-900 border-2 border-slate-100 hover:border-slate-900'
+                                                            : 'bg-slate-100 text-slate-500 border-2 border-slate-200 hover:border-slate-900 hover:text-slate-900'
                                                 }`}
                                         >
+                                            {isProcessing && selectedPlan?.id === plan.id
+                                                ? <span className="animate-spin w-4 h-4 border-2 border-current border-t-transparent rounded-full" />
+                                                : null
+                                            }
                                             {isCurrent ? 'Tu Plan Actual' : plan.id === 'ultra' ? 'Contactar' : 'Suscribirse'}
                                             {!isCurrent && <ArrowRight className="w-4 h-4 transition-transform group-hover/btn:translate-x-1" />}
-                                        </Button>
+                                        </button>
                                     </div>
                                 </Card>
                             )
