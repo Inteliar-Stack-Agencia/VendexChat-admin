@@ -275,7 +275,7 @@ export default function SubscriptionPage() {
                                         <button
                                             onClick={() => {
                                                 if (plan.id === 'ultra') {
-                                                    window.open(`https://wa.me/5491100000000?text=Hola! Quiero info sobre el plan VENDEx ULTRA`, '_blank')
+                                                    window.open(`https://wa.me/5491165689145?text=Hola! Quiero info sobre el plan VENDEx ULTRA`, '_blank')
                                                 } else {
                                                     handleSubscribe(plan.id)
                                                 }
@@ -423,7 +423,7 @@ export default function SubscriptionPage() {
                                     </div>
 
                                     <a
-                                        href={`https://wa.me/5491100000000?text=${encodeURIComponent(`Hola! Quiero activar el plan VENDEx ${selectedPlan.name} (${billingCycle === 'monthly' ? 'Mensual' : 'Anual'}) - USD $${amount}. Email: ${user?.email || ''}`)}`}
+                                        href={`https://wa.me/5491165689145?text=${encodeURIComponent(`Hola! Quiero activar el plan VENDEx ${selectedPlan.name} (${billingCycle === 'monthly' ? 'Mensual' : 'Anual'}) - USD $${amount}. Email: ${user?.email || ''}`)}`}
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         className="w-full flex items-center justify-center gap-3 bg-emerald-500 hover:bg-emerald-600 text-white font-black uppercase tracking-widest text-[11px] py-4 rounded-2xl transition-colors shadow-lg shadow-emerald-100"
