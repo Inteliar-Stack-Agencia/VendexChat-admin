@@ -231,6 +231,7 @@ export default function SubscriptionPage() {
                                             {style.icon}
                                         </div>
                                         <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">{plan.name}</h3>
+                                        <p className="text-[11px] text-slate-500 font-medium mt-1 leading-snug">{plan.description}</p>
                                         <div className="mt-2 flex items-baseline gap-1">
                                             {plan.id !== 'free' && plan.id !== 'ultra' && (
                                                 <span className="text-slate-400 text-xs font-bold">USD</span>
