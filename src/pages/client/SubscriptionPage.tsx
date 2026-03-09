@@ -7,17 +7,21 @@ import {
     CreditCard,
     Clock,
     AlertCircle,
-    ArrowRight
+    ArrowRight,
+    MessageCircle
 } from 'lucide-react'
 import { Card, Button, Badge, LoadingSpinner, showToast, Modal } from '../../components/common'
-import { billingApi } from '../../services/api'
+import { billingApi, tenantApi } from '../../services/api'
 import { Subscription, SubscriptionPlan } from '../../types'
 import { useAuth } from '../../contexts/AuthContext'
 
 import MPPaymentBrick from '../../components/billing/MPPaymentBrick'
 
+// Países donde Mercado Pago está disponible
+const MP_COUNTRIES = ['Argentina', 'Uruguay', 'Chile', 'México', 'Colombia', 'Perú', 'Ecuador', 'Paraguay', 'Bolivia']
+
 export default function SubscriptionPage() {
-    const { refreshSubscription } = useAuth()
+    const { refreshSubscription, user } = useAuth()
     const [plans, setPlans] = useState<SubscriptionPlan[]>([])
     const [currentSub, setCurrentSub] = useState<Subscription | null>(null)
     const [loading, setLoading] = useState(true)
@@ -25,6 +29,7 @@ export default function SubscriptionPage() {
     const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(null)
     const [isProcessing, setIsProcessing] = useState(false)
     const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('monthly')
+    const [userCountry, setUserCountry] = useState<string | null>(null)
 
     useEffect(() => {
         const loadData = async () => {
@@ -52,6 +57,13 @@ export default function SubscriptionPage() {
                 setLoading(false)
             }
         }
+        // Cargar país de la tienda
+        tenantApi.getMe().then(store => {
+            setUserCountry(store.country)
+        }).catch(err => {
+            console.error('Error loading store country:', err)
+        })
+
         loadData()
     }, [])
 
@@ -364,43 +376,73 @@ export default function SubscriptionPage() {
                 <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 blur-[100px] rounded-full" />
             </div>
 
-            {/* Real Checkout Modal with Mercado Pago Brick */}
+            {/* Real Checkout Modal — flujo según país */}
             <Modal
                 isOpen={showCheckoutModal}
                 onClose={() => setShowCheckoutModal(false)}
                 title="Pagar Suscripción VENDEx"
             >
-                {selectedPlan && (
-                    <div className="p-4 sm:p-6 space-y-6">
-                        <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Plan Seleccionado</p>
-                            <div className="flex items-center justify-between">
-                                <h4 className="font-black text-xl text-slate-900 uppercase tracking-tight">{selectedPlan.name}</h4>
-                                <div className="text-right">
-                                    <span className="text-xl font-black text-indigo-600">
-                                        ${billingCycle === 'monthly' ? selectedPlan.price : selectedPlan.annual_price}
-                                    </span>
-                                    <span className="text-xs text-slate-400 block uppercase font-bold tracking-tighter">
-                                        / {billingCycle === 'monthly' ? 'mes' : 'año'}
-                                    </span>
+                {selectedPlan && (() => {
+                    const amount = billingCycle === 'annual' ? selectedPlan.annual_price : selectedPlan.price
+                    const isMPAvailable = MP_COUNTRIES.includes(userCountry || '')
+
+                    return (
+                        <div className="p-4 sm:p-6 space-y-6">
+                            {/* Plan Summary */}
+                            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Plan Seleccionado</p>
+                                <div className="flex items-center justify-between">
+                                    <h4 className="font-black text-xl text-slate-900 uppercase tracking-tight">{selectedPlan.name}</h4>
+                                    <div className="text-right">
+                                        <span className="text-xl font-black text-indigo-600">${amount}</span>
+                                        <span className="text-xs text-slate-400 block uppercase font-bold tracking-tighter">
+                                            / {billingCycle === 'monthly' ? 'mes' : 'año'}
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
 
-                        <MPPaymentBrick
-                            plan={selectedPlan}
-                            billingCycle={billingCycle}
-                            storeId={useAuth().user?.store_id || ''}
-                            onSuccess={handlePaymentSuccess}
-                            onCancel={() => setShowCheckoutModal(false)}
-                        />
+                            {isMPAvailable ? (
+                                /* Flujo Mercado Pago para países LATAM */
+                                <MPPaymentBrick
+                                    plan={selectedPlan}
+                                    billingCycle={billingCycle}
+                                    storeId={user?.store_id || ''}
+                                    onSuccess={handlePaymentSuccess}
+                                    onCancel={() => setShowCheckoutModal(false)}
+                                />
+                            ) : (
+                                /* Flujo manual para otros países */
+                                <div className="space-y-4">
+                                    <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 text-center space-y-2">
+                                        <MessageCircle className="w-10 h-10 text-amber-500 mx-auto" />
+                                        <p className="font-black text-slate-800 text-sm uppercase tracking-tight">Activación Manual</p>
+                                        <p className="text-xs text-slate-500 leading-relaxed">
+                                            Para tu país (<span className="font-bold text-slate-700">{userCountry || 'desconocido'}</span>), el pago se coordina con un asesor. Tocá el botón y te activamos el plan en minutos.
+                                        </p>
+                                    </div>
 
-                        <div className="text-center">
-                            <p className="text-[10px] font-bold text-slate-400 mb-2 uppercase tracking-tight">O contactar a un asesor</p>
-                            <a href={`https://wa.me/5491100000000?text=Ayuda con el pago del plan ${selectedPlan.name}`} className="text-indigo-600 font-black text-xs uppercase hover:underline">Chat de WhatsApp</a>
+                                    <a
+                                        href={`https://wa.me/5491100000000?text=${encodeURIComponent(`Hola! Quiero activar el plan VENDEx ${selectedPlan.name} (${billingCycle === 'monthly' ? 'Mensual' : 'Anual'}) - USD $${amount}. Email: ${user?.email || ''}`)}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="w-full flex items-center justify-center gap-3 bg-emerald-500 hover:bg-emerald-600 text-white font-black uppercase tracking-widest text-[11px] py-4 rounded-2xl transition-colors shadow-lg shadow-emerald-100"
+                                    >
+                                        <MessageCircle className="w-5 h-5" />
+                                        Activar por WhatsApp
+                                    </a>
+
+                                    <button
+                                        onClick={() => setShowCheckoutModal(false)}
+                                        className="w-full text-slate-400 text-sm font-bold hover:text-slate-600 transition-colors py-2"
+                                    >
+                                        Cancelar y volver
+                                    </button>
+                                </div>
+                            )}
                         </div>
-                    </div>
-                )}
+                    )
+                })()}
             </Modal>
         </div>
     )
