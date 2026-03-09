@@ -319,6 +319,7 @@ export interface Subscription {
 export interface SubscriptionPlan {
   id: string
   name: string
+  description: string
   price: number
   annual_price: number
   interval: 'month' | 'year'
