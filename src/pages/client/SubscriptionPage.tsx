@@ -232,6 +232,9 @@ export default function SubscriptionPage() {
                                         </div>
                                         <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">{plan.name}</h3>
                                         <div className="mt-2 flex items-baseline gap-1">
+                                            {plan.id !== 'free' && plan.id !== 'ultra' && (
+                                                <span className="text-slate-400 text-xs font-bold">USD</span>
+                                            )}
                                             <span className="text-4xl font-black text-slate-900 tracking-tighter">
                                                 {plan.id === 'ultra' ? 'Custom' : `$${billingCycle === 'monthly' ? plan.price : (plan.annual_price / 12).toFixed(2)}`}
                                             </span>
