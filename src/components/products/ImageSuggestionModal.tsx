@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Search, X, Loader2, Sparkles, Image as ImageIcon, AlertCircle } from 'lucide-react'
+import { Search, X, Loader2, Sparkles, Image as ImageIcon, AlertCircle, Globe } from 'lucide-react'
 import { Button, Card } from '../common'
 
 const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_API_KEY
@@ -12,11 +12,52 @@ interface SearchImage {
     title: string;
 }
 
+interface SearchImage {
+    url: string;
+    thumb: string;
+    alt: string;
+    source: string;
+}
+
+type SearchMode = 'ai' | 'web'
+
 interface ImageSuggestionModalProps {
     isOpen: boolean
     onClose: () => void
     onSelect: (url: string) => void
     initialQuery?: string
+}
+
+const GOOGLE_CX = import.meta.env.VITE_GOOGLE_CSE_CX || 'f2ec5d52f8cd24b2a'
+const GOOGLE_KEY = import.meta.env.VITE_GOOGLE_CSE_KEY || ''
+const PEXELS_KEY = import.meta.env.VITE_PEXELS_API_KEY || ''
+
+async function searchGoogle(query: string): Promise<SearchImage[]> {
+    const url = `https://www.googleapis.com/customsearch/v1?key=${GOOGLE_KEY}&cx=${GOOGLE_CX}&q=${encodeURIComponent(query)}&searchType=image&num=6`
+    const res = await fetch(url)
+    if (!res.ok) throw new Error(`Google error ${res.status}`)
+    const data = await res.json()
+    return (data.items || []).map((item: any) => ({
+        url: item.link,
+        thumb: item.image?.thumbnailLink || item.link,
+        alt: item.title,
+        source: 'google'
+    }))
+}
+
+async function searchPexels(query: string): Promise<SearchImage[]> {
+    const res = await fetch(
+        `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=6&orientation=square`,
+        { headers: { Authorization: PEXELS_KEY } }
+    )
+    if (!res.ok) throw new Error(`Pexels error ${res.status}`)
+    const data = await res.json()
+    return (data.photos || []).map((p: any) => ({
+        url: p.src.large,
+        thumb: p.src.medium,
+        alt: p.alt || query,
+        source: 'pexels'
+    }))
 }
 
 export default function ImageSuggestionModal({ isOpen, onClose, onSelect, initialQuery = '' }: ImageSuggestionModalProps) {
@@ -94,6 +135,14 @@ export default function ImageSuggestionModal({ isOpen, onClose, onSelect, initia
             handleSearch(initialQuery)
         }
     }, [isOpen, initialQuery])
+
+    // Reset results when switching mode
+    useEffect(() => {
+        setImages([])
+        setSearchResults([])
+        setError(null)
+        setUsedPexelsFallback(false)
+    }, [mode])
 
     if (!isOpen) return null
 
