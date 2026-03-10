@@ -50,27 +50,13 @@ function getDaysSince(lastOrderAt: string | null): number | null {
     return Math.floor((Date.now() - new Date(lastOrderAt).getTime()) / 86400000)
 }
 
-// --- Llamada a Pollinations (mismo patrón que AIAssistantPage) ---
-async function callAI(systemPrompt: string, userContent: string): Promise<string> {
-    const response = await fetch('https://text.pollinations.ai/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            messages: [
-                { role: 'system', content: systemPrompt },
-                { role: 'user', content: userContent }
-            ],
-            model: 'openai'
-        })
-    })
-    if (!response.ok) throw new Error('Error en IA')
-    return response.text()
-}
+import { callAI as callAIService } from '../../services/aiService'
 
 const TAG_FILTERS = ['Todos', 'VIP', 'Frecuente', 'En riesgo', 'Inactivo', 'Nuevo']
 
 function CrmIaPageInner() {
-    const { selectedStoreId } = useAuth()
+    const { selectedStoreId, subscription } = useAuth()
+    const plan = subscription?.plan_type ?? 'free'
     const [customers, setCustomers] = useState<Customer[]>([])
     const [loading, setLoading] = useState(true)
     const [search, setSearch] = useState('')
@@ -148,15 +134,15 @@ function CrmIaPageInner() {
             ? (Number(customer.total_spent) / customer.total_orders).toFixed(0)
             : 0
         try {
-            const text = await callAI(
-                `Eres un analista de CRM experto para una tienda online latinoamericana. Analiza el perfil del cliente y genera un resumen de 3-4 oraciones que incluya: comportamiento de compra, valor para el negocio, y una recomendación concreta de acción. Escribe en español, tono profesional pero cálido.`,
-                `Cliente: ${customer.name}
+            const text = await callAIService([
+                { role: 'system', content: `Eres un analista de CRM experto para una tienda online latinoamericana. Analiza el perfil del cliente y genera un resumen de 3-4 oraciones que incluya: comportamiento de compra, valor para el negocio, y una recomendación concreta de acción. Escribe en español, tono profesional pero cálido.` },
+                { role: 'user', content: `Cliente: ${customer.name}
 Pedidos totales: ${customer.total_orders}
 Total gastado: $${Number(customer.total_spent).toLocaleString('es-AR')}
 Ticket promedio: $${Number(avgTicket).toLocaleString('es-AR')}
 Días desde último pedido: ${days}
-Notas internas: ${customer.notes || 'ninguna'}`
-            )
+Notas internas: ${customer.notes || 'ninguna'}` }
+            ], plan)
             setAiAnalysisText(text)
         } catch {
             showToast('error', 'Error al consultar la IA')
@@ -173,13 +159,13 @@ Notas internas: ${customer.notes || 'ninguna'}`
         setLoadingAI(true)
         const days = getDaysSince(customer.last_order_at) ?? 'varios'
         try {
-            const text = await callAI(
-                `Eres un experto en marketing conversacional para ecommerce latinoamericano. Genera un mensaje de WhatsApp personalizado, cálido y natural (NO genérico ni corporativo) para reconectar con el cliente. El mensaje debe ser corto (máximo 3 oraciones), usar el nombre del cliente, y tener un call-to-action sutil. Responde SOLO con el texto del mensaje, listo para copiar y enviar. No uses asteriscos ni markdown.`,
-                `Nombre del cliente: ${customer.name}
+            const text = await callAIService([
+                { role: 'system', content: `Eres un experto en marketing conversacional para ecommerce latinoamericano. Genera un mensaje de WhatsApp personalizado, cálido y natural (NO genérico ni corporativo) para reconectar con el cliente. El mensaje debe ser corto (máximo 3 oraciones), usar el nombre del cliente, y tener un call-to-action sutil. Responde SOLO con el texto del mensaje, listo para copiar y enviar. No uses asteriscos ni markdown.` },
+                { role: 'user', content: `Nombre del cliente: ${customer.name}
 Pedidos realizados: ${customer.total_orders}
 Días sin comprar: ${days}
-Notas del vendedor: ${customer.notes || 'ninguna'}`
-            )
+Notas del vendedor: ${customer.notes || 'ninguna'}` }
+            ], plan)
             setAiMessageText(text)
         } catch {
             showToast('error', 'Error al consultar la IA')

@@ -54,22 +54,7 @@ const PERSONALITY_OPTIONS = [
     },
 ]
 
-// --- Helper: llamada a IA ---
-async function callAI(system: string, user: string): Promise<string> {
-    const res = await fetch('https://text.pollinations.ai/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            messages: [
-                { role: 'system', content: system },
-                { role: 'user', content: user },
-            ],
-            model: 'openai',
-        }),
-    })
-    if (!res.ok) throw new Error('Error IA')
-    return res.text()
-}
+import { callAI as callAIService } from '../../services/aiService'
 
 function buildSystemPrompt(config: BotConfig, aiPrompt: string, storeName: string): string {
     const personalityMap = {
@@ -96,7 +81,8 @@ Responde siempre en español.`
 // Componente principal (inner)
 // ============================================================
 function BotConfigPageInner() {
-    const { selectedStoreId } = useAuth()
+    const { selectedStoreId, subscription } = useAuth()
+    const plan = subscription?.plan_type ?? 'free'
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
     const [tenant, setTenant] = useState<Tenant | null>(null)
@@ -190,7 +176,10 @@ function BotConfigPageInner() {
         setChatLoading(true)
         try {
             const system = buildSystemPrompt(config, aiPrompt, tenant?.name || 'la tienda')
-            const text = await callAI(system, userMsg)
+            const text = await callAIService([
+                { role: 'system', content: system },
+                { role: 'user', content: userMsg },
+            ], plan)
             setChatMessages((prev) => [...prev, { role: 'bot', text }])
         } catch {
             setChatMessages((prev) => [...prev, { role: 'bot', text: '❌ Error de conexión. Revisá tu internet.' }])

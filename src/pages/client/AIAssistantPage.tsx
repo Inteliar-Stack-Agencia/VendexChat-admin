@@ -23,6 +23,8 @@ import { Order } from '../../types'
 import { formatPrice, formatDate } from '../../utils/helpers'
 import { showToast } from '../../components/common/Toast'
 import FeatureGuard from '../../components/FeatureGuard'
+import { useAuth } from '../../contexts/AuthContext'
+import { callAI } from '../../services/aiService'
 
 interface Message {
     id: string
@@ -32,6 +34,8 @@ interface Message {
 }
 
 export default function AIAssistantPage() {
+    const { subscription } = useAuth()
+    const plan = subscription?.plan_type ?? 'free'
     const [messages, setMessages] = useState<Message[]>([
         {
             id: '1',
@@ -83,19 +87,10 @@ export default function AIAssistantPage() {
             
             REGLA: Si el usuario pide "pedidos de [EMPRESA]", busca ese nombre. Si no especifica empresa, company_name es null.`;
 
-            const response = await fetch('https://text.pollinations.ai/', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    messages: [
-                        { role: 'system', content: systemPrompt },
-                        { role: 'user', content: input }
-                    ],
-                    model: 'openai'
-                })
-            })
-
-            const aiText = await response.text()
+            const aiText = await callAI([
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: input }
+            ], plan)
             let aiResponse;
             try {
                 // Limpiar posible markdown
