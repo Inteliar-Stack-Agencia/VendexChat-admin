@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Search, X, Loader2, Image as ImageIcon, AlertCircle, Camera } from 'lucide-react'
+import { Search, X, Loader2, Image as ImageIcon, AlertCircle, Camera, ExternalLink } from 'lucide-react'
 import { Button, Card } from '../common'
 import { supabase } from '../../supabaseClient'
 
@@ -179,9 +179,20 @@ export default function PexelsImageSuggestions({
                     </div>
 
                     {error && (
-                        <div className="mb-6 p-4 bg-red-50 rounded-2xl border border-red-100 flex items-center gap-3">
-                            <AlertCircle className="w-5 h-5 text-red-500" />
-                            <p className="text-xs font-bold text-red-700 uppercase tracking-tight">{error}</p>
+                        <div className="mb-6 p-4 bg-red-50 rounded-2xl border border-red-100 flex flex-col gap-3">
+                            <div className="flex items-center gap-3">
+                                <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
+                                <p className="text-xs font-bold text-red-700 uppercase tracking-tight">{error}</p>
+                            </div>
+                            <a
+                                href={`https://www.google.com/search?q=${encodeURIComponent(query)}&tbm=isch`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black uppercase tracking-widest transition-colors"
+                            >
+                                <ExternalLink className="w-3.5 h-3.5" />
+                                Buscar en Google Images
+                            </a>
                         </div>
                     )}
 
