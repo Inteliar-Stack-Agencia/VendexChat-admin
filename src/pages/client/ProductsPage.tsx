@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Search, Pencil, Package, ArrowUp, ArrowDown, Eye, EyeOff, MinusCircle, Trash2, FolderInput, CheckSquare, Square, Check, Upload, Loader2, GripVertical, Save, X as CloseIcon } from 'lucide-react'
+import { Plus, Search, Pencil, Package, ArrowUp, ArrowDown, Eye, EyeOff, MinusCircle, Trash2, FolderInput, CheckSquare, Square, Check, Upload, Loader2, GripVertical, Save, X as CloseIcon, Camera } from 'lucide-react'
 import { Card, LoadingSpinner, EmptyState, Pagination, Button } from '../../components/common'
 import { productsApi, categoriesApi } from '../../services/api'
 import { Product, Category } from '../../types'
@@ -8,6 +8,7 @@ import { formatPrice } from '../../utils/helpers'
 import { showToast } from '../../components/common/Toast'
 import { useAuth } from '../../contexts/AuthContext'
 import BulkActionsToolbar from '../../components/products/BulkActionsToolbar'
+import PexelsImageSuggestions from '../../components/products/PexelsImageSuggestions'
 
 // Dnd Kit Imports
 import {
@@ -38,6 +39,7 @@ interface SortableRowProps {
   onSelect: (id: string) => void
   onUpdateStatus: (p: Product, s: 'visible' | 'no-stock' | 'hidden') => void
   onImageUpload: (id: string, e: React.ChangeEvent<HTMLInputElement>) => void
+  onSearchImage: (id: string, name: string) => void
   moveArrows: React.ReactNode
 }
 
@@ -51,6 +53,7 @@ function SortableProductRow({
   onSelect,
   onUpdateStatus,
   onImageUpload,
+  onSearchImage,
   moveArrows
 }: SortableRowProps) {
   const {
@@ -162,12 +165,21 @@ function SortableProductRow({
         </div>
       </td>
       <td className="px-6 py-4 text-right">
-        <Link
-          to={`/products/edit/${product.id}`}
-          className="inline-flex items-center justify-center p-3 rounded-xl bg-slate-50 text-slate-400 hover:bg-slate-900 hover:text-white transition-all shadow-sm"
-        >
-          <Pencil className="w-4 h-4" />
-        </Link>
+        <div className="flex items-center justify-end gap-2">
+          <button
+            onClick={() => onSearchImage(product.id, product.name)}
+            title="Buscar foto en Google"
+            className="inline-flex items-center justify-center p-3 rounded-xl bg-blue-50 text-blue-500 hover:bg-blue-600 hover:text-white transition-all shadow-sm"
+          >
+            <Camera className="w-4 h-4" />
+          </button>
+          <Link
+            to={`/products/edit/${product.id}`}
+            className="inline-flex items-center justify-center p-3 rounded-xl bg-slate-50 text-slate-400 hover:bg-slate-900 hover:text-white transition-all shadow-sm"
+          >
+            <Pencil className="w-4 h-4" />
+          </Link>
+        </div>
       </td>
     </tr>
   )
@@ -188,6 +200,7 @@ export default function ProductsPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [isSortingMode, setIsSortingMode] = useState(false)
   const [isSavingOrder, setIsSavingOrder] = useState(false)
+  const [googleSearchProduct, setGoogleSearchProduct] = useState<{ id: string; name: string } | null>(null)
   const { selectedStoreId } = useAuth()
   const requestCount = useRef(0)
 
@@ -390,6 +403,19 @@ export default function ProductsPage() {
       showToast('error', 'Error al mover productos')
       loadProducts()
     }
+  }
+
+  const handleGoogleImageSelect = async (url: string) => {
+    if (!googleSearchProduct) return
+    const { id } = googleSearchProduct
+    try {
+      await productsApi.update(id, { image_url: url })
+      setProducts(prev => prev.map(p => p.id === id ? { ...p, image_url: url } : p))
+      showToast('success', 'Imagen actualizada')
+    } catch {
+      showToast('error', 'Error al guardar la imagen')
+    }
+    setGoogleSearchProduct(null)
   }
 
   const handleDirectImageUpload = async (productId: string, e: React.ChangeEvent<HTMLInputElement>) => {
@@ -647,6 +673,7 @@ export default function ProductsPage() {
                         onSelect={toggleSelectOne}
                         onUpdateStatus={handleUpdateStatus}
                         onImageUpload={handleDirectImageUpload}
+                        onSearchImage={(id, name) => setGoogleSearchProduct({ id, name })}
                         moveArrows={
                           <div className="flex flex-col items-center gap-1 group-hover:opacity-100 transition-opacity">
                             <button
@@ -688,6 +715,14 @@ export default function ProductsPage() {
         onDelete={handleBulkDelete}
         onMove={handleBulkMove}
         onClear={() => setSelectedIds([])}
+      />
+
+      {/* Modal de búsqueda de imagen en Google */}
+      <PexelsImageSuggestions
+        isOpen={googleSearchProduct !== null}
+        onClose={() => setGoogleSearchProduct(null)}
+        onSelect={handleGoogleImageSelect}
+        initialQuery={googleSearchProduct?.name ?? ''}
       />
     </div>
   )
