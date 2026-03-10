@@ -19,6 +19,7 @@ import {
 import { Card, Button, showToast, Badge } from '../../components/common'
 import ImageSuggestionModal from '../../components/products/ImageSuggestionModal'
 import FeatureGuard from '../../components/FeatureGuard'
+import { callAI } from '../../services/aiService'
 import { supabase } from '../../supabaseClient'
 import { getStoreId } from '../../services/api'
 import Tesseract from 'tesseract.js'
@@ -242,22 +243,10 @@ export default function AIImporterPage() {
             TEXTO PARA PROCESAR:
             ${textToUse}`;
 
-            const response = await fetch('https://text.pollinations.ai/', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    messages: [
-                        { role: 'system', content: systemPrompt },
-                        { role: 'user', content: 'Procesa esta lista ahora. Devuelve solo un array JSON [].' }
-                    ],
-                    model: 'openai',
-                    seed: 42
-                })
-            });
-
-            if (!response.ok) throw new Error('Error en el servicio de IA');
-
-            const resultText = await response.text();
+            const resultText = await callAI([
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: 'Procesa esta lista ahora. Devuelve solo un array JSON [].' }
+            ], 'pro');
 
             // Limpieza robusta de JSON
             let cleanJson = resultText.trim();
