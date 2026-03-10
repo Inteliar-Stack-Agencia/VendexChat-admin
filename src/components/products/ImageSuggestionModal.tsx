@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Search, X, Loader2, Sparkles, Image as ImageIcon, AlertCircle } from 'lucide-react'
+import { Search, X, Loader2, Sparkles, Image as ImageIcon, AlertCircle, Globe } from 'lucide-react'
 import { Button, Card } from '../common'
 
 interface SDImage {
@@ -8,6 +8,15 @@ interface SDImage {
     error: boolean;
 }
 
+interface SearchImage {
+    url: string;
+    thumb: string;
+    alt: string;
+    source: string;
+}
+
+type SearchMode = 'ai' | 'web'
+
 interface ImageSuggestionModalProps {
     isOpen: boolean
     onClose: () => void
@@ -15,38 +24,94 @@ interface ImageSuggestionModalProps {
     initialQuery?: string
 }
 
+const GOOGLE_CX = import.meta.env.VITE_GOOGLE_CSE_CX || 'f2ec5d52f8cd24b2a'
+const GOOGLE_KEY = import.meta.env.VITE_GOOGLE_CSE_KEY || ''
+const PEXELS_KEY = import.meta.env.VITE_PEXELS_API_KEY || ''
+
+async function searchGoogle(query: string): Promise<SearchImage[]> {
+    const url = `https://www.googleapis.com/customsearch/v1?key=${GOOGLE_KEY}&cx=${GOOGLE_CX}&q=${encodeURIComponent(query)}&searchType=image&num=6`
+    const res = await fetch(url)
+    if (!res.ok) throw new Error(`Google error ${res.status}`)
+    const data = await res.json()
+    return (data.items || []).map((item: any) => ({
+        url: item.link,
+        thumb: item.image?.thumbnailLink || item.link,
+        alt: item.title,
+        source: 'google'
+    }))
+}
+
+async function searchPexels(query: string): Promise<SearchImage[]> {
+    const res = await fetch(
+        `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=6&orientation=square`,
+        { headers: { Authorization: PEXELS_KEY } }
+    )
+    if (!res.ok) throw new Error(`Pexels error ${res.status}`)
+    const data = await res.json()
+    return (data.photos || []).map((p: any) => ({
+        url: p.src.large,
+        thumb: p.src.medium,
+        alt: p.alt || query,
+        source: 'pexels'
+    }))
+}
+
 export default function ImageSuggestionModal({ isOpen, onClose, onSelect, initialQuery = '' }: ImageSuggestionModalProps) {
+    const [mode, setMode] = useState<SearchMode>('ai')
     const [images, setImages] = useState<SDImage[]>([])
+    const [searchResults, setSearchResults] = useState<SearchImage[]>([])
     const [loading, setLoading] = useState(false)
     const [query, setQuery] = useState(initialQuery)
     const [error, setError] = useState<string | null>(null)
+    const [usedPexelsFallback, setUsedPexelsFallback] = useState(false)
 
     const generateImage = async (prompt: string) => {
         const rawPrompt = prompt.trim().replace(/[- \t]+$/, '').trim()
         if (!rawPrompt) return
 
-        // Enhance prompt for better product results
         const enhancedPrompt = `${rawPrompt}, professional product photography, studio lighting, high resolution, 4k, sharp focus`
 
         setLoading(true)
         setError(null)
 
         try {
-            // Stable Diffusion via Pollinations.ai (Keyless & Free)
             const seed = Math.floor(Math.random() * 1000000)
-
-            // Generate variants using the canonical pollinations.ai/p/ format
-            // We use 'flux' model which is more modern and often more stable
             const newImages: SDImage[] = [1, 2, 3].map(i => ({
                 url: `https://pollinations.ai/p/${encodeURIComponent(enhancedPrompt)}?seed=${seed + i}&width=1024&height=1024&model=flux&nologo=true`,
                 loading: true,
                 error: false
             }))
-
             setImages(newImages)
         } catch (err) {
             console.error('Error preparando generación:', err)
             setError('Error al conectar con la IA.')
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    const searchWeb = async (q: string) => {
+        const raw = q.trim()
+        if (!raw) return
+
+        setLoading(true)
+        setError(null)
+        setUsedPexelsFallback(false)
+        setSearchResults([])
+
+        try {
+            const results = await searchGoogle(raw)
+            setSearchResults(results)
+        } catch (googleErr) {
+            console.warn('Google search failed, falling back to Pexels:', googleErr)
+            try {
+                const results = await searchPexels(raw)
+                setSearchResults(results)
+                setUsedPexelsFallback(true)
+            } catch (pexelsErr) {
+                console.error('Pexels also failed:', pexelsErr)
+                setError('No se pudieron cargar imágenes. Verificá tu conexión.')
+            }
         } finally {
             setLoading(false)
         }
@@ -60,12 +125,25 @@ export default function ImageSuggestionModal({ isOpen, onClose, onSelect, initia
         setImages(prev => prev.map((img, i) => i === index ? { ...img, loading: false, error: true } : img))
     }
 
+    const handleSearch = () => {
+        if (mode === 'ai') generateImage(query)
+        else searchWeb(query)
+    }
+
     useEffect(() => {
         if (isOpen && initialQuery) {
             setQuery(initialQuery)
-            generateImage(initialQuery)
+            if (mode === 'ai') generateImage(initialQuery)
         }
     }, [isOpen, initialQuery])
+
+    // Reset results when switching mode
+    useEffect(() => {
+        setImages([])
+        setSearchResults([])
+        setError(null)
+        setUsedPexelsFallback(false)
+    }, [mode])
 
     if (!isOpen) return null
 
@@ -79,8 +157,10 @@ export default function ImageSuggestionModal({ isOpen, onClose, onSelect, initia
                             <Sparkles className="w-5 h-5 text-white" />
                         </div>
                         <div>
-                            <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">Sugerencias de IA</h3>
-                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Generación profesional con Stable Diffusion</p>
+                            <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">Sugerencias de imágenes</h3>
+                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
+                                {mode === 'ai' ? 'Generación profesional con Stable Diffusion' : 'Búsqueda en Google · Pexels'}
+                            </p>
                         </div>
                     </div>
                     <button
@@ -88,6 +168,22 @@ export default function ImageSuggestionModal({ isOpen, onClose, onSelect, initia
                         className="p-2 hover:bg-slate-200 rounded-full transition-colors"
                     >
                         <X className="w-5 h-5 text-slate-400" />
+                    </button>
+                </div>
+
+                {/* Mode Selector */}
+                <div className="flex gap-2 px-6 pt-5">
+                    <button
+                        onClick={() => setMode('ai')}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${mode === 'ai' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                    >
+                        <Sparkles className="w-3.5 h-3.5" /> Generar con IA
+                    </button>
+                    <button
+                        onClick={() => setMode('web')}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${mode === 'web' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                    >
+                        <Globe className="w-3.5 h-3.5" /> Buscar imágenes
                     </button>
                 </div>
 
@@ -99,17 +195,21 @@ export default function ImageSuggestionModal({ isOpen, onClose, onSelect, initia
                             type="text"
                             value={query}
                             onChange={(e) => setQuery(e.target.value)}
-                            onKeyDown={(e) => e.key === 'Enter' && generateImage(query)}
-                            placeholder="Ej: Hamburguesa con queso cheddar derretido, fondo oscuro, foto profesional..."
+                            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                            placeholder={
+                                mode === 'ai'
+                                    ? 'Ej: Hamburguesa con queso cheddar derretido, fondo oscuro...'
+                                    : 'Ej: Hamburguesa gourmet, pizza margherita...'
+                            }
                             className="w-full pl-12 pr-4 py-4 rounded-2xl bg-slate-100 border-2 border-transparent focus:border-indigo-500 focus:bg-white text-slate-700 font-medium transition-all outline-none"
                         />
                         <Button
                             type="button"
-                            onClick={() => generateImage(query)}
+                            onClick={handleSearch}
                             disabled={loading}
                             className="absolute right-2 top-1/2 -translate-y-1/2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl px-4 py-2 text-xs font-black uppercase tracking-widest disabled:opacity-50"
                         >
-                            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Generar'}
+                            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : mode === 'ai' ? 'Generar' : 'Buscar'}
                         </Button>
                     </div>
 
@@ -125,9 +225,11 @@ export default function ImageSuggestionModal({ isOpen, onClose, onSelect, initia
                         {loading ? (
                             <div className="flex flex-col items-center justify-center py-20 grayscale opacity-50">
                                 <Loader2 className="w-10 h-10 text-indigo-500 animate-spin mb-4" />
-                                <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Preparando lienzos...</p>
+                                <p className="text-xs font-black text-slate-400 uppercase tracking-widest">
+                                    {mode === 'ai' ? 'Preparando lienzos...' : 'Buscando imágenes...'}
+                                </p>
                             </div>
-                        ) : images.length > 0 ? (
+                        ) : mode === 'ai' && images.length > 0 ? (
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 {images.map((img, idx) => (
                                     <div
@@ -141,7 +243,6 @@ export default function ImageSuggestionModal({ isOpen, onClose, onSelect, initia
                                                 <span className="text-[8px] font-black text-slate-300 uppercase tracking-widest">Generando...</span>
                                             </div>
                                         )}
-
                                         {img.error && (
                                             <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center p-4">
                                                 <AlertCircle className="w-6 h-6 text-red-300" />
@@ -152,7 +253,6 @@ export default function ImageSuggestionModal({ isOpen, onClose, onSelect, initia
                                                 }}>Reintentar</p>
                                             </div>
                                         )}
-
                                         <img
                                             src={img.url}
                                             alt="AI Generated"
@@ -160,7 +260,6 @@ export default function ImageSuggestionModal({ isOpen, onClose, onSelect, initia
                                             onLoad={() => handleImageLoad(idx)}
                                             onError={() => handleImageError(idx)}
                                         />
-
                                         {!img.loading && !img.error && (
                                             <div className="absolute inset-0 bg-indigo-600/0 group-hover:bg-indigo-600/20 transition-all flex items-center justify-center">
                                                 <div className="bg-white text-indigo-600 font-black text-[10px] uppercase tracking-widest px-4 py-2 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transform translate-y-4 group-hover:translate-y-0 transition-all flex items-center gap-2">
@@ -171,15 +270,45 @@ export default function ImageSuggestionModal({ isOpen, onClose, onSelect, initia
                                     </div>
                                 ))}
                             </div>
+                        ) : mode === 'web' && searchResults.length > 0 ? (
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                {searchResults.map((img, idx) => (
+                                    <div
+                                        key={idx}
+                                        onClick={() => onSelect(img.url)}
+                                        className="group relative aspect-square rounded-2xl overflow-hidden border-2 border-transparent cursor-pointer hover:border-indigo-500 hover:shadow-xl hover:scale-[1.02] transition-all shadow-sm bg-slate-50"
+                                    >
+                                        <img
+                                            src={img.thumb}
+                                            alt={img.alt}
+                                            className="w-full h-full object-cover"
+                                            onError={(e) => {
+                                                (e.target as HTMLImageElement).src = img.url
+                                            }}
+                                        />
+                                        <div className="absolute inset-0 bg-indigo-600/0 group-hover:bg-indigo-600/20 transition-all flex items-center justify-center">
+                                            <div className="bg-white text-indigo-600 font-black text-[10px] uppercase tracking-widest px-4 py-2 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transform translate-y-4 group-hover:translate-y-0 transition-all flex items-center gap-2">
+                                                <Search className="w-3 h-3" /> Seleccionar
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
                         ) : query ? (
                             <div className="flex flex-col items-center justify-center py-20 text-center">
                                 <ImageIcon className="w-12 h-12 text-slate-200 mb-4" />
-                                <p className="text-slate-400 font-medium text-sm">Describe tu producto y presiona generar</p>
+                                <p className="text-slate-400 font-medium text-sm">
+                                    {mode === 'ai' ? 'Describe tu producto y presiona generar' : 'Ingresá un término y presiona buscar'}
+                                </p>
                             </div>
                         ) : (
                             <div className="flex flex-col items-center justify-center py-20 text-center">
                                 <ImageIcon className="w-12 h-12 text-slate-100 mb-4" />
-                                <p className="text-slate-400 font-medium text-sm">Introduce una descripción para crear tus fotos profesionales</p>
+                                <p className="text-slate-400 font-medium text-sm">
+                                    {mode === 'ai'
+                                        ? 'Introduce una descripción para crear tus fotos profesionales'
+                                        : 'Buscá imágenes reales de tu producto en Google o Pexels'}
+                                </p>
                             </div>
                         )}
                     </div>
@@ -187,9 +316,20 @@ export default function ImageSuggestionModal({ isOpen, onClose, onSelect, initia
 
                 {/* Footer */}
                 <div className="p-4 bg-slate-50 text-center">
-                    <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest flex items-center justify-center gap-2">
-                        Potenciado por <span className="text-indigo-600 font-black">STABLE DIFFUSION</span> (Gratis e Ilimitado)
-                    </p>
+                    {usedPexelsFallback ? (
+                        <p className="text-[9px] font-bold uppercase tracking-widest flex items-center justify-center gap-2 text-yellow-600">
+                            <AlertCircle className="w-3 h-3" />
+                            Google no disponible · Mostrando resultados de <span className="font-black">PEXELS</span>
+                        </p>
+                    ) : mode === 'ai' ? (
+                        <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest flex items-center justify-center gap-2">
+                            Potenciado por <span className="text-indigo-600 font-black">STABLE DIFFUSION</span> (Gratis e Ilimitado)
+                        </p>
+                    ) : (
+                        <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest flex items-center justify-center gap-2">
+                            Búsqueda via <span className="text-indigo-600 font-black">GOOGLE</span> · Respaldo automático con <span className="text-green-600 font-black">PEXELS</span>
+                        </p>
+                    )}
                 </div>
             </Card>
         </div>
