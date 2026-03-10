@@ -128,25 +128,25 @@ export default function PexelsImageSuggestions({
 
             let results: ImageResult[] = []
 
-            // Try Pexels first
+            // Try Google first
             try {
-                results = await searchPexels(englishTerm)
+                results = await searchGoogle(englishTerm)
                 if (results.length > 0) {
-                    setActiveSource('pexels')
+                    setActiveSource('google')
                 }
-            } catch (pexelsErr) {
-                console.warn('Pexels falló, intentando Google...', pexelsErr)
+            } catch (googleErr) {
+                console.warn('Google falló, intentando Pexels...', googleErr)
             }
 
-            // Fallback to Google if Pexels returned nothing
+            // Fallback to Pexels if Google returned nothing
             if (results.length === 0) {
                 try {
-                    results = await searchGoogle(englishTerm)
+                    results = await searchPexels(englishTerm)
                     if (results.length > 0) {
-                        setActiveSource('google')
+                        setActiveSource('pexels')
                     }
-                } catch (googleErr) {
-                    console.warn('Google también falló:', googleErr)
+                } catch (pexelsErr) {
+                    console.warn('Pexels también falló:', pexelsErr)
                 }
             }
 
@@ -189,11 +189,11 @@ export default function PexelsImageSuggestions({
     if (!isOpen) return null
 
     const sourceLabel =
-        activeSource === 'pexels'
-            ? 'Resultados de Pexels'
-            : activeSource === 'google'
-                ? 'Resultados de Google Images'
-                : 'Pexels · Google Images'
+        activeSource === 'google'
+            ? 'Resultados de Google Images'
+            : activeSource === 'pexels'
+                ? 'Resultados de Pexels'
+                : 'Google Images · Pexels'
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
@@ -302,9 +302,9 @@ export default function PexelsImageSuggestions({
                 {/* Footer */}
                 <div className="p-4 bg-slate-50 text-center">
                     <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest flex items-center justify-center gap-2">
-                        Fotos de <span className="text-emerald-600 font-black">PEXELS</span>
+                        Fotos de <span className="text-blue-600 font-black">GOOGLE IMAGES</span>
                         <span className="text-slate-300">·</span>
-                        Fallback <span className="text-blue-600 font-black">GOOGLE IMAGES</span>
+                        Fallback <span className="text-emerald-600 font-black">PEXELS</span>
                         <span className="text-slate-300">·</span>
                         Guardadas en tu tienda
                     </p>
