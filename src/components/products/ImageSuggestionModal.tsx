@@ -2,10 +2,14 @@ import { useState, useEffect } from 'react'
 import { Search, X, Loader2, Sparkles, Image as ImageIcon, AlertCircle, Globe } from 'lucide-react'
 import { Button, Card } from '../common'
 
-interface SDImage {
+const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_API_KEY
+const GOOGLE_CX = import.meta.env.VITE_GOOGLE_CX || 'f2ec5d52f8cd24b2a'
+const PEXELS_API_KEY = import.meta.env.VITE_PEXELS_API_KEY
+
+interface SearchImage {
     url: string;
-    loading: boolean;
-    error: boolean;
+    thumb: string;
+    title: string;
 }
 
 interface SearchImage {
@@ -57,83 +61,78 @@ async function searchPexels(query: string): Promise<SearchImage[]> {
 }
 
 export default function ImageSuggestionModal({ isOpen, onClose, onSelect, initialQuery = '' }: ImageSuggestionModalProps) {
-    const [mode, setMode] = useState<SearchMode>('ai')
-    const [images, setImages] = useState<SDImage[]>([])
-    const [searchResults, setSearchResults] = useState<SearchImage[]>([])
+    const [images, setImages] = useState<SearchImage[]>([])
     const [loading, setLoading] = useState(false)
-    const [query, setQuery] = useState(initialQuery)
     const [error, setError] = useState<string | null>(null)
-    const [usedPexelsFallback, setUsedPexelsFallback] = useState(false)
+    const [usingPexelsFallback, setUsingPexelsFallback] = useState(false)
+    const [query, setQuery] = useState(initialQuery)
 
-    const generateImage = async (prompt: string) => {
-        const rawPrompt = prompt.trim().replace(/[- \t]+$/, '').trim()
-        if (!rawPrompt) return
-
-        const enhancedPrompt = `${rawPrompt}, professional product photography, studio lighting, high resolution, 4k, sharp focus`
-
-        setLoading(true)
-        setError(null)
-
-        try {
-            const seed = Math.floor(Math.random() * 1000000)
-            const newImages: SDImage[] = [1, 2, 3].map(i => ({
-                url: `https://pollinations.ai/p/${encodeURIComponent(enhancedPrompt)}?seed=${seed + i}&width=1024&height=1024&model=flux&nologo=true`,
-                loading: true,
-                error: false
-            }))
-            setImages(newImages)
-        } catch (err) {
-            console.error('Error preparando generación:', err)
-            setError('Error al conectar con la IA.')
-        } finally {
-            setLoading(false)
-        }
+    const searchPexels = async (q: string): Promise<SearchImage[]> => {
+        if (!PEXELS_API_KEY) throw new Error('Pexels API key no configurada')
+        const res = await fetch(
+            `https://api.pexels.com/v1/search?query=${encodeURIComponent(q)}&per_page=9&orientation=square`,
+            { headers: { Authorization: PEXELS_API_KEY } }
+        )
+        if (!res.ok) throw new Error(`Pexels error ${res.status}`)
+        const data = await res.json()
+        return (data.photos || []).map((p: { src: { large: string; medium: string }; alt: string }) => ({
+            url: p.src.large,
+            thumb: p.src.medium,
+            title: p.alt || q
+        }))
     }
 
-    const searchWeb = async (q: string) => {
-        const raw = q.trim()
-        if (!raw) return
+    const searchGoogle = async (q: string): Promise<SearchImage[]> => {
+        if (!GOOGLE_API_KEY) throw new Error('Google API key no configurada')
+        const res = await fetch(
+            `https://www.googleapis.com/customsearch/v1?key=${GOOGLE_API_KEY}&cx=${GOOGLE_CX}&q=${encodeURIComponent(q)}&searchType=image&num=9`
+        )
+        if (!res.ok) throw new Error(`Google error ${res.status}`)
+        const data = await res.json()
+        return (data.items || []).map((item: { link: string; image?: { thumbnailLink: string }; title: string }) => ({
+            url: item.link,
+            thumb: item.image?.thumbnailLink || item.link,
+            title: item.title || q
+        }))
+    }
+
+    const handleSearch = async (q: string) => {
+        const trimmed = q.trim()
+        if (!trimmed) return
 
         setLoading(true)
         setError(null)
-        setUsedPexelsFallback(false)
-        setSearchResults([])
+        setUsingPexelsFallback(false)
+        setImages([])
 
         try {
-            const results = await searchGoogle(raw)
-            setSearchResults(results)
-        } catch (googleErr) {
-            console.warn('Google search failed, falling back to Pexels:', googleErr)
+            let results: SearchImage[] = []
+
             try {
-                const results = await searchPexels(raw)
-                setSearchResults(results)
-                setUsedPexelsFallback(true)
-            } catch (pexelsErr) {
-                console.error('Pexels also failed:', pexelsErr)
-                setError('No se pudieron cargar imágenes. Verificá tu conexión.')
+                results = await searchGoogle(trimmed)
+            } catch (googleErr) {
+                console.warn('Google Images falló, usando Pexels como fallback:', googleErr)
+                results = await searchPexels(trimmed)
+                setUsingPexelsFallback(true)
             }
+
+            if (results.length === 0) {
+                setError('No se encontraron imágenes para esta búsqueda.')
+            } else {
+                setImages(results)
+            }
+        } catch (err) {
+            console.error('Error en búsqueda de imágenes:', err)
+            setError('Error al buscar imágenes. Verificá tu conexión y las API keys.')
         } finally {
             setLoading(false)
         }
-    }
-
-    const handleImageLoad = (index: number) => {
-        setImages(prev => prev.map((img, i) => i === index ? { ...img, loading: false } : img))
-    }
-
-    const handleImageError = (index: number) => {
-        setImages(prev => prev.map((img, i) => i === index ? { ...img, loading: false, error: true } : img))
-    }
-
-    const handleSearch = () => {
-        if (mode === 'ai') generateImage(query)
-        else searchWeb(query)
     }
 
     useEffect(() => {
         if (isOpen && initialQuery) {
             setQuery(initialQuery)
-            if (mode === 'ai') generateImage(initialQuery)
+            handleSearch(initialQuery)
         }
     }, [isOpen, initialQuery])
 
@@ -157,177 +156,97 @@ export default function ImageSuggestionModal({ isOpen, onClose, onSelect, initia
                             <Sparkles className="w-5 h-5 text-white" />
                         </div>
                         <div>
-                            <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">Sugerencias de imágenes</h3>
-                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
-                                {mode === 'ai' ? 'Generación profesional con Stable Diffusion' : 'Búsqueda en Google · Pexels'}
-                            </p>
+                            <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">Buscar Imagen</h3>
+                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Google Imágenes · Pexels como respaldo</p>
                         </div>
                     </div>
-                    <button
-                        onClick={onClose}
-                        className="p-2 hover:bg-slate-200 rounded-full transition-colors"
-                    >
+                    <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-full transition-colors">
                         <X className="w-5 h-5 text-slate-400" />
                     </button>
                 </div>
 
-                {/* Mode Selector */}
-                <div className="flex gap-2 px-6 pt-5">
-                    <button
-                        onClick={() => setMode('ai')}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${mode === 'ai' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
-                    >
-                        <Sparkles className="w-3.5 h-3.5" /> Generar con IA
-                    </button>
-                    <button
-                        onClick={() => setMode('web')}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${mode === 'web' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
-                    >
-                        <Globe className="w-3.5 h-3.5" /> Buscar imágenes
-                    </button>
-                </div>
-
-                {/* Search Bar */}
                 <div className="p-6">
-                    <div className="relative mb-6">
-                        <ImageIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                    {/* Search Bar */}
+                    <div className="relative mb-5">
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                         <input
                             type="text"
                             value={query}
                             onChange={(e) => setQuery(e.target.value)}
-                            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                            placeholder={
-                                mode === 'ai'
-                                    ? 'Ej: Hamburguesa con queso cheddar derretido, fondo oscuro...'
-                                    : 'Ej: Hamburguesa gourmet, pizza margherita...'
-                            }
+                            onKeyDown={(e) => e.key === 'Enter' && handleSearch(query)}
+                            placeholder="Ej: Hamburguesa artesanal, pizza napolitana..."
                             className="w-full pl-12 pr-4 py-4 rounded-2xl bg-slate-100 border-2 border-transparent focus:border-indigo-500 focus:bg-white text-slate-700 font-medium transition-all outline-none"
                         />
                         <Button
                             type="button"
-                            onClick={handleSearch}
+                            onClick={() => handleSearch(query)}
                             disabled={loading}
                             className="absolute right-2 top-1/2 -translate-y-1/2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl px-4 py-2 text-xs font-black uppercase tracking-widest disabled:opacity-50"
                         >
-                            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : mode === 'ai' ? 'Generar' : 'Buscar'}
+                            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Buscar'}
                         </Button>
                     </div>
 
+                    {/* Error banner */}
                     {error && (
-                        <div className="mb-6 p-4 bg-red-50 rounded-2xl border border-red-100 flex items-center gap-3 animate-shake">
-                            <AlertCircle className="w-5 h-5 text-red-500" />
+                        <div className="mb-5 p-4 bg-red-50 rounded-2xl border border-red-100 flex items-center gap-3">
+                            <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />
                             <p className="text-xs font-bold text-red-700 uppercase tracking-tight">{error}</p>
                         </div>
                     )}
 
                     {/* Results Grid */}
-                    <div className="max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                    <div className="max-h-[400px] overflow-y-auto pr-1 custom-scrollbar">
                         {loading ? (
-                            <div className="flex flex-col items-center justify-center py-20 grayscale opacity-50">
-                                <Loader2 className="w-10 h-10 text-indigo-500 animate-spin mb-4" />
-                                <p className="text-xs font-black text-slate-400 uppercase tracking-widest">
-                                    {mode === 'ai' ? 'Preparando lienzos...' : 'Buscando imágenes...'}
-                                </p>
+                            <div className="flex flex-col items-center justify-center py-16 opacity-50">
+                                <Loader2 className="w-10 h-10 text-indigo-400 animate-spin mb-3" />
+                                <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Buscando imágenes...</p>
                             </div>
-                        ) : mode === 'ai' && images.length > 0 ? (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        ) : images.length > 0 ? (
+                            <div className="grid grid-cols-3 gap-3">
                                 {images.map((img, idx) => (
                                     <div
                                         key={idx}
-                                        onClick={() => !img.loading && !img.error && onSelect(img.url)}
-                                        className={`group relative aspect-square rounded-2xl overflow-hidden border-2 transition-all shadow-sm ${img.loading ? 'bg-slate-50 border-slate-100' : img.error ? 'bg-red-50 border-red-100' : 'cursor-pointer border-transparent hover:border-indigo-500 hover:shadow-xl hover:scale-[1.02]'}`}
-                                    >
-                                        {img.loading && (
-                                            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
-                                                <Loader2 className="w-6 h-6 text-indigo-300 animate-spin" />
-                                                <span className="text-[8px] font-black text-slate-300 uppercase tracking-widest">Generando...</span>
-                                            </div>
-                                        )}
-                                        {img.error && (
-                                            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center p-4">
-                                                <AlertCircle className="w-6 h-6 text-red-300" />
-                                                <span className="text-[8px] font-black text-red-400 uppercase tracking-widest leading-tight">Error de carga</span>
-                                                <p className="text-[7px] text-red-300 font-bold uppercase cursor-pointer underline" onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    generateImage(query);
-                                                }}>Reintentar</p>
-                                            </div>
-                                        )}
-                                        <img
-                                            src={img.url}
-                                            alt="AI Generated"
-                                            className={`w-full h-full object-cover transition-all duration-700 ${img.loading ? 'opacity-0 scale-95' : 'opacity-100 scale-100'} ${img.error ? 'hidden' : ''}`}
-                                            onLoad={() => handleImageLoad(idx)}
-                                            onError={() => handleImageError(idx)}
-                                        />
-                                        {!img.loading && !img.error && (
-                                            <div className="absolute inset-0 bg-indigo-600/0 group-hover:bg-indigo-600/20 transition-all flex items-center justify-center">
-                                                <div className="bg-white text-indigo-600 font-black text-[10px] uppercase tracking-widest px-4 py-2 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transform translate-y-4 group-hover:translate-y-0 transition-all flex items-center gap-2">
-                                                    <Sparkles className="w-3 h-3" /> Seleccionar
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
-                        ) : mode === 'web' && searchResults.length > 0 ? (
-                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                                {searchResults.map((img, idx) => (
-                                    <div
-                                        key={idx}
                                         onClick={() => onSelect(img.url)}
-                                        className="group relative aspect-square rounded-2xl overflow-hidden border-2 border-transparent cursor-pointer hover:border-indigo-500 hover:shadow-xl hover:scale-[1.02] transition-all shadow-sm bg-slate-50"
+                                        className="group relative aspect-square rounded-xl overflow-hidden cursor-pointer border-2 border-transparent hover:border-indigo-500 hover:shadow-lg hover:scale-[1.03] transition-all"
                                     >
                                         <img
                                             src={img.thumb}
-                                            alt={img.alt}
+                                            alt={img.title}
                                             className="w-full h-full object-cover"
-                                            onError={(e) => {
-                                                (e.target as HTMLImageElement).src = img.url
-                                            }}
+                                            onError={(e) => { (e.target as HTMLImageElement).src = img.url }}
                                         />
                                         <div className="absolute inset-0 bg-indigo-600/0 group-hover:bg-indigo-600/20 transition-all flex items-center justify-center">
-                                            <div className="bg-white text-indigo-600 font-black text-[10px] uppercase tracking-widest px-4 py-2 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transform translate-y-4 group-hover:translate-y-0 transition-all flex items-center gap-2">
-                                                <Search className="w-3 h-3" /> Seleccionar
+                                            <div className="bg-white text-indigo-600 font-black text-[9px] uppercase tracking-widest px-3 py-1.5 rounded-full shadow-md opacity-0 group-hover:opacity-100 transform translate-y-3 group-hover:translate-y-0 transition-all">
+                                                Seleccionar
                                             </div>
                                         </div>
                                     </div>
                                 ))}
                             </div>
-                        ) : query ? (
-                            <div className="flex flex-col items-center justify-center py-20 text-center">
-                                <ImageIcon className="w-12 h-12 text-slate-200 mb-4" />
-                                <p className="text-slate-400 font-medium text-sm">
-                                    {mode === 'ai' ? 'Describe tu producto y presiona generar' : 'Ingresá un término y presiona buscar'}
-                                </p>
-                            </div>
                         ) : (
-                            <div className="flex flex-col items-center justify-center py-20 text-center">
+                            <div className="flex flex-col items-center justify-center py-16 text-center">
                                 <ImageIcon className="w-12 h-12 text-slate-100 mb-4" />
-                                <p className="text-slate-400 font-medium text-sm">
-                                    {mode === 'ai'
-                                        ? 'Introduce una descripción para crear tus fotos profesionales'
-                                        : 'Buscá imágenes reales de tu producto en Google o Pexels'}
-                                </p>
+                                <p className="text-slate-400 font-medium text-sm">Escribí el nombre del producto y presiona Buscar</p>
                             </div>
                         )}
                     </div>
                 </div>
 
                 {/* Footer */}
-                <div className="p-4 bg-slate-50 text-center">
-                    {usedPexelsFallback ? (
-                        <p className="text-[9px] font-bold uppercase tracking-widest flex items-center justify-center gap-2 text-yellow-600">
+                <div className="p-4 bg-slate-50 border-t border-slate-100 text-center">
+                    {usingPexelsFallback ? (
+                        <p className="text-[9px] font-bold uppercase tracking-widest flex items-center justify-center gap-2 text-amber-600">
                             <AlertCircle className="w-3 h-3" />
                             Google no disponible · Mostrando resultados de <span className="font-black">PEXELS</span>
                         </p>
-                    ) : mode === 'ai' ? (
+                    ) : images.length > 0 ? (
                         <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest flex items-center justify-center gap-2">
-                            Potenciado por <span className="text-indigo-600 font-black">STABLE DIFFUSION</span> (Gratis e Ilimitado)
+                            Resultados de <span className="text-blue-600 font-black">GOOGLE IMÁGENES</span>
                         </p>
                     ) : (
-                        <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest flex items-center justify-center gap-2">
-                            Búsqueda via <span className="text-indigo-600 font-black">GOOGLE</span> · Respaldo automático con <span className="text-green-600 font-black">PEXELS</span>
+                        <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">
+                            Busca imágenes reales para tus productos
                         </p>
                     )}
                 </div>
