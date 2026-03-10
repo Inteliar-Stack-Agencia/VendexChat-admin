@@ -44,7 +44,6 @@ export default function ProductFormPage() {
     }).catch(console.error)
   }, [isEditing])
 
-  // Cargar producto si estamos editando
   useEffect(() => {
     if (isEditing && id) {
       productsApi
@@ -83,7 +82,6 @@ export default function ProductFormPage() {
     setErrors((prev) => ({ ...prev, [field]: '' }))
   }
 
-  // Manejar imagen: previsualizar y guardar archivo
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -138,7 +136,6 @@ export default function ProductFormPage() {
         showToast('success', 'Producto creado')
       }
 
-      // Si hay un archivo de imagen, subirlo ahora que tenemos el ID
       if (imageFile && savedProduct?.id) {
         try {
           await productsApi.uploadProductImage(String(savedProduct.id), imageFile)
@@ -174,7 +171,6 @@ export default function ProductFormPage() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
-      {/* Header */}
       <div className="flex items-center gap-3">
         <button onClick={() => navigate('/products')} className="p-2 rounded-lg hover:bg-gray-100">
           <ArrowLeft className="w-5 h-5 text-gray-600" />
@@ -185,7 +181,6 @@ export default function ProductFormPage() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Información básica */}
         <Card>
           <h2 className="text-sm font-semibold text-gray-500 uppercase mb-4">Información básica</h2>
           <div className="space-y-4">
@@ -221,7 +216,6 @@ export default function ProductFormPage() {
           </div>
         </Card>
 
-        {/* Precio y stock */}
         <Card>
           <h2 className="text-sm font-semibold text-gray-500 uppercase mb-4">Precio y stock</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -258,7 +252,6 @@ export default function ProductFormPage() {
           </label>
         </Card>
 
-        {/* Imagen */}
         <Card>
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-semibold text-gray-500 uppercase">Imagen</h2>
@@ -325,7 +318,6 @@ export default function ProductFormPage() {
           />
         </Card>
 
-        {/* Visibilidad */}
         <Card>
           <h2 className="text-sm font-semibold text-gray-500 uppercase mb-4">Visibilidad</h2>
           <div className="space-y-3">
@@ -350,7 +342,6 @@ export default function ProductFormPage() {
           </div>
         </Card>
 
-        {/* Botones */}
         <div className="flex justify-between items-center gap-3">
           {isEditing ? (
             <button
