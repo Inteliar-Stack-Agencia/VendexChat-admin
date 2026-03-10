@@ -3,16 +3,6 @@ import { Search, X, Loader2, Image as ImageIcon, AlertCircle, Camera } from 'luc
 import { Button, Card } from '../common'
 import { supabase } from '../../supabaseClient'
 
-interface PexelsPhoto {
-    id: number
-    src: {
-        medium: string
-        large: string
-    }
-    photographer: string
-    alt: string
-}
-
 interface GoogleImageItem {
     link: string
     title: string
@@ -25,7 +15,6 @@ interface ImageResult {
     url: string
     thumb: string
     credit: string
-    source: 'pexels' | 'google'
 }
 
 interface PexelsImageSuggestionsProps {
@@ -35,7 +24,6 @@ interface PexelsImageSuggestionsProps {
     initialQuery?: string
 }
 
-const PEXELS_API_KEY = import.meta.env.VITE_PEXELS_API_KEY
 const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_API_KEY
 const GOOGLE_CX = import.meta.env.VITE_GOOGLE_CX
 
@@ -54,21 +42,6 @@ async function translateToEnglish(text: string): Promise<string> {
     return text
 }
 
-async function searchPexels(query: string): Promise<ImageResult[]> {
-    const res = await fetch(
-        `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=12&orientation=square`,
-        { headers: { Authorization: PEXELS_API_KEY } }
-    )
-    if (!res.ok) throw new Error(`Pexels error: ${res.status}`)
-    const data = await res.json()
-    return (data.photos as PexelsPhoto[]).map(p => ({
-        url: p.src.large,
-        thumb: p.src.medium,
-        credit: p.photographer,
-        source: 'pexels' as const
-    }))
-}
-
 async function searchGoogle(query: string): Promise<ImageResult[]> {
     const url = `https://www.googleapis.com/customsearch/v1?key=${GOOGLE_API_KEY}&cx=${GOOGLE_CX}&q=${encodeURIComponent(query)}&searchType=image&num=10`
     const res = await fetch(url)
@@ -78,7 +51,6 @@ async function searchGoogle(query: string): Promise<ImageResult[]> {
         url: item.link,
         thumb: item.image?.thumbnailLink || item.link,
         credit: item.title || 'Google Images',
-        source: 'google' as const
     }))
 }
 
@@ -87,7 +59,7 @@ async function uploadImageToSupabase(imageUrl: string): Promise<string> {
     if (!res.ok) throw new Error('No se pudo descargar la imagen')
     const blob = await res.blob()
     const ext = blob.type.split('/')[1]?.split(';')[0] || 'jpg'
-    const fileName = `pexels-${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+    const fileName = `google-${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
     const filePath = `products/${fileName}`
 
     const { error } = await supabase.storage
@@ -114,41 +86,16 @@ export default function PexelsImageSuggestions({
     const [uploading, setUploading] = useState<number | null>(null)
     const [query, setQuery] = useState(initialQuery)
     const [error, setError] = useState<string | null>(null)
-    const [activeSource, setActiveSource] = useState<'pexels' | 'google' | null>(null)
 
     const search = async (term: string) => {
         if (!term.trim()) return
         setLoading(true)
         setError(null)
         setImages([])
-        setActiveSource(null)
 
         try {
             const englishTerm = await translateToEnglish(term.trim())
-
-            let results: ImageResult[] = []
-
-            // Try Google first
-            try {
-                results = await searchGoogle(englishTerm)
-                if (results.length > 0) {
-                    setActiveSource('google')
-                }
-            } catch (googleErr) {
-                console.warn('Google falló, intentando Pexels...', googleErr)
-            }
-
-            // Fallback to Pexels if Google returned nothing
-            if (results.length === 0) {
-                try {
-                    results = await searchPexels(englishTerm)
-                    if (results.length > 0) {
-                        setActiveSource('pexels')
-                    }
-                } catch (pexelsErr) {
-                    console.warn('Pexels también falló:', pexelsErr)
-                }
-            }
+            const results = await searchGoogle(englishTerm)
 
             if (results.length === 0) {
                 setError('No se encontraron imágenes. Probá con otro término.')
@@ -156,7 +103,7 @@ export default function PexelsImageSuggestions({
 
             setImages(results)
         } catch {
-            setError('Error al buscar imágenes.')
+            setError('Error al buscar imágenes. Verificá que la API de Google esté configurada.')
         } finally {
             setLoading(false)
         }
@@ -170,7 +117,6 @@ export default function PexelsImageSuggestions({
             onSelect(supabaseUrl)
             onClose()
         } catch {
-            // If Supabase upload fails, use the direct URL as fallback
             onSelect(img.url)
             onClose()
         } finally {
@@ -188,13 +134,6 @@ export default function PexelsImageSuggestions({
 
     if (!isOpen) return null
 
-    const sourceLabel =
-        activeSource === 'google'
-            ? 'Resultados de Google Images'
-            : activeSource === 'pexels'
-                ? 'Resultados de Pexels'
-                : 'Google Images · Pexels'
-
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
             <Card className="w-full max-w-3xl bg-white overflow-hidden shadow-2xl border-0 rounded-3xl animate-scale-in">
@@ -206,7 +145,7 @@ export default function PexelsImageSuggestions({
                         </div>
                         <div>
                             <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">Buscar fotos reales</h3>
-                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{sourceLabel}</p>
+                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Google Images</p>
                         </div>
                     </div>
                     <button
@@ -303,8 +242,6 @@ export default function PexelsImageSuggestions({
                 <div className="p-4 bg-slate-50 text-center">
                     <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest flex items-center justify-center gap-2">
                         Fotos de <span className="text-blue-600 font-black">GOOGLE IMAGES</span>
-                        <span className="text-slate-300">·</span>
-                        Fallback <span className="text-emerald-600 font-black">PEXELS</span>
                         <span className="text-slate-300">·</span>
                         Guardadas en tu tienda
                     </p>
