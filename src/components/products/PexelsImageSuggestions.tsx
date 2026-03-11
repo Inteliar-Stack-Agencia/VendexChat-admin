@@ -12,6 +12,7 @@ interface GoogleImageItem {
 }
 
 interface ImageResult {
+  id: string
   url: string
   thumb: string
   credit: string
@@ -43,14 +44,26 @@ async function translateToEnglish(text: string): Promise<string> {
 }
 
 async function searchGoogle(query: string): Promise<ImageResult[]> {
+  if (!GOOGLE_API_KEY || !GOOGLE_CX) throw new Error("API key de Google no configurada.")
+
   const url = `https://www.googleapis.com/customsearch/v1?key=${GOOGLE_API_KEY}&cx=${GOOGLE_CX}&q=${encodeURIComponent(query)}&searchType=image&num=10`
   const res = await fetch(url)
-  if (!res.ok) throw new Error(`Google error: ${res.status}`)
+
+  if (!res.ok) {
+    let msg = `Google error ${res.status}`;
+    try {
+      const errData = await res.json();
+      if (errData?.error?.message) msg = errData.error.message;
+    } catch { /* ignore */ }
+    throw new Error(msg);
+  }
+
   const data = await res.json()
-  return ((data.items as GoogleImageItem[]) || []).map(item => ({
+  return ((data.items as GoogleImageItem[]) || []).map((item, i) => ({
+    id: `g-${i}-${item.link}`,
     url: item.link,
     thumb: item.image?.thumbnailLink || item.link,
-    credit: item.title || 'Google Images',
+    credit: item.title || 'Google Images'
   }))
 }
 
@@ -59,7 +72,7 @@ async function uploadImageToSupabase(imageUrl: string): Promise<string> {
   if (!res.ok) throw new Error('No se pudo descargar la imagen')
   const blob = await res.blob()
   const ext = blob.type.split('/')[1]?.split(';')[0] || 'jpg'
-  const fileName = `google-${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+  const fileName = `external-${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
   const filePath = `products/${fileName}`
 
   const { error } = await supabase.storage
@@ -83,7 +96,7 @@ export default function PexelsImageSuggestions({
 }: PexelsImageSuggestionsProps) {
   const [images, setImages] = useState<ImageResult[]>([])
   const [loading, setLoading] = useState(false)
-  const [uploading, setUploading] = useState<number | null>(null)
+  const [uploadingId, setUploadingId] = useState<string | null>(null)
   const [query, setQuery] = useState(initialQuery)
   const [error, setError] = useState<string | null>(null)
 
@@ -98,29 +111,31 @@ export default function PexelsImageSuggestions({
       const results = await searchGoogle(englishTerm)
 
       if (results.length === 0) {
-        setError('No se encontraron imágenes. Probá con otro término.')
+        throw new Error("No se encontraron imágenes en Google.")
       }
 
       setImages(results)
-    } catch {
-      setError('Error al buscar imágenes. Verificá que la API de Google esté configurada.')
+    } catch (err: any) {
+      console.error("Google search error:", err);
+      setError(err.message || 'Error al buscar imágenes. Verificá tu conexión o las claves de API.')
     } finally {
       setLoading(false)
     }
   }
 
-  const handleSelect = async (img: ImageResult, idx: number) => {
-    if (uploading !== null) return
-    setUploading(idx)
+  const handleSelect = async (img: ImageResult) => {
+    if (uploadingId !== null) return
+    setUploadingId(img.id)
     try {
       const supabaseUrl = await uploadImageToSupabase(img.url)
       onSelect(supabaseUrl)
       onClose()
     } catch {
+      // Fallback: use raw URL if upload fails
       onSelect(img.url)
       onClose()
     } finally {
-      setUploading(null)
+      setUploadingId(null)
     }
   }
 
@@ -145,7 +160,9 @@ export default function PexelsImageSuggestions({
             </div>
             <div>
               <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">Buscar fotos reales</h3>
-              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Google Images</p>
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
+                Vía Google Images
+              </p>
             </div>
           </div>
           <button
@@ -205,11 +222,11 @@ export default function PexelsImageSuggestions({
               </div>
             ) : images.length > 0 ? (
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {images.map((img, idx) => (
+                {images.map((img) => (
                   <div
-                    key={idx}
-                    onClick={() => uploading === null && handleSelect(img, idx)}
-                    className={`group relative aspect-square rounded-2xl overflow-hidden border-2 border-transparent hover:border-emerald-500 cursor-pointer hover:shadow-xl hover:scale-[1.02] transition-all shadow-sm bg-slate-100 ${uploading === idx ? 'pointer-events-none' : ''}`}
+                    key={img.id}
+                    onClick={() => uploadingId === null && handleSelect(img)}
+                    className={`group relative aspect-square rounded-2xl overflow-hidden border-2 border-transparent hover:border-emerald-500 cursor-pointer hover:shadow-xl hover:scale-[1.02] transition-all shadow-sm bg-slate-100 ${uploadingId === img.id ? 'pointer-events-none' : ''}`}
                   >
                     <img
                       src={img.thumb}
@@ -218,13 +235,13 @@ export default function PexelsImageSuggestions({
                       loading="lazy"
                     />
 
-                    {uploading === idx && (
+                    {uploadingId === img.id && (
                       <div className="absolute inset-0 bg-white/80 flex items-center justify-center">
                         <Loader2 className="w-6 h-6 text-emerald-500 animate-spin" />
                       </div>
                     )}
 
-                    {uploading !== idx && (
+                    {uploadingId !== img.id && (
                       <>
                         <div className="absolute inset-0 bg-emerald-600/0 group-hover:bg-emerald-600/20 transition-all flex items-center justify-center">
                           <div className="bg-white text-emerald-600 font-black text-[10px] uppercase tracking-widest px-3 py-1.5 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transform translate-y-2 group-hover:translate-y-0 transition-all">
@@ -232,7 +249,9 @@ export default function PexelsImageSuggestions({
                           </div>
                         </div>
                         <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <p className="text-[9px] text-white font-bold truncate">{img.credit}</p>
+                          <p className="text-[9px] text-white font-bold truncate">
+                            {img.credit}
+                          </p>
                         </div>
                       </>
                     )}

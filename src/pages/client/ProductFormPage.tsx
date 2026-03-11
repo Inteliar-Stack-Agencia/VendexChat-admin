@@ -1,8 +1,7 @@
 import { useState, useEffect, FormEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Upload, X, Sparkles, Trash2, Search } from 'lucide-react'
+import { ArrowLeft, Upload, X, Trash2, Search } from 'lucide-react'
 import { Button, Input, Select, Card, LoadingSpinner } from '../../components/common'
-import ImageSuggestionModal from '../../components/products/ImageSuggestionModal'
 import PexelsImageSuggestions from '../../components/products/PexelsImageSuggestions'
 import { showToast } from '../../components/common/Toast'
 import { productsApi, categoriesApi } from '../../services/api'
@@ -18,8 +17,7 @@ export default function ProductFormPage() {
   const [categories, setCategories] = useState<Category[]>([])
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [imageFile, setImageFile] = useState<File | null>(null)
-  const [isImageModalOpen, setIsImageModalOpen] = useState(false)
-  const [isPexelsModalOpen, setIsPexelsModalOpen] = useState(false)
+  const [isSearchModalOpen, setIsSearchModalOpen] = useState(false)
 
   const [form, setForm] = useState<ProductFormData>({
     name: '',
@@ -255,24 +253,14 @@ export default function ProductFormPage() {
         <Card>
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-semibold text-gray-500 uppercase">Imagen</h2>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setIsPexelsModalOpen(true)}
-                className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-emerald-600 hover:text-emerald-700 transition-colors bg-emerald-50 px-3 py-1.5 rounded-full"
-              >
-                <Search className="w-3.5 h-3.5" />
-                Buscar fotos
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsImageModalOpen(true)}
-                className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-indigo-600 hover:text-indigo-700 transition-colors bg-indigo-50 px-3 py-1.5 rounded-full"
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                Sugerir con IA
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => setIsSearchModalOpen(true)}
+              className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-emerald-600 hover:text-emerald-700 transition-colors bg-emerald-50 px-3 py-1.5 rounded-full"
+            >
+              <Search className="w-3.5 h-3.5" />
+              BUSCAR FOTOS REALES
+            </button>
           </div>
 
           {imagePreview ? (
@@ -295,24 +283,13 @@ export default function ProductFormPage() {
             </label>
           )}
 
-          <ImageSuggestionModal
-            isOpen={isImageModalOpen}
-            onClose={() => setIsImageModalOpen(false)}
-            onSelect={(url) => {
-              setImagePreview(url)
-              updateField('image_url', url)
-              setIsImageModalOpen(false)
-            }}
-            initialQuery={form.name}
-          />
-
           <PexelsImageSuggestions
-            isOpen={isPexelsModalOpen}
-            onClose={() => setIsPexelsModalOpen(false)}
+            isOpen={isSearchModalOpen}
+            onClose={() => setIsSearchModalOpen(false)}
             onSelect={(url) => {
               setImagePreview(url)
               updateField('image_url', url)
-              setIsPexelsModalOpen(false)
+              setIsSearchModalOpen(false)
             }}
             initialQuery={form.name}
           />

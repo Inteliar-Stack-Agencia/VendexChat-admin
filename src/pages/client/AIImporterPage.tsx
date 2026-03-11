@@ -17,7 +17,7 @@ import {
     Camera
 } from 'lucide-react'
 import { Card, Button, showToast, Badge } from '../../components/common'
-import ImageSuggestionModal from '../../components/products/ImageSuggestionModal'
+import PexelsImageSuggestions from '../../components/products/PexelsImageSuggestions'
 import FeatureGuard from '../../components/FeatureGuard'
 import { callAI } from '../../services/aiService'
 import { supabase } from '../../supabaseClient'
@@ -654,10 +654,10 @@ export default function AIImporterPage() {
                     </div>
                 )}
             </div>
-            <ImageSuggestionModal
+            <PexelsImageSuggestions
                 isOpen={isImageModalOpen}
                 onClose={() => { setIsImageModalOpen(false); setActiveProductId(null) }}
-                onSelect={(url) => {
+                onSelect={(url: string) => {
                     if (activeProductId) {
                         setResults(prev => prev.map(item => item.id === activeProductId ? { ...item, image_url: url } : item))
                     }
