@@ -29,9 +29,6 @@ interface PexelsImageSuggestionsProps {
   initialQuery?: string
 }
 
-const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_API_KEY
-const GOOGLE_CX = import.meta.env.VITE_GOOGLE_CX
-
 async function translateToEnglish(text: string): Promise<string> {
   try {
     const res = await fetch(
@@ -48,18 +45,23 @@ async function translateToEnglish(text: string): Promise<string> {
 }
 
 async function searchGoogle(query: string): Promise<ImageResult[]> {
-  if (!GOOGLE_API_KEY || !GOOGLE_CX) throw new Error("API key de Google no configurada.")
-
-  const url = `https://www.googleapis.com/customsearch/v1?key=${GOOGLE_API_KEY}&cx=${GOOGLE_CX}&q=${encodeURIComponent(query)}&searchType=image&num=10`
-  const res = await fetch(url)
+  const res = await fetch('/api/google-image-search', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ query })
+  })
 
   if (!res.ok) {
-    let msg = `Google error ${res.status}`;
+    let msg = `Google error ${res.status}`
     try {
-      const errData = await res.json();
-      if (errData?.error?.message) msg = errData.error.message;
-    } catch { /* ignore */ }
-    throw new Error(msg);
+      const errData = await res.json()
+      if (errData?.error) msg = errData.error
+    } catch {
+      // ignore parse error
+    }
+    throw new Error(msg)
   }
 
   const data = await res.json()
@@ -89,6 +91,10 @@ function getGoogleSetupHints(rawMessage: string): GoogleSearchErrorDetails {
 
   if (message.includes('billing')) {
     setupHints.push('Confirmá que la cuenta de facturación esté activa en el mismo proyecto de Google Cloud.')
+  }
+
+  if (message.includes('cors') || message.includes('failed to fetch')) {
+    setupHints.push('Esta búsqueda usa un proxy del servidor. Si falla, publicá un nuevo deploy en Cloudflare Pages.')
   }
 
   if (setupHints.length === 0) {
@@ -132,11 +138,6 @@ export default function PexelsImageSuggestions({
   const [query, setQuery] = useState(initialQuery)
   const [error, setError] = useState<string | null>(null)
   const [errorDetails, setErrorDetails] = useState<GoogleSearchErrorDetails | null>(null)
-
-  const missingConfig = [
-    !GOOGLE_API_KEY ? 'VITE_GOOGLE_API_KEY' : null,
-    !GOOGLE_CX ? 'VITE_GOOGLE_CX' : null
-  ].filter(Boolean) as string[]
 
   const search = async (term: string) => {
     if (!term.trim()) return
@@ -252,11 +253,9 @@ export default function PexelsImageSuggestions({
                 </ul>
               ) : null}
 
-              {missingConfig.length > 0 ? (
-                <p className="text-xs text-red-800">
-                  Variables faltantes en el deploy: <span className="font-bold">{missingConfig.join(', ')}</span>
-                </p>
-              ) : null}
+              <p className="text-xs text-red-800">
+                Si ya actualizaste variables en Cloudflare Pages, hacé un nuevo deploy para que el proxy tome la configuración nueva.
+              </p>
 
               <div className="flex flex-wrap items-center gap-3 text-xs">
                 <a
