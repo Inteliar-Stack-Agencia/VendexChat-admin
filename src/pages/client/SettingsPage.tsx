@@ -108,6 +108,8 @@ export default function SettingsPage() {
   })
 
   useEffect(() => {
+    setLoading(true)
+    setLocalTenant(null)
     const loadData = async () => {
       try {
         const data = await tenantApi.getMe()
