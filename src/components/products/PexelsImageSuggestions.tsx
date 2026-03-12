@@ -18,6 +18,10 @@ interface ImageResult {
   credit: string
 }
 
+interface GoogleSearchErrorDetails {
+  setupHints: string[]
+}
+
 interface PexelsImageSuggestionsProps {
   isOpen: boolean
   onClose: () => void
@@ -67,6 +71,34 @@ async function searchGoogle(query: string): Promise<ImageResult[]> {
   }))
 }
 
+function getGoogleSetupHints(rawMessage: string): GoogleSearchErrorDetails {
+  const message = rawMessage.toLowerCase()
+  const setupHints: string[] = []
+
+  if (message.includes('custom search json api') || message.includes('access not configured')) {
+    setupHints.push('Activá la API "Custom Search JSON API" en Google Cloud Console.')
+  }
+
+  if (message.includes('api key not valid') || message.includes('invalid key') || message.includes('forbidden')) {
+    setupHints.push('Revisá que la API key sea correcta y que no tenga restricciones que bloqueen este dominio.')
+  }
+
+  if (message.includes('referer') || message.includes('http referrer')) {
+    setupHints.push('Agregá admin.vendexchat.app en los HTTP referrers permitidos de la API key.')
+  }
+
+  if (message.includes('billing')) {
+    setupHints.push('Confirmá que la cuenta de facturación esté activa en el mismo proyecto de Google Cloud.')
+  }
+
+  if (setupHints.length === 0) {
+    setupHints.push('Verificá que la API key y el CX pertenezcan al mismo proyecto y buscador programable.')
+    setupHints.push('Esperá 5 minutos después de habilitar APIs/cambiar permisos, Google puede demorar en aplicar cambios.')
+  }
+
+  return { setupHints }
+}
+
 async function uploadImageToSupabase(imageUrl: string): Promise<string> {
   const res = await fetch(imageUrl)
   if (!res.ok) throw new Error('No se pudo descargar la imagen')
@@ -99,11 +131,18 @@ export default function PexelsImageSuggestions({
   const [uploadingId, setUploadingId] = useState<string | null>(null)
   const [query, setQuery] = useState(initialQuery)
   const [error, setError] = useState<string | null>(null)
+  const [errorDetails, setErrorDetails] = useState<GoogleSearchErrorDetails | null>(null)
+
+  const missingConfig = [
+    !GOOGLE_API_KEY ? 'VITE_GOOGLE_API_KEY' : null,
+    !GOOGLE_CX ? 'VITE_GOOGLE_CX' : null
+  ].filter(Boolean) as string[]
 
   const search = async (term: string) => {
     if (!term.trim()) return
     setLoading(true)
     setError(null)
+    setErrorDetails(null)
     setImages([])
 
     try {
@@ -117,7 +156,10 @@ export default function PexelsImageSuggestions({
       setImages(results)
     } catch (err: any) {
       console.error("Google search error:", err);
-      setError(err.message || 'Error al buscar imágenes. Verificá tu conexión o las claves de API.')
+      const baseMessage = err.message || 'Error al buscar imágenes. Verificá tu conexión o las claves de API.'
+      const details = getGoogleSetupHints(baseMessage)
+      setError(baseMessage)
+      setErrorDetails(details)
     } finally {
       setLoading(false)
     }
@@ -201,6 +243,40 @@ export default function PexelsImageSuggestions({
                 <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
                 <p className="text-xs font-bold text-red-700 uppercase tracking-tight">{error}</p>
               </div>
+
+              {errorDetails?.setupHints?.length ? (
+                <ul className="text-xs text-red-800 pl-5 list-disc space-y-1">
+                  {errorDetails.setupHints.map((hint) => (
+                    <li key={hint}>{hint}</li>
+                  ))}
+                </ul>
+              ) : null}
+
+              {missingConfig.length > 0 ? (
+                <p className="text-xs text-red-800">
+                  Variables faltantes en el deploy: <span className="font-bold">{missingConfig.join(', ')}</span>
+                </p>
+              ) : null}
+
+              <div className="flex flex-wrap items-center gap-3 text-xs">
+                <a
+                  href="https://console.cloud.google.com/apis/library/customsearch.googleapis.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-bold text-red-700 hover:text-red-800 underline underline-offset-2"
+                >
+                  Abrir Custom Search JSON API
+                </a>
+                <a
+                  href="https://programmablesearchengine.google.com/controlpanel/all"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-bold text-red-700 hover:text-red-800 underline underline-offset-2"
+                >
+                  Abrir Programmable Search Engine (CX)
+                </a>
+              </div>
+
               <a
                 href={`https://www.google.com/search?q=${encodeURIComponent(query)}&tbm=isch`}
                 target="_blank"
