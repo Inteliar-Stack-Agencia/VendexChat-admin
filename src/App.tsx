@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { Toaster } from 'sonner'
 import RouteLoader from './components/common/RouteLoader'
+import ToastContainer from './components/common/Toast'
 
 // Layout (Estáticos para mayor estabilidad en el core)
 import AppLayout from './components/layout/AppLayout'
@@ -85,6 +86,7 @@ export default function App() {
     <BrowserRouter>
       <AuthProvider>
         <Toaster position="top-right" richColors closeButton />
+        <ToastContainer />
         <Suspense fallback={<RouteLoader />}>
           <Routes>
             {/* Rutas públicas (Auth) */}
