@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef, FormEvent } from 'react'
 import { useOutletContext, useLocation } from 'react-router-dom'
 import { Card, Button, Input, LoadingSpinner } from '../../components/common'
-import { showToast } from '../../components/common/Toast'
 import { tenantApi, authApi, storageApi } from '../../services/api'
 import { Tenant } from '../../types'
 import { CreditCard, Plus, RefreshCw, Trash2, ShieldCheck, Globe, MessageSquare, Palette, LayoutGrid, Upload, Info, Printer } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import FeatureGuard from '../../components/FeatureGuard'
+import { toast } from 'sonner'
 
 const TABS = [
   { id: 'general', label: 'General', icon: Globe },
@@ -176,7 +176,7 @@ export default function SettingsPage() {
     e.preventDefault()
     setSaving(true)
     if (!tenant?.id) {
-      showToast('error', 'No se encontró el ID de la tienda')
+      toast.error('No se encontró el ID de la tienda')
       setSaving(false)
       return
     }
@@ -209,10 +209,10 @@ export default function SettingsPage() {
           history_title: historyTitle
         }
       } as any)
-      showToast('success', 'Información actualizada')
+      toast.success('Información actualizada')
     } catch (err: unknown) {
       console.error('[SaveGeneral]', err)
-      showToast('error', err instanceof Error ? err.message : 'Error al guardar general')
+      toast.error(err instanceof Error ? err.message : 'Error al guardar general')
     } finally {
       setSaving(false)
     }
@@ -231,10 +231,10 @@ export default function SettingsPage() {
       handleUpdateTenantState({ whatsapp, email, address, country, city, instagram: cleanInstagram, facebook: cleanFacebook })
       setInstagram(cleanInstagram)
       setFacebook(cleanFacebook)
-      showToast('success', 'Contacto actualizado')
+      toast.success('Contacto actualizado')
     } catch (err: unknown) {
       console.error('[SaveContact]', err)
-      showToast('error', err instanceof Error ? err.message : 'Error al guardar contacto')
+      toast.error(err instanceof Error ? err.message : 'Error al guardar contacto')
     } finally {
       setSaving(false)
     }
@@ -258,10 +258,10 @@ export default function SettingsPage() {
         delivery_info: deliveryInfo,
         low_stock_threshold: Number(lowStockThreshold)
       })
-      showToast('success', 'Configuración de pedidos actualizada')
+      toast.success('Configuración de pedidos actualizada')
     } catch (err: unknown) {
       console.error('[SaveOrders]', err)
-      showToast('error', err instanceof Error ? err.message : 'Error al guardar pedidos')
+      toast.error(err instanceof Error ? err.message : 'Error al guardar pedidos')
     } finally {
       setSaving(false)
     }
@@ -281,10 +281,10 @@ export default function SettingsPage() {
         welcome_message: welcomeMessage,
         footer_message: footerMessage,
       })
-      showToast('success', 'Personalización actualizada')
+      toast.success('Personalización actualizada')
     } catch (err: unknown) {
       console.error('[SaveCustomization]', err)
-      showToast('error', err instanceof Error ? err.message : 'Error al guardar diseño')
+      toast.error(err instanceof Error ? err.message : 'Error al guardar diseño')
     } finally {
       setSaving(false)
     }
@@ -293,23 +293,23 @@ export default function SettingsPage() {
   const handleChangePassword = async (e: FormEvent) => {
     e.preventDefault()
     if (newPassword.length < 8) {
-      showToast('error', 'La contraseña debe tener al menos 8 caracteres')
+      toast.error('La contraseña debe tener al menos 8 caracteres')
       return
     }
     if (newPassword !== confirmPassword) {
-      showToast('error', 'Las contraseñas no coinciden')
+      toast.error('Las contraseñas no coinciden')
       return
     }
     setChangingPassword(true)
     try {
       await authApi.changePassword(currentPassword, newPassword)
-      showToast('success', 'Contraseña cambiada correctamente')
+      toast.success('Contraseña cambiada correctamente')
       setCurrentPassword('')
       setNewPassword('')
       setConfirmPassword('')
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Error al cambiar contraseña'
-      showToast('error', msg)
+      toast.error(msg)
     } finally {
       setChangingPassword(false)
     }
@@ -326,10 +326,10 @@ export default function SettingsPage() {
       const gws = await tenantApi.listGateways()
       setGateways(gws)
       setNewGateway({ provider: 'mercadopago', public_key: '', secret_key: '' })
-      showToast('success', 'Pasarela conectada correctamente')
+      toast.success('Pasarela conectada correctamente')
     } catch (err) {
       console.error('Error al conectar pasarela:', err)
-      showToast('error', 'Error al conectar pasarela')
+      toast.error('Error al conectar pasarela')
     } finally {
       setLoadingGateways(false)
     }
@@ -359,10 +359,10 @@ export default function SettingsPage() {
       } as any)
 
       handleUpdateTenantState({ metadata: updatedMetadata } as any)
-      showToast('success', 'Métodos manuales actualizados')
+      toast.success('Métodos manuales actualizados')
     } catch (err) {
       console.error('Error saving manual payments:', err)
-      showToast('error', 'Error al guardar')
+      toast.error('Error al guardar')
     } finally {
       setSaving(false)
     }
@@ -388,17 +388,20 @@ export default function SettingsPage() {
       } as any)
 
       handleUpdateTenantState({ metadata: updatedMetadata } as any)
-      showToast('success', 'Configuración de impresora actualizada')
+      toast.success('Configuración de impresora actualizada')
     } catch (err: unknown) {
       console.error('Error saving printer settings:', err)
-      showToast('error', err instanceof Error ? err.message : 'Error al guardar')
+      toast.error(err instanceof Error ? err.message : 'Error al guardar')
     } finally {
       setSaving(false)
     }
   }
 
   const handleUpload = async (file: File, type: 'logo' | 'banner') => {
-    if (!tenant?.id) return
+    if (!tenant?.id) {
+      toast.error('No se encontró el ID de la tienda. Recarga la página.')
+      return
+    }
 
     const isLogo = type === 'logo'
     if (isLogo) setUploadingLogo(true)
@@ -419,13 +422,18 @@ export default function SettingsPage() {
         handleUpdateTenantState({ banner_url: url })
       }
 
-      showToast('success', `${isLogo ? 'Logo' : 'Banner'} subido y guardado correctamente`)
+      toast.success(`${isLogo ? 'Logo' : 'Banner'} subido y guardado correctamente`)
     } catch (err: unknown) {
       console.error('Error uploading image (Settings):', err)
-      showToast('error', 'Error al subir la imagen. Verifica el tamaño y formato.')
+      toast.error(err instanceof Error ? err.message : 'Error al subir la imagen. Verifica el tamaño y formato.')
     } finally {
-      if (isLogo) setUploadingLogo(false)
-      else setUploadingBanner(false)
+      if (isLogo) {
+        setUploadingLogo(false)
+        if (logoInputRef.current) logoInputRef.current.value = ''
+      } else {
+        setUploadingBanner(false)
+        if (bannerInputRef.current) bannerInputRef.current.value = ''
+      }
     }
   }
 
