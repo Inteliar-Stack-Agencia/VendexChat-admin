@@ -398,7 +398,10 @@ export default function SettingsPage() {
   }
 
   const handleUpload = async (file: File, type: 'logo' | 'banner') => {
-    if (!tenant?.id) return
+    if (!tenant?.id) {
+      showToast('error', 'No se encontró el ID de la tienda. Recarga la página.')
+      return
+    }
 
     const isLogo = type === 'logo'
     if (isLogo) setUploadingLogo(true)
@@ -422,10 +425,15 @@ export default function SettingsPage() {
       showToast('success', `${isLogo ? 'Logo' : 'Banner'} subido y guardado correctamente`)
     } catch (err: unknown) {
       console.error('Error uploading image (Settings):', err)
-      showToast('error', 'Error al subir la imagen. Verifica el tamaño y formato.')
+      showToast('error', err instanceof Error ? err.message : 'Error al subir la imagen. Verifica el tamaño y formato.')
     } finally {
-      if (isLogo) setUploadingLogo(false)
-      else setUploadingBanner(false)
+      if (isLogo) {
+        setUploadingLogo(false)
+        if (logoInputRef.current) logoInputRef.current.value = ''
+      } else {
+        setUploadingBanner(false)
+        if (bannerInputRef.current) bannerInputRef.current.value = ''
+      }
     }
   }
 
