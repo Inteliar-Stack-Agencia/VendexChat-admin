@@ -69,6 +69,9 @@ export default function SettingsPage() {
   const [deliveryCost, setDeliveryCost] = useState('0')
   const [deliveryInfo, setDeliveryInfo] = useState('')
   const [lowStockThreshold, setLowStockThreshold] = useState('5')
+  const [deliveryMode, setDeliveryMode] = useState<'delivery' | 'pickup' | 'both'>('both')
+  const [estimatedTime, setEstimatedTime] = useState('')
+  const [orderConfirmMessage, setOrderConfirmMessage] = useState('')
 
   // Form para personalización
   const [primaryColor, setPrimaryColor] = useState('#10b981')
@@ -134,6 +137,11 @@ export default function SettingsPage() {
         setHighlights(metadata.highlights || [])
         setAboutTitle(metadata.about_title || 'Nosotros')
         setHistoryTitle(metadata.history_title || 'Nuestra Historia')
+
+        // Load orders extra settings from metadata
+        setDeliveryMode(metadata.delivery_mode || 'both')
+        setEstimatedTime(metadata.estimated_time || '')
+        setOrderConfirmMessage(metadata.order_confirm_message || '')
 
         // Load printer settings from metadata
         const printer = metadata.printer || {}
@@ -244,20 +252,29 @@ export default function SettingsPage() {
     e.preventDefault()
     setSaving(true)
     try {
+      const currentMetadata = (tenant as any)?.metadata || {}
+      const updatedMetadata = {
+        ...currentMetadata,
+        delivery_mode: deliveryMode,
+        estimated_time: estimatedTime,
+        order_confirm_message: orderConfirmMessage,
+      }
       await tenantApi.updateMe({
         accept_orders: acceptOrders,
         min_order: Number(minOrder),
         delivery_cost: Number(deliveryCost),
         delivery_info: deliveryInfo,
-        low_stock_threshold: Number(lowStockThreshold)
-      })
+        low_stock_threshold: Number(lowStockThreshold),
+        metadata: updatedMetadata,
+      } as any)
       handleUpdateTenantState({
         accept_orders: acceptOrders,
         min_order: Number(minOrder),
         delivery_cost: Number(deliveryCost),
         delivery_info: deliveryInfo,
-        low_stock_threshold: Number(lowStockThreshold)
-      })
+        low_stock_threshold: Number(lowStockThreshold),
+        metadata: updatedMetadata,
+      } as any)
       toast.success('Configuración de pedidos actualizada')
     } catch (err: unknown) {
       console.error('[SaveOrders]', err)
@@ -712,18 +729,64 @@ export default function SettingsPage() {
       {/* Tab: Pedidos */}
       {activeTab === 'orders' && (
         <Card>
-          <form onSubmit={handleSaveOrders} className="space-y-4">
-            <label className="flex items-center gap-2 cursor-pointer">
+          <form onSubmit={handleSaveOrders} className="space-y-6">
+
+            {/* Aceptar pedidos */}
+            <label className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl cursor-pointer">
               <input
                 type="checkbox"
                 checked={acceptOrders}
                 onChange={(e) => setAcceptOrders(e.target.checked)}
                 className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
               />
-              <span className="text-sm text-gray-700 font-medium">Aceptar pedidos</span>
+              <div>
+                <span className="text-sm font-bold text-gray-800">Aceptar pedidos</span>
+                <p className="text-[11px] text-slate-400">Cuando está desactivado, los clientes no podrán realizar pedidos nuevos.</p>
+              </div>
             </label>
-            <Input label="Pedido mínimo ($)" type="number" min="0" value={minOrder} onChange={(e) => setMinOrder(e.target.value)} />
-            <Input label="Costo de delivery ($)" type="number" min="0" value={deliveryCost} onChange={(e) => setDeliveryCost(e.target.value)} />
+
+            {/* Modalidad de entrega */}
+            <div>
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Modalidad de entrega</label>
+              <div className="flex gap-2">
+                {[
+                  { value: 'delivery', label: '🛵 Delivery' },
+                  { value: 'pickup', label: '🏪 Retiro en local' },
+                  { value: 'both', label: '✅ Ambas' },
+                ].map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setDeliveryMode(opt.value as 'delivery' | 'pickup' | 'both')}
+                    className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold border-2 transition-all ${deliveryMode === opt.value
+                      ? 'border-indigo-600 bg-indigo-50 text-indigo-700'
+                      : 'border-slate-100 bg-white text-slate-400 hover:border-slate-200'
+                      }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Costo y pedido mínimo */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Input label="Pedido mínimo ($)" type="number" min="0" value={minOrder} onChange={(e) => setMinOrder(e.target.value)} />
+              {(deliveryMode === 'delivery' || deliveryMode === 'both') && (
+                <Input label="Costo de delivery ($)" type="number" min="0" value={deliveryCost} onChange={(e) => setDeliveryCost(e.target.value)} />
+              )}
+            </div>
+
+            {/* Tiempo estimado */}
+            <Input
+              label="Tiempo estimado de entrega"
+              value={estimatedTime}
+              onChange={(e) => setEstimatedTime(e.target.value)}
+              placeholder="Ej: 30-45 minutos"
+              helperText="Se mostrará al cliente al realizar el pedido."
+            />
+
+            {/* Info de zonas */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Información de envíos/zonas</label>
               <textarea
@@ -734,6 +797,21 @@ export default function SettingsPage() {
                 placeholder="Entregamos en zona norte los martes..."
               />
             </div>
+
+            {/* Mensaje de confirmación */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Mensaje de confirmación de pedido</label>
+              <textarea
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                rows={3}
+                value={orderConfirmMessage}
+                onChange={(e) => setOrderConfirmMessage(e.target.value)}
+                placeholder="¡Gracias por tu pedido! Lo estamos preparando y te avisamos cuando esté en camino."
+              />
+              <p className="text-[11px] text-slate-400 mt-1">Mensaje automático que se envía al cliente al confirmar un pedido.</p>
+            </div>
+
+            {/* Umbral de stock */}
             <Input
               label="Alerta de Stock Bajo (Umbral)"
               type="number"
@@ -742,6 +820,7 @@ export default function SettingsPage() {
               onChange={(e) => setLowStockThreshold(e.target.value)}
               helperText="Los productos con stock igual o inferior a este número aparecerán como alerta en el dashboard."
             />
+
             <Button type="submit" loading={saving}>Guardar cambios</Button>
           </form>
         </Card>
