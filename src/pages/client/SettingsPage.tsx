@@ -72,6 +72,7 @@ export default function SettingsPage() {
   const [deliveryMode, setDeliveryMode] = useState<'delivery' | 'pickup' | 'both'>('both')
   const [estimatedTime, setEstimatedTime] = useState('')
   const [orderConfirmMessage, setOrderConfirmMessage] = useState('')
+  const [deliveryZones, setDeliveryZones] = useState<{ name: string; cost: number }[]>([])
 
   // Form para personalización
   const [primaryColor, setPrimaryColor] = useState('#10b981')
@@ -142,6 +143,7 @@ export default function SettingsPage() {
         setDeliveryMode(metadata.delivery_mode || 'both')
         setEstimatedTime(metadata.estimated_time || '')
         setOrderConfirmMessage(metadata.order_confirm_message || '')
+        setDeliveryZones(metadata.delivery_zones || [])
 
         // Load printer settings from metadata
         const printer = metadata.printer || {}
@@ -258,6 +260,7 @@ export default function SettingsPage() {
         delivery_mode: deliveryMode,
         estimated_time: estimatedTime,
         order_confirm_message: orderConfirmMessage,
+        delivery_zones: deliveryZones,
       }
       await tenantApi.updateMe({
         accept_orders: acceptOrders,
@@ -810,6 +813,73 @@ export default function SettingsPage() {
               />
               <p className="text-[11px] text-slate-400 mt-1">Mensaje automático que se envía al cliente al confirmar un pedido.</p>
             </div>
+
+            {/* Zonas de envío */}
+            {(deliveryMode === 'delivery' || deliveryMode === 'both') && (
+              <div className="pt-4 border-t border-slate-100">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight">Zonas de envío</h3>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Costo diferenciado por barrio o zona</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setDeliveryZones([...deliveryZones, { name: '', cost: 0 }])}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-indigo-600 border border-indigo-200 rounded-lg hover:bg-indigo-50 transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Agregar zona
+                  </button>
+                </div>
+
+                {deliveryZones.length === 0 ? (
+                  <div className="text-center py-6 bg-slate-50 rounded-xl border-2 border-dashed border-slate-100">
+                    <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Sin zonas configuradas</p>
+                    <p className="text-[10px] text-slate-400 mt-1">Se usará el costo de delivery general</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {deliveryZones.map((zone, i) => (
+                      <div key={i} className="flex items-center gap-2 p-3 bg-slate-50 rounded-xl border border-slate-100">
+                        <input
+                          type="text"
+                          value={zone.name}
+                          onChange={(e) => {
+                            const updated = [...deliveryZones]
+                            updated[i] = { ...updated[i], name: e.target.value }
+                            setDeliveryZones(updated)
+                          }}
+                          placeholder="Ej: Centro, Palermo, Zona Norte..."
+                          className="flex-1 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500/20"
+                        />
+                        <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg px-3 py-1.5">
+                          <span className="text-slate-400 text-sm font-bold">$</span>
+                          <input
+                            type="number"
+                            min="0"
+                            value={zone.cost}
+                            onChange={(e) => {
+                              const updated = [...deliveryZones]
+                              updated[i] = { ...updated[i], cost: Number(e.target.value) }
+                              setDeliveryZones(updated)
+                            }}
+                            className="w-24 text-sm outline-none font-bold text-slate-700"
+                            placeholder="0"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setDeliveryZones(deliveryZones.filter((_, idx) => idx !== i))}
+                          className="p-1.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Umbral de stock */}
             <Input
