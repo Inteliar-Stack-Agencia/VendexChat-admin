@@ -6,7 +6,8 @@ export const storageApi = {
             .from(bucket)
             .upload(path, file, {
                 upsert: true,
-                cacheControl: '3600'
+                cacheControl: '3600',
+                contentType: file.type
             })
 
         if (error) {
