@@ -137,15 +137,32 @@ export const statsApi = {
 
     getOrdersByCompany: async (range: '7d' | '30d' | 'all' | 'custom' = 'all', dateRange?: DateRange) => {
         const storeId = await getStoreId()
-        let query = supabase
+        let ordersQuery = supabase
             .from('orders')
-            .select('created_at, total, status, order_number, customer_name, customer_whatsapp, delivery_address, metadata')
+            .select('id, created_at, total, status, order_number, customer_name, customer_whatsapp, delivery_address, metadata')
             .eq('store_id', storeId)
             .order('created_at', { ascending: false })
-        query = applyDateRange(query, range, dateRange)
+        ordersQuery = applyDateRange(ordersQuery, range, dateRange)
 
-        const { data, error } = await query
-        if (error) throw error
-        return data || []
+        const { data: orders, error: ordersError } = await ordersQuery
+        if (ordersError) throw ordersError
+        if (!orders || orders.length === 0) return []
+
+        const orderIds = orders.map(o => o.id)
+        const { data: items, error: itemsError } = await supabase
+            .from('order_items')
+            .select('order_id, quantity, price, products(name)')
+            .in('order_id', orderIds)
+
+        if (itemsError) throw itemsError
+
+        const itemsByOrder: Record<string, { quantity: number; price: number; products: { name: string } | null }[]> = {}
+        ;(items || []).forEach((item: { order_id: string; quantity: number; price: number; products: { name: string } | { name: string }[] | null }) => {
+            if (!itemsByOrder[item.order_id]) itemsByOrder[item.order_id] = []
+            const prod = Array.isArray(item.products) ? item.products[0] : item.products
+            itemsByOrder[item.order_id].push({ quantity: item.quantity, price: item.price, products: prod })
+        })
+
+        return orders.map(o => ({ ...o, items: itemsByOrder[o.id] || [] }))
     }
 }
