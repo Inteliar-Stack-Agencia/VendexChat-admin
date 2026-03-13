@@ -6,17 +6,16 @@ type DateRange = { from?: string; to?: string }
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function applyDateRange(query: any, range: '7d' | '30d' | 'all' | 'custom', dateRange?: DateRange) {
     if (range === 'custom' && dateRange?.from) {
-        query = query.gte('created_at', new Date(dateRange.from).toISOString())
+        query = query.gte('created_at', dateRange.from + 'T00:00:00')
         if (dateRange.to) {
-            const toDate = new Date(dateRange.to)
-            toDate.setHours(23, 59, 59, 999)
-            query = query.lte('created_at', toDate.toISOString())
+            query = query.lte('created_at', dateRange.to + 'T23:59:59')
         }
     } else if (range !== 'all') {
         const days = range === '7d' ? 7 : 30
         const date = new Date()
         date.setDate(date.getDate() - days)
-        query = query.gte('created_at', date.toISOString())
+        const dateStr = date.toISOString().split('T')[0]
+        query = query.gte('created_at', dateStr + 'T00:00:00')
     }
     return query
 }
@@ -30,7 +29,7 @@ export const statsApi = {
         const { data, error } = await query
         if (error) throw error
 
-        const filtered = (data || []).filter(o => ['pending', 'confirmed', 'completed'].includes(o.status))
+        const filtered = (data || []).filter(o => o.status !== 'cancelled')
         const totalSales = filtered.reduce((acc, curr) => acc + (Number(curr.total) || 0), 0)
         const totalOrders = filtered.length
         const avgTicket = totalOrders > 0 ? totalSales / totalOrders : 0
