@@ -120,6 +120,28 @@ export default function StatsPage() {
         }
     }
 
+    const handleExportByCustomer = async () => {
+        setExporting('byCustomer')
+        try {
+            const data = await statsApi.getOrdersByCustomer(range, getDateRange())
+            const rows = data.map((o: { order_number?: string; created_at: string; status: string; total: number; customer_name: string; customer_whatsapp: string; delivery_address?: string; metadata?: Record<string, unknown> }) => ({
+                'Cliente': o.customer_name || '',
+                'WhatsApp': o.customer_whatsapp || '',
+                'N° Pedido': o.order_number || '',
+                'Fecha': formatDate(o.created_at || ''),
+                'Estado': o.status || '',
+                'Dirección': o.delivery_address || '',
+                'Empresa': (o.metadata?.company_name as string) || '',
+                'Total': o.total || 0
+            }))
+            exportToExcel(rows, 'Reporte_Pedidos_Por_Cliente')
+        } catch {
+            showToast('error', 'Error al obtener datos de pedidos por cliente')
+        } finally {
+            setExporting(null)
+        }
+    }
+
     const handleExportByCompany = async () => {
         setExporting('company')
         try {
@@ -352,6 +374,13 @@ export default function StatsPage() {
                         icon={Users}
                         onDownload={handleExportCustomers}
                         loading={exporting === 'customers'}
+                    />
+                    <ReportCard
+                        title="Pedidos por Cliente"
+                        description="Listado detallado de todos los pedidos ordenados por cliente, con fecha, estado y total."
+                        icon={Users}
+                        onDownload={handleExportByCustomer}
+                        loading={exporting === 'byCustomer'}
                     />
                     <ReportCard
                         title="Pedidos por Día"
