@@ -146,17 +146,39 @@ export default function StatsPage() {
         setExporting('company')
         try {
             const data = await statsApi.getOrdersByCompany(range, getDateRange())
-            const companyMap: Record<string, { 'Empresa': string; 'Cant. Pedidos': number; 'Total Compras': number }> = {}
-            data.forEach((o: { metadata?: Record<string, unknown>; customer_name: string; total: number }) => {
-                const company = (o.metadata?.company_name as string) || '(Sin empresa)'
-                if (!companyMap[company]) {
-                    companyMap[company] = { 'Empresa': company, 'Cant. Pedidos': 0, 'Total Compras': 0 }
+            const rows: Record<string, unknown>[] = []
+            data.forEach((o: { metadata?: Record<string, unknown>; customer_name: string; total: number; order_number: string; created_at: string; items: { quantity: number; price: number; products: { name: string } | null }[] }) => {
+                const empresa = (o.metadata?.company_name as string) || '(Sin empresa)'
+                const empleado = o.customer_name || ''
+                const fecha = formatDate(o.created_at)
+                const nPedido = o.order_number || ''
+                if (o.items && o.items.length > 0) {
+                    o.items.forEach(item => {
+                        rows.push({
+                            'Empresa': empresa,
+                            'Empleado': empleado,
+                            'N° Pedido': nPedido,
+                            'Fecha': fecha,
+                            'Producto': item.products?.name || 'Desconocido',
+                            'Cantidad': item.quantity || 0,
+                            'Precio Unit.': item.price || 0,
+                            'Subtotal': (item.quantity || 0) * (item.price || 0),
+                        })
+                    })
+                } else {
+                    rows.push({
+                        'Empresa': empresa,
+                        'Empleado': empleado,
+                        'N° Pedido': nPedido,
+                        'Fecha': fecha,
+                        'Producto': '',
+                        'Cantidad': '',
+                        'Precio Unit.': '',
+                        'Subtotal': o.total || 0,
+                    })
                 }
-                companyMap[company]['Cant. Pedidos'] += 1
-                companyMap[company]['Total Compras'] += o.total || 0
             })
-            const sorted = Object.values(companyMap).sort((a, b) => b['Total Compras'] - a['Total Compras'])
-            exportToExcel(sorted, 'Reporte_Por_Empresa')
+            exportToExcel(rows, 'Reporte_Por_Empresa')
         } catch {
             showToast('error', 'Error al obtener datos por empresa')
         } finally {
