@@ -3,7 +3,8 @@ import { getStoreId } from './coreApi'
 
 type DateRange = { from?: string; to?: string }
 
-function applyDateRange(query: ReturnType<typeof supabase.from>, range: '7d' | '30d' | 'all' | 'custom', dateRange?: DateRange) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function applyDateRange(query: any, range: '7d' | '30d' | 'all' | 'custom', dateRange?: DateRange) {
     if (range === 'custom' && dateRange?.from) {
         query = query.gte('created_at', new Date(dateRange.from).toISOString())
         if (dateRange.to) {
