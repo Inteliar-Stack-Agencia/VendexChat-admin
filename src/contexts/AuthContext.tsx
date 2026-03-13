@@ -14,6 +14,7 @@ interface AuthContextType {
   logout: () => void
   isAuthenticated: boolean
   isSuperadmin: boolean
+  isEmpresa: boolean
   subscription: Subscription | null
   refreshSubscription: () => Promise<void>
   selectedStoreId: string | null
@@ -179,6 +180,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         logout,
         isAuthenticated: !!user,
         isSuperadmin: user?.role === 'superadmin',
+        isEmpresa: user?.role === 'empresa',
         subscription,
         refreshSubscription,
         selectedStoreId,

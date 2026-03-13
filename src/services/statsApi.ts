@@ -30,9 +30,9 @@ export const statsApi = {
         const { data, error } = await query
         if (error) throw error
 
-        const filtered = (data || []).filter(o => ['completed', 'paid', 'delivered', 'pending'].includes(o.status))
+        const filtered = (data || []).filter(o => ['pending', 'confirmed', 'completed'].includes(o.status))
         const totalSales = filtered.reduce((acc, curr) => acc + (Number(curr.total) || 0), 0)
-        const totalOrders = (data || []).length
+        const totalOrders = filtered.length
         const avgTicket = totalOrders > 0 ? totalSales / totalOrders : 0
 
         return { totalSales, totalOrders, avgTicket, orders: data || [] }
@@ -81,6 +81,68 @@ export const statsApi = {
             .from('orders')
             .select('customer_name, customer_whatsapp, order_number, total, created_at')
             .eq('store_id', storeId)
+        query = applyDateRange(query, range, dateRange)
+
+        const { data, error } = await query
+        if (error) throw error
+        return data || []
+    },
+
+    getOrdersByDay: async (range: '7d' | '30d' | 'all' | 'custom' = 'all', dateRange?: DateRange) => {
+        const storeId = await getStoreId()
+        let query = supabase
+            .from('orders')
+            .select('created_at, total, status, order_number, customer_name, metadata')
+            .eq('store_id', storeId)
+            .order('created_at', { ascending: false })
+        query = applyDateRange(query, range, dateRange)
+
+        const { data, error } = await query
+        if (error) throw error
+        return data || []
+    },
+
+    getMyCompanyOrders: async (companyFilter: string, range: '7d' | '30d' | 'all' | 'custom' = 'all', dateRange?: DateRange) => {
+        const storeId = await getStoreId()
+        let query = supabase
+            .from('orders')
+            .select('created_at, total, status, order_number, customer_name, customer_whatsapp, delivery_address, metadata')
+            .eq('store_id', storeId)
+            .order('created_at', { ascending: false })
+        query = applyDateRange(query, range, dateRange)
+
+        const { data, error } = await query
+        if (error) throw error
+
+        // Filter client-side by company_name in metadata
+        const filtered = (data || []).filter(
+            (o: { metadata?: Record<string, unknown> }) =>
+                (o.metadata?.company_name as string | undefined) === companyFilter
+        )
+        return filtered
+    },
+
+    getOrdersByCustomer: async (range: '7d' | '30d' | 'all' | 'custom' = 'all', dateRange?: DateRange) => {
+        const storeId = await getStoreId()
+        let query = supabase
+            .from('orders')
+            .select('created_at, total, status, order_number, customer_name, customer_whatsapp, delivery_address, metadata')
+            .eq('store_id', storeId)
+            .order('customer_name', { ascending: true })
+        query = applyDateRange(query, range, dateRange)
+
+        const { data, error } = await query
+        if (error) throw error
+        return data || []
+    },
+
+    getOrdersByCompany: async (range: '7d' | '30d' | 'all' | 'custom' = 'all', dateRange?: DateRange) => {
+        const storeId = await getStoreId()
+        let query = supabase
+            .from('orders')
+            .select('created_at, total, status, order_number, customer_name, customer_whatsapp, delivery_address, metadata')
+            .eq('store_id', storeId)
+            .order('created_at', { ascending: false })
         query = applyDateRange(query, range, dateRange)
 
         const { data, error } = await query

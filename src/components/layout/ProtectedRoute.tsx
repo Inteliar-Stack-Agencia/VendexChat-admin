@@ -44,6 +44,34 @@ export default function ProtectedRoute({ children, requiredRole = 'client' }: Pr
   return <>{children}</>
 }
 
+// Ruta protegida solo para empresas
+export function EmpresaRoute({ children }: { children: React.ReactNode }) {
+  const { user, isAuthenticated, loading } = useAuth()
+  const location = useLocation()
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-white">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-1.5 h-1.5 bg-indigo-600 rounded-full animate-bounce" style={{ animationDelay: '0s' }} />
+          <div className="w-1.5 h-1.5 bg-indigo-600 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }} />
+          <div className="w-1.5 h-1.5 bg-indigo-600 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
+        </div>
+      </div>
+    )
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" state={{ from: location }} replace />
+  }
+
+  if (user?.role !== 'empresa') {
+    return <Navigate to="/dashboard" replace />
+  }
+
+  return <>{children}</>
+}
+
 // Ruta protegida solo para superadmin
 export function SuperadminRoute({ children }: { children: React.ReactNode }) {
   const { user, isAuthenticated, loading } = useAuth()

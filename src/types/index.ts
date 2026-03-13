@@ -66,8 +66,9 @@ export interface User {
   id: string // Supabase Auth uses UUID
   email: string
   name: string
-  role: 'client' | 'superadmin'
+  role: 'client' | 'superadmin' | 'empresa'
   store_id: string | null
+  company_filter: string | null
   created_at: string
 }
 
