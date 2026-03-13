@@ -7,17 +7,18 @@ import {
     Package,
     MapPin,
     TrendingUp,
-    Calendar,
-    ArrowRight,
     FileSpreadsheet,
-    Loader2
+    Loader2,
+    CalendarRange
 } from 'lucide-react'
-import { Card, LoadingSpinner, Button } from '../../components/common'
+import { Card, Button } from '../../components/common'
 import { statsApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import { formatPrice, formatDate } from '../../utils/helpers'
 import * as XLSX from 'xlsx'
 import { showToast } from '../../components/common/Toast'
+
+type RangeOption = '7d' | '30d' | 'all' | 'custom'
 
 export default function StatsPage() {
     const { selectedStoreId } = useAuth()
@@ -29,16 +30,24 @@ export default function StatsPage() {
         orders: { total: number | null; created_at: string | null; status: string | null }[];
     } | null>(null)
     const [exporting, setExporting] = useState<string | null>(null)
-    const [range, setRange] = useState<'7d' | '30d' | 'all'>('30d')
+    const [range, setRange] = useState<RangeOption>('30d')
+
+    const today = new Date().toISOString().split('T')[0]
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+    const [fromDate, setFromDate] = useState(thirtyDaysAgo)
+    const [toDate, setToDate] = useState(today)
 
     useEffect(() => {
         loadOverview()
-    }, [range, selectedStoreId])
+    }, [range, selectedStoreId, fromDate, toDate])
+
+    const getDateRange = () =>
+        range === 'custom' ? { from: fromDate, to: toDate } : undefined
 
     const loadOverview = async () => {
         setLoading(true)
         try {
-            const data = await statsApi.getOverview(range)
+            const data = await statsApi.getOverview(range, getDateRange())
             setOverview(data)
         } catch (err) {
             console.error('Error al cargar estadísticas:', err)
@@ -51,7 +60,7 @@ export default function StatsPage() {
     const exportToExcel = (data: Record<string, unknown>[], fileName: string) => {
         try {
             if (data.length === 0) {
-                showToast('error', 'No hay datos para exportar')
+                showToast('error', 'No hay datos para exportar en el período seleccionado')
                 return
             }
             const worksheet = XLSX.utils.json_to_sheet(data)
@@ -68,7 +77,7 @@ export default function StatsPage() {
     const handleExportOrders = async () => {
         setExporting('orders')
         try {
-            const res = await statsApi.getOverview('all')
+            const res = await statsApi.getOverview(range, getDateRange())
             const data = res.orders.map((o, i: number) => ({
                 'ID Pedido': `ORD-${i + 1}`,
                 'Fecha': formatDate(o.created_at || ''),
@@ -76,7 +85,7 @@ export default function StatsPage() {
                 'Total': o.total || 0
             }))
             exportToExcel(data, 'Reporte_Pedidos')
-        } catch (err) {
+        } catch {
             showToast('error', 'Error al obtener datos de pedidos')
         } finally {
             setExporting(null)
@@ -86,7 +95,7 @@ export default function StatsPage() {
     const handleExportByZone = async () => {
         setExporting('zones')
         try {
-            const data = await statsApi.getOrdersByZone()
+            const data = await statsApi.getOrdersByZone(range, getDateRange())
             const formatted = data.map((o: { created_at: string; delivery_address: string; total: number; status: string }) => ({
                 'Fecha': formatDate(o.created_at),
                 'Zona/Dirección': o.delivery_address,
@@ -94,7 +103,7 @@ export default function StatsPage() {
                 'Estado': o.status
             }))
             exportToExcel(formatted, 'Reporte_Ventas_Por_Zona')
-        } catch (err) {
+        } catch {
             showToast('error', 'Error al obtener datos por zona')
         } finally {
             setExporting(null)
@@ -104,8 +113,7 @@ export default function StatsPage() {
     const handleExportProducts = async () => {
         setExporting('products')
         try {
-            const data = await statsApi.getTopProducts()
-            // Agrupar por producto
+            const data = await statsApi.getTopProducts(range, getDateRange())
             const productMap: Record<string, { 'Producto': string; 'Cantidad Vendida': number; 'Total Recaudado': number }> = {}
             data.forEach((item: { products?: { name: string }[] | { name: string } | null; quantity: number | null; price?: number | null }) => {
                 const prod = item.products
@@ -116,8 +124,8 @@ export default function StatsPage() {
                 productMap[name]['Cantidad Vendida'] += item.quantity || 0
                 productMap[name]['Total Recaudado'] += ((item.quantity || 0) * (item.price || 0)) || 0
             })
-            exportToExcel(Object.values(productMap), 'Reporte_Top_Productos')
-        } catch (err) {
+            exportToExcel(Object.values(productMap).sort((a, b) => b['Cantidad Vendida'] - a['Cantidad Vendida']), 'Reporte_Top_Productos')
+        } catch {
             showToast('error', 'Error al obtener datos de productos')
         } finally {
             setExporting(null)
@@ -127,8 +135,7 @@ export default function StatsPage() {
     const handleExportCustomers = async () => {
         setExporting('customers')
         try {
-            const data = await statsApi.getTopCustomers()
-            // Agrupar por cliente
+            const data = await statsApi.getTopCustomers(range, getDateRange())
             const customerMap: Record<string, { 'Cliente': string; 'WhatsApp': string; 'Cant. Pedidos': number; 'Total Compras': number }> = {}
             data.forEach((o: { customer_whatsapp: string; customer_name: string; total: number }) => {
                 const key = o.customer_whatsapp || o.customer_name
@@ -144,15 +151,12 @@ export default function StatsPage() {
                 customerMap[key]['Total Compras'] += o.total || 0
             })
             exportToExcel(Object.values(customerMap).sort((a, b) => b['Total Compras'] - a['Total Compras']), 'Reporte_Clientes')
-        } catch (err) {
+        } catch {
             showToast('error', 'Error al obtener datos de clientes')
         } finally {
             setExporting(null)
         }
     }
-
-    // Renderizado base omitiendo el return prematuro del spinner bloqueante
-    // if (loading && !overview) return <LoadingSpinner text="Analizando datos..." />
 
     return (
         <div className="space-y-6 animate-fade-in">
@@ -163,17 +167,49 @@ export default function StatsPage() {
                     <p className="text-slate-500 text-sm">Analizá el rendimiento de tu negocio y descargá reportes.</p>
                 </div>
 
-                <div className="flex bg-slate-100 p-1 rounded-xl">
-                    {(['7d', '30d', 'all'] as const).map((r) => (
-                        <button
-                            key={r}
-                            onClick={() => setRange(r)}
-                            className={`px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${range === r ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-                                }`}
-                        >
-                            {r === '7d' ? '7 Días' : r === '30d' ? '30 Días' : 'Todo'}
-                        </button>
-                    ))}
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                    {/* Range quick buttons */}
+                    <div className="flex bg-slate-100 p-1 rounded-xl">
+                        {(['7d', '30d', 'all', 'custom'] as const).map((r) => (
+                            <button
+                                key={r}
+                                onClick={() => setRange(r)}
+                                className={`px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all flex items-center gap-1 ${range === r ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                            >
+                                {r === '7d' ? '7 Días' : r === '30d' ? '30 Días' : r === 'all' ? 'Todo' : (
+                                    <><CalendarRange className="w-3 h-3" /> Fechas</>
+                                )}
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* Custom date inputs */}
+                    {range === 'custom' && (
+                        <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 py-2 shadow-sm">
+                            <div className="flex flex-col">
+                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Desde</label>
+                                <input
+                                    type="date"
+                                    value={fromDate}
+                                    max={toDate}
+                                    onChange={e => setFromDate(e.target.value)}
+                                    className="text-xs text-slate-700 border-none outline-none bg-transparent"
+                                />
+                            </div>
+                            <span className="text-slate-300 font-bold">—</span>
+                            <div className="flex flex-col">
+                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Hasta</label>
+                                <input
+                                    type="date"
+                                    value={toDate}
+                                    min={fromDate}
+                                    max={today}
+                                    onChange={e => setToDate(e.target.value)}
+                                    className="text-xs text-slate-700 border-none outline-none bg-transparent"
+                                />
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -186,7 +222,7 @@ export default function StatsPage() {
                         </div>
                         <div className="flex-1">
                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Total Ventas</p>
-                            {loading && !overview ? (
+                            {loading ? (
                                 <div className="h-8 w-32 bg-slate-100 animate-pulse rounded mt-1" />
                             ) : (
                                 <p className="text-2xl font-black text-slate-900">{formatPrice(overview?.totalSales || 0)}</p>
@@ -202,7 +238,7 @@ export default function StatsPage() {
                         </div>
                         <div className="flex-1">
                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Cant. Pedidos</p>
-                            {loading && !overview ? (
+                            {loading ? (
                                 <div className="h-8 w-16 bg-slate-100 animate-pulse rounded mt-1" />
                             ) : (
                                 <p className="text-2xl font-black text-slate-900">{overview?.totalOrders || 0}</p>
@@ -218,7 +254,7 @@ export default function StatsPage() {
                         </div>
                         <div className="flex-1">
                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Ticket Promedio</p>
-                            {loading && !overview ? (
+                            {loading ? (
                                 <div className="h-8 w-24 bg-slate-100 animate-pulse rounded mt-1" />
                             ) : (
                                 <p className="text-2xl font-black text-slate-900">{formatPrice(overview?.avgTicket || 0)}</p>
@@ -234,6 +270,9 @@ export default function StatsPage() {
                     <FileSpreadsheet className="w-5 h-5 text-emerald-500" />
                     Descarga de Reportes (Excel)
                 </h2>
+                <p className="text-xs text-slate-400 -mt-2">
+                    Los reportes se exportan con el filtro de período seleccionado arriba.
+                </p>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <ReportCard
