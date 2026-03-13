@@ -86,5 +86,33 @@ export const statsApi = {
         const { data, error } = await query
         if (error) throw error
         return data || []
+    },
+
+    getOrdersByDay: async (range: '7d' | '30d' | 'all' | 'custom' = 'all', dateRange?: DateRange) => {
+        const storeId = await getStoreId()
+        let query = supabase
+            .from('orders')
+            .select('created_at, total, status, order_number, customer_name, metadata')
+            .eq('store_id', storeId)
+            .order('created_at', { ascending: false })
+        query = applyDateRange(query, range, dateRange)
+
+        const { data, error } = await query
+        if (error) throw error
+        return data || []
+    },
+
+    getOrdersByCompany: async (range: '7d' | '30d' | 'all' | 'custom' = 'all', dateRange?: DateRange) => {
+        const storeId = await getStoreId()
+        let query = supabase
+            .from('orders')
+            .select('created_at, total, status, order_number, customer_name, customer_whatsapp, delivery_address, metadata')
+            .eq('store_id', storeId)
+            .order('created_at', { ascending: false })
+        query = applyDateRange(query, range, dateRange)
+
+        const { data, error } = await query
+        if (error) throw error
+        return data || []
     }
 }

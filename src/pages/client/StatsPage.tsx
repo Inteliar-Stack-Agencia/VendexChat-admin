@@ -9,7 +9,9 @@ import {
     TrendingUp,
     FileSpreadsheet,
     Loader2,
-    CalendarRange
+    CalendarRange,
+    CalendarDays,
+    Building2
 } from 'lucide-react'
 import { Card, Button } from '../../components/common'
 import { statsApi } from '../../services/api'
@@ -77,16 +79,64 @@ export default function StatsPage() {
     const handleExportOrders = async () => {
         setExporting('orders')
         try {
-            const res = await statsApi.getOverview(range, getDateRange())
-            const data = res.orders.map((o, i: number) => ({
-                'ID Pedido': `ORD-${i + 1}`,
+            const res = await statsApi.getOrdersByDay(range, getDateRange())
+            const data = res.map((o: { order_number?: string; created_at: string; status: string; total: number; customer_name: string; metadata?: Record<string, unknown> }) => ({
+                'N° Pedido': o.order_number || '',
                 'Fecha': formatDate(o.created_at || ''),
+                'Cliente': o.customer_name || '',
+                'Empresa': (o.metadata?.company_name as string) || '',
                 'Estado': o.status || '',
                 'Total': o.total || 0
             }))
             exportToExcel(data, 'Reporte_Pedidos')
         } catch {
             showToast('error', 'Error al obtener datos de pedidos')
+        } finally {
+            setExporting(null)
+        }
+    }
+
+    const handleExportByDay = async () => {
+        setExporting('byDay')
+        try {
+            const data = await statsApi.getOrdersByDay(range, getDateRange())
+            const dayMap: Record<string, { 'Fecha': string; 'Cant. Pedidos': number; 'Total del Día': number }> = {}
+            data.forEach((o: { created_at: string; total: number }) => {
+                const day = formatDate(o.created_at)
+                if (!dayMap[day]) {
+                    dayMap[day] = { 'Fecha': day, 'Cant. Pedidos': 0, 'Total del Día': 0 }
+                }
+                dayMap[day]['Cant. Pedidos'] += 1
+                dayMap[day]['Total del Día'] += o.total || 0
+            })
+            const sorted = Object.values(dayMap).sort((a, b) =>
+                new Date(b['Fecha']).getTime() - new Date(a['Fecha']).getTime()
+            )
+            exportToExcel(sorted, 'Reporte_Pedidos_Por_Dia')
+        } catch {
+            showToast('error', 'Error al obtener datos por día')
+        } finally {
+            setExporting(null)
+        }
+    }
+
+    const handleExportByCompany = async () => {
+        setExporting('company')
+        try {
+            const data = await statsApi.getOrdersByCompany(range, getDateRange())
+            const companyMap: Record<string, { 'Empresa': string; 'Cant. Pedidos': number; 'Total Compras': number }> = {}
+            data.forEach((o: { metadata?: Record<string, unknown>; customer_name: string; total: number }) => {
+                const company = (o.metadata?.company_name as string) || '(Sin empresa)'
+                if (!companyMap[company]) {
+                    companyMap[company] = { 'Empresa': company, 'Cant. Pedidos': 0, 'Total Compras': 0 }
+                }
+                companyMap[company]['Cant. Pedidos'] += 1
+                companyMap[company]['Total Compras'] += o.total || 0
+            })
+            const sorted = Object.values(companyMap).sort((a, b) => b['Total Compras'] - a['Total Compras'])
+            exportToExcel(sorted, 'Reporte_Por_Empresa')
+        } catch {
+            showToast('error', 'Error al obtener datos por empresa')
         } finally {
             setExporting(null)
         }
@@ -302,6 +352,20 @@ export default function StatsPage() {
                         icon={Users}
                         onDownload={handleExportCustomers}
                         loading={exporting === 'customers'}
+                    />
+                    <ReportCard
+                        title="Pedidos por Día"
+                        description="Resumen de pedidos y ventas agrupados por día. Ideal para ver picos de demanda."
+                        icon={CalendarDays}
+                        onDownload={handleExportByDay}
+                        loading={exporting === 'byDay'}
+                    />
+                    <ReportCard
+                        title="Pedidos por Empresa"
+                        description="Agrupá los pedidos por empresa/razón social. Requiere que el campo empresa esté completado en el pedido."
+                        icon={Building2}
+                        onDownload={handleExportByCompany}
+                        loading={exporting === 'company'}
                     />
                 </div>
             </div>
