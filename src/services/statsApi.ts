@@ -102,6 +102,26 @@ export const statsApi = {
         return data || []
     },
 
+    getMyCompanyOrders: async (companyFilter: string, range: '7d' | '30d' | 'all' | 'custom' = 'all', dateRange?: DateRange) => {
+        const storeId = await getStoreId()
+        let query = supabase
+            .from('orders')
+            .select('created_at, total, status, order_number, customer_name, customer_whatsapp, delivery_address, metadata')
+            .eq('store_id', storeId)
+            .order('created_at', { ascending: false })
+        query = applyDateRange(query, range, dateRange)
+
+        const { data, error } = await query
+        if (error) throw error
+
+        // Filter client-side by company_name in metadata
+        const filtered = (data || []).filter(
+            (o: { metadata?: Record<string, unknown> }) =>
+                (o.metadata?.company_name as string | undefined) === companyFilter
+        )
+        return filtered
+    },
+
     getOrdersByCompany: async (range: '7d' | '30d' | 'all' | 'custom' = 'all', dateRange?: DateRange) => {
         const storeId = await getStoreId()
         let query = supabase

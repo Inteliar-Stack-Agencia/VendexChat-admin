@@ -7,7 +7,7 @@ import ToastContainer from './components/common/Toast'
 
 // Layout (Estáticos para mayor estabilidad en el core)
 import AppLayout from './components/layout/AppLayout'
-import ProtectedRoute, { SuperadminRoute } from './components/layout/ProtectedRoute'
+import ProtectedRoute, { SuperadminRoute, EmpresaRoute } from './components/layout/ProtectedRoute'
 import SuperadminLayout from './components/layout/SuperadminLayout'
 
 // Auth pages (Estáticos: El core de auth debe ser instantáneo)
@@ -43,6 +43,9 @@ const AIAssistantPage = lazy(() => import('./pages/client/AIAssistantPage'))
 const BulkPriceEditorPage = lazy(() => import('./pages/client/BulkPriceEditorPage'))
 const LegalPage = lazy(() => import('./pages/legal/LegalPage'))
 
+// Empresa portal
+const EmpresaPage = lazy(() => import('./pages/empresa/EmpresaPage'))
+
 // Superadmin pages (Lazy)
 const SuperadminDashboard = lazy(() => import('./pages/superadmin/SuperadminDashboard'))
 const TenantsPage = lazy(() => import('./pages/superadmin/TenantsPage'))
@@ -60,11 +63,13 @@ const SALiquidationsPage = lazy(() => import('./pages/superadmin/SALiquidationsP
 const SASettingsPage = lazy(() => import('./pages/superadmin/SASettingsPage'))
 
 function RoleRedirect() {
-  const { user, loading, isSuperadmin, selectedStoreId } = useAuth()
+  const { user, loading, isSuperadmin, isEmpresa, selectedStoreId } = useAuth()
 
   if (loading) return null
 
   if (!user) return <Navigate to="/login" replace />
+
+  if (isEmpresa) return <Navigate to="/empresa" replace />
 
   if (isSuperadmin) {
     // Si el superadmin seleccionó una tienda para trabajar, ir al dashboard de esa cada
@@ -169,6 +174,16 @@ export default function App() {
               <Route path="/superadmin/tenants" element={<TenantsPage />} />
               <Route path="/superadmin/users" element={<UsersPage />} />
             </Route>
+
+            {/* Portal empresa */}
+            <Route
+              path="/empresa"
+              element={
+                <EmpresaRoute>
+                  <EmpresaPage />
+                </EmpresaRoute>
+              }
+            />
 
             {/* Redirigir raíz al login o dashboard según rol */}
             <Route path="/" element={<RoleRedirect />} />

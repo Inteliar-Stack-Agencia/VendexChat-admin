@@ -172,7 +172,8 @@ export const authApi = {
                 role: profile.role,
                 tenant_id: profile.store_id,
                 store_id: profile.store_id,
-                store: profile.stores
+                store: profile.stores,
+                company_filter: profile.company_filter ?? null
             } as unknown as User
         }
     },
