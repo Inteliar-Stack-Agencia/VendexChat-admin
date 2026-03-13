@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
-import { Eye, ShoppingCart } from 'lucide-react'
+import { Eye, ShoppingCart, Printer } from 'lucide-react'
 import { Card, Badge, LoadingSpinner, EmptyState, Pagination } from '../../components/common'
 import { ordersApi } from '../../services/api'
 import { Order } from '../../types'
@@ -48,6 +48,45 @@ export default function OrdersPage() {
   useEffect(() => {
     loadOrders()
   }, [loadOrders])
+
+  const handlePrint = async (orderId: string) => {
+    const order = await ordersApi.get(orderId)
+    const statusConf = orderStatusConfig[order.status]
+    const itemsHtml = (order.items || []).map(item =>
+      `<tr>
+        <td style="padding:4px 8px;border-bottom:1px solid #eee">${item.product_name}</td>
+        <td style="padding:4px 8px;border-bottom:1px solid #eee;text-align:center">${item.quantity}</td>
+        <td style="padding:4px 8px;border-bottom:1px solid #eee;text-align:right">${formatPrice(item.unit_price)}</td>
+        <td style="padding:4px 8px;border-bottom:1px solid #eee;text-align:right">${formatPrice(item.subtotal)}</td>
+      </tr>`
+    ).join('')
+    const win = window.open('', '_blank', 'width=420,height=600')
+    if (!win) return
+    win.document.write(`<!DOCTYPE html><html><head><title>Pedido #${order.order_number || order.id.slice(0,8)}</title>
+      <style>body{font-family:sans-serif;font-size:13px;padding:24px;color:#111}h2{margin:0 0 4px}hr{border:none;border-top:1px solid #ddd;margin:12px 0}table{width:100%;border-collapse:collapse}th{text-align:left;padding:4px 8px;border-bottom:2px solid #ddd;font-size:11px;color:#555}td{font-size:13px}tfoot td{font-weight:bold;padding-top:6px}</style>
+    </head><body>
+      <h2>Pedido #${order.order_number || order.id.slice(0,8)}</h2>
+      <p style="margin:0;color:#555">${formatDate(order.created_at)} &nbsp;|&nbsp; Estado: <strong>${statusConf?.label || order.status}</strong></p>
+      <hr/>
+      <p style="margin:4px 0"><strong>Cliente:</strong> ${order.customer_name}</p>
+      <p style="margin:4px 0"><strong>WhatsApp:</strong> ${order.customer_whatsapp}</p>
+      ${order.customer_address ? `<p style="margin:4px 0"><strong>Dirección:</strong> ${order.customer_address}</p>` : ''}
+      ${order.customer_notes ? `<p style="margin:4px 0"><strong>Nota:</strong> ${order.customer_notes}</p>` : ''}
+      <hr/>
+      <table>
+        <thead><tr><th>Producto</th><th style="text-align:center">Cant.</th><th style="text-align:right">Precio</th><th style="text-align:right">Subtotal</th></tr></thead>
+        <tbody>${itemsHtml}</tbody>
+        <tfoot>
+          <tr><td colspan="3" style="text-align:right;padding:4px 8px">Subtotal</td><td style="text-align:right;padding:4px 8px">${formatPrice(order.subtotal)}</td></tr>
+          ${order.delivery_cost > 0 ? `<tr><td colspan="3" style="text-align:right;padding:4px 8px">Envío</td><td style="text-align:right;padding:4px 8px">${formatPrice(order.delivery_cost)}</td></tr>` : ''}
+          <tr><td colspan="3" style="text-align:right;padding:4px 8px;font-size:15px">TOTAL</td><td style="text-align:right;padding:4px 8px;font-size:15px">${formatPrice(order.total)}</td></tr>
+        </tfoot>
+      </table>
+    </body></html>`)
+    win.document.close()
+    win.focus()
+    win.print()
+  }
 
   return (
     <div className="space-y-6">
@@ -151,7 +190,14 @@ export default function OrdersPage() {
                       </td>
                       <td className="px-4 py-3 text-gray-500 hidden sm:table-cell">{formatDate(order.created_at)}</td>
                       <td className="px-4 py-3">
-                        <div className="flex justify-end">
+                        <div className="flex justify-end gap-1">
+                          <button
+                            onClick={() => handlePrint(order.id)}
+                            className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700"
+                            title="Imprimir pedido"
+                          >
+                            <Printer className="w-4 h-4" />
+                          </button>
                           <Link
                             to={`/orders/${order.id}`}
                             className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700"
