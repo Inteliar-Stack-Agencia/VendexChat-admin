@@ -102,11 +102,6 @@ export default function SubscriptionPage() {
                     <h2 className="text-3xl font-black text-slate-900 tracking-tight">Planes y Facturación</h2>
                     <p className="text-slate-500 font-medium mt-1">Escala tu negocio con herramientas avanzadas y soporte dedicado.</p>
                 </div>
-                <div className="flex items-center gap-3">
-                    <Button variant="outline" className="bg-white border-slate-200">
-                        Configurar Facturación
-                    </Button>
-                </div>
             </header>
 
             {/* Current Plan Banner */}
