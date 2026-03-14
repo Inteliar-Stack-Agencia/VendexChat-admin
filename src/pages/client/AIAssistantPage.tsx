@@ -287,7 +287,7 @@ ${snap.lowStockProducts.length > 0 ? snap.lowStockProducts.map(p => `⚠️ ${p.
                 </div>
 
                 {/* Chat */}
-                <Card className="flex flex-col border-indigo-100 shadow-2xl shadow-indigo-50/50 rounded-[2.5rem] overflow-hidden" style={{ height: '65vh' }}>
+                <Card className="flex flex-col border-indigo-100 shadow-2xl shadow-indigo-50/50 rounded-[2.5rem] overflow-hidden h-[65vh]">
                     <div className="p-5 border-b border-indigo-50 bg-indigo-50/30 flex items-center justify-between">
                         <div className="flex items-center gap-3">
                             <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-sm">
