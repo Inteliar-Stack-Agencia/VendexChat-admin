@@ -55,6 +55,14 @@ export const customersApi = {
         return data
     },
 
+    remove: async (id: string) => {
+        const { error } = await supabase
+            .from('customers')
+            .delete()
+            .eq('id', id)
+        if (error) throw error
+    },
+
     getOrdersByWhatsapp: async (whatsapp: string) => {
         const storeId = await getStoreId()
         const clean = whatsapp.replace(/\D/g, '')
