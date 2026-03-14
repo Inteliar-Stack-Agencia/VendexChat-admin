@@ -17,7 +17,8 @@ export default function PopupsPage() {
     const loadPopups = async () => {
         try {
             const tenant = await tenantApi.getMe()
-            setPopups(tenant.popups || [])
+            const normalized = (tenant.popups || []).map(p => ({ ...p, active: p.active !== false }))
+            setPopups(normalized)
         } catch (err) {
             showToast('error', 'Error al cargar los popups')
         } finally {
@@ -37,6 +38,9 @@ export default function PopupsPage() {
         setSaving(true)
         try {
             await tenantApi.updateMe({ popups })
+            const tenant = await tenantApi.getMe()
+            const normalized = (tenant.popups || []).map(p => ({ ...p, active: p.active !== false }))
+            setPopups(normalized)
             showToast('success', 'Mensajes emergentes actualizados')
         } catch (err) {
             showToast('error', 'Error al guardar los popups')
