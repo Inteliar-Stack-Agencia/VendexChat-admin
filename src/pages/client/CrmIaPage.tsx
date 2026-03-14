@@ -462,7 +462,7 @@ Firma de la tienda obligatoria: — ${storeSignature}` }
                                                         <Bot className="w-4 h-4" />
                                                     </button>
                                                     <button
-                                                        onClick={() => handleAIMessage(customer)}
+                                                        onClick={() => handleAIMessage(customer, messageGoal)}
                                                         className="p-2 rounded-lg hover:bg-white hover:shadow-sm text-slate-400 hover:text-pink-600 transition-all border border-transparent hover:border-pink-100"
                                                         title="Generar mensaje WhatsApp con IA"
                                                     >
