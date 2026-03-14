@@ -458,6 +458,20 @@ export default function CustomersPage() {
                                                 >
                                                     <Trash2 className="w-5 h-5" />
                                                 </button>
+                                                <button
+                                                    onClick={() => handleChangeCustomerStatus(customer)}
+                                                    className="p-2 rounded-lg hover:bg-white hover:shadow-sm text-slate-400 hover:text-violet-600 transition-all border border-transparent hover:border-violet-100"
+                                                    title="Cambiar estado (color)"
+                                                >
+                                                    <Tag className="w-4 h-4" />
+                                                </button>
+                                                <button
+                                                    onClick={() => setCustomerToDelete(customer)}
+                                                    className="p-2 rounded-lg hover:bg-white hover:shadow-sm text-slate-400 hover:text-red-600 transition-all border border-transparent hover:border-red-100"
+                                                    title="Eliminar cliente"
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                </button>
                                                 <a
                                                     href={whatsappLink(customer.whatsapp)}
                                                     target="_blank"
