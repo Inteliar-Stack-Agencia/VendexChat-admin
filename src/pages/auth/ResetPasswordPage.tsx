@@ -1,12 +1,11 @@
 import { useState, FormEvent } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { Store } from 'lucide-react'
 import { Button, Input } from '../../components/common'
 import { showToast } from '../../components/common/Toast'
 import { authApi } from '../../services/api'
 
 export default function ResetPasswordPage() {
-  const { token } = useParams<{ token: string }>()
   const navigate = useNavigate()
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -24,11 +23,11 @@ export default function ResetPasswordPage() {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
-    if (!validate() || !token) return
+    if (!validate()) return
 
     setLoading(true)
     try {
-      await authApi.resetPassword(token, password)
+      await authApi.resetPassword('', password)
       showToast('success', 'Contraseña restablecida correctamente')
       navigate('/login')
     } catch (err) {
