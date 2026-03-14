@@ -258,13 +258,13 @@ export default function OrdersPage() {
             <p className="text-sm font-medium text-gray-700">{selectedOrderIds.length} pedidos seleccionados</p>
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" onClick={() => openArchiveAction(selectedOrderIds, true)}>
-                <Archive className="w-4 h-4" /> Archivar seleccionados
+                <Archive className="w-5 h-5" /> Archivar seleccionados
               </Button>
               <Button variant="outline" onClick={() => openArchiveAction(selectedOrderIds, false)}>
-                <ArchiveRestore className="w-4 h-4" /> Desarchivar
+                <ArchiveRestore className="w-5 h-5" /> Desarchivar
               </Button>
               <Button variant="danger" onClick={() => openDeleteAction(selectedOrderIds)}>
-                <Trash2 className="w-4 h-4" /> Eliminar definitivo
+                <Trash2 className="w-5 h-5" /> Eliminar definitivo
               </Button>
             </div>
           </div>
@@ -368,30 +368,30 @@ export default function OrdersPage() {
                         <div className="flex justify-end gap-1">
                           <button
                             onClick={() => openArchiveAction([order.id], !archived)}
-                            className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700"
+                            className="p-2.5 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-600 hover:text-slate-800 border border-slate-200"
                             title={archived ? 'Desarchivar pedido' : 'Archivar pedido'}
                           >
-                            {archived ? <ArchiveRestore className="w-4 h-4" /> : <Archive className="w-4 h-4" />}
+                            {archived ? <ArchiveRestore className="w-5 h-5" /> : <Archive className="w-5 h-5" />}
                           </button>
                           <button
                             onClick={() => openDeleteAction([order.id])}
-                            className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600"
+                            className="p-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 hover:text-rose-700 border border-rose-100"
                             title="Eliminar definitivamente"
                           >
-                            <Trash2 className="w-4 h-4" />
+                            <Trash2 className="w-5 h-5" />
                           </button>
                           <button
                             onClick={() => handlePrint(order.id)}
-                            className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700"
+                            className="p-2.5 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-600 hover:text-slate-800 border border-slate-200"
                             title="Imprimir pedido"
                           >
-                            <Printer className="w-4 h-4" />
+                            <Printer className="w-5 h-5" />
                           </button>
                           <Link
                             to={`/orders/${order.id}`}
-                            className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700"
+                            className="p-2.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-600 hover:text-indigo-700 border border-indigo-100"
                           >
-                            <Eye className="w-4 h-4" />
+                            <Eye className="w-5 h-5" />
                           </Link>
                         </div>
                       </td>

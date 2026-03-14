@@ -91,21 +91,27 @@ export default function CustomersPage() {
     // Nota: Para precisión absoluta deberían venir del servidor, pero para feedback visual sirve.
 
 
-    const statusMarkerRegex = /\[ESTADO:([^\]]+)\]/i
+    const operationStatusMarkerRegex = /\[GESTION:([^\]]+)\]/i
 
-    const stripStatusMarker = (notesText?: string | null) => (notesText || '').replace(statusMarkerRegex, '').trim()
-
-    const getManualStatus = (customer: Customer) => {
-        const match = (customer.notes || '').match(statusMarkerRegex)
-        const value = match?.[1]?.toLowerCase()
-        const allowed = ['vip', 'frequent', 'new', 'atRisk', 'inactive', 'all']
-        return allowed.includes(value || '') ? value as 'vip' | 'frequent' | 'new' | 'atRisk' | 'inactive' | 'all' : null
+    const operationStatusConfig: Record<'pending' | 'accepted' | 'paid' | 'completed', { label: string; className: string }> = {
+        pending: { label: 'Pendiente', className: 'bg-amber-100 text-amber-700' },
+        accepted: { label: 'Aceptado', className: 'bg-blue-100 text-blue-700' },
+        paid: { label: 'Pagado', className: 'bg-violet-100 text-violet-700' },
+        completed: { label: 'Completado', className: 'bg-emerald-100 text-emerald-700' },
     }
 
-    const upsertStatusMarker = (notesText: string | null | undefined, status: 'vip' | 'frequent' | 'new' | 'atRisk' | 'inactive' | 'all') => {
-        const clean = stripStatusMarker(notesText)
-        if (status === 'all') return clean
-        const marker = `[ESTADO:${status}]`
+    const stripOperationStatusMarker = (notesText?: string | null) => (notesText || '').replace(operationStatusMarkerRegex, '').trim()
+
+    const getOperationStatus = (customer: Customer): 'pending' | 'accepted' | 'paid' | 'completed' => {
+        const match = (customer.notes || '').match(operationStatusMarkerRegex)
+        const value = match?.[1]?.toLowerCase()
+        if (value === 'accepted' || value === 'paid' || value === 'completed') return value
+        return 'pending'
+    }
+
+    const upsertOperationStatusMarker = (notesText: string | null | undefined, status: 'pending' | 'accepted' | 'paid' | 'completed') => {
+        const clean = stripOperationStatusMarker(notesText)
+        const marker = `[GESTION:${status}]`
         return clean ? `${marker} ${clean}` : marker
     }
 
@@ -125,15 +131,15 @@ export default function CustomersPage() {
     }
 
     const handleChangeCustomerStatus = async (customer: Customer) => {
-        const current = getCustomerSegment(customer).key
-        const flow: Array<'vip' | 'frequent' | 'atRisk' | 'inactive' | 'new' | 'all'> = ['new', 'frequent', 'vip', 'atRisk', 'inactive', 'all']
-        const index = flow.indexOf((current as typeof flow[number]) || 'all')
+        const current = getOperationStatus(customer)
+        const flow: Array<'pending' | 'accepted' | 'paid' | 'completed'> = ['pending', 'accepted', 'paid', 'completed']
+        const index = flow.indexOf(current)
         const nextStatus = flow[(index + 1) % flow.length]
 
         try {
-            const updatedNotes = upsertStatusMarker(customer.notes, nextStatus)
+            const updatedNotes = upsertOperationStatusMarker(customer.notes, nextStatus)
             await customersApi.updateNotes(customer.id, updatedNotes)
-            showToast('success', `Estado actualizado a ${nextStatus === 'all' ? 'Automático' : nextStatus}`)
+            showToast('success', `Estado actualizado a ${operationStatusConfig[nextStatus].label}`)
             loadCustomers()
         } catch {
             showToast('error', 'No se pudo cambiar el estado')
@@ -147,18 +153,6 @@ export default function CustomersPage() {
     }
 
     const getCustomerSegment = (customer: Customer) => {
-        const manualStatus = getManualStatus(customer)
-        if (manualStatus && manualStatus !== 'all') {
-            const manualMap: Record<'vip' | 'frequent' | 'new' | 'atRisk' | 'inactive', { key: string; label: string; className: string }> = {
-                vip: { key: 'vip', label: 'VIP', className: 'bg-violet-100 text-violet-700' },
-                frequent: { key: 'frequent', label: 'Frecuente', className: 'bg-blue-100 text-blue-700' },
-                new: { key: 'new', label: 'Nuevo', className: 'bg-emerald-100 text-emerald-700' },
-                atRisk: { key: 'atRisk', label: 'En riesgo', className: 'bg-amber-100 text-amber-700' },
-                inactive: { key: 'inactive', label: 'Inactivo', className: 'bg-slate-100 text-slate-700' },
-            }
-            return manualMap[manualStatus as 'vip' | 'frequent' | 'new' | 'atRisk' | 'inactive']
-        }
-
         const orders = Number(customer.total_orders) || 0
         const spent = Number(customer.total_spent) || 0
         const daysSinceLastOrder = getDaysSinceLastOrder(customer.last_order_at)
@@ -397,6 +391,8 @@ export default function CustomersPage() {
                             <tbody className="divide-y divide-gray-100">
                                 {filteredCustomers.map((customer) => {
                                     const segment = getCustomerSegment(customer)
+                                    const operationStatus = getOperationStatus(customer)
+                                    const operationBadge = operationStatusConfig[operationStatus]
                                     return (
                                     <tr key={customer.id} className="hover:bg-gray-50 transition-colors group">
                                         <td className="px-6 py-4">
@@ -405,6 +401,9 @@ export default function CustomersPage() {
                                                     <span className="font-bold text-gray-900">{customer.name}</span>
                                                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${segment.className}`}>
                                                         {segment.label}
+                                                    </span>
+                                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${operationBadge.className}`}>
+                                                        {operationBadge.label}
                                                     </span>
                                                 </div>
                                                 <span className="text-[10px] text-gray-400 font-medium">
@@ -433,17 +432,31 @@ export default function CustomersPage() {
                                                         setNotes(customer.notes || '')
                                                         setIsEditingNotes(true)
                                                     }}
-                                                    className="p-2 rounded-lg hover:bg-white hover:shadow-sm text-slate-400 hover:text-indigo-600 transition-all border border-transparent hover:border-indigo-100"
+                                                    className="p-2.5 rounded-xl bg-indigo-50/60 hover:bg-indigo-100 text-indigo-600 hover:text-indigo-700 transition-all border border-indigo-100"
                                                     title="Notas del cliente"
                                                 >
-                                                    <ClipboardList className="w-4 h-4" />
+                                                    <ClipboardList className="w-5 h-5" />
                                                 </button>
                                                 <button
                                                     onClick={() => handleViewOrders(customer)}
-                                                    className="p-2 rounded-lg hover:bg-white hover:shadow-sm text-slate-400 hover:text-amber-600 transition-all border border-transparent hover:border-amber-100"
+                                                    className="p-2.5 rounded-xl bg-amber-50/60 hover:bg-amber-100 text-amber-600 hover:text-amber-700 transition-all border border-amber-100"
                                                     title="Ver pedidos"
                                                 >
-                                                    <ShoppingBag className="w-4 h-4" />
+                                                    <ShoppingBag className="w-5 h-5" />
+                                                </button>
+                                                <button
+                                                    onClick={() => handleChangeCustomerStatus(customer)}
+                                                    className="p-2.5 rounded-xl bg-violet-50/60 hover:bg-violet-100 text-violet-600 hover:text-violet-700 transition-all border border-violet-100"
+                                                    title="Cambiar estado de gestión (pendiente/aceptado/pagado/completado)"
+                                                >
+                                                    <Tag className="w-5 h-5" />
+                                                </button>
+                                                <button
+                                                    onClick={() => setCustomerToDelete(customer)}
+                                                    className="p-2.5 rounded-xl bg-rose-50/60 hover:bg-rose-100 text-rose-600 hover:text-rose-700 transition-all border border-rose-100"
+                                                    title="Eliminar cliente"
+                                                >
+                                                    <Trash2 className="w-5 h-5" />
                                                 </button>
                                                 <button
                                                     onClick={() => handleChangeCustomerStatus(customer)}
@@ -463,10 +476,10 @@ export default function CustomersPage() {
                                                     href={whatsappLink(customer.whatsapp)}
                                                     target="_blank"
                                                     rel="noopener noreferrer"
-                                                    className="p-2 rounded-lg hover:bg-white hover:shadow-sm text-emerald-600 transition-all border border-transparent hover:border-emerald-100"
+                                                    className="p-2.5 rounded-xl bg-emerald-50/60 hover:bg-emerald-100 text-emerald-600 hover:text-emerald-700 transition-all border border-emerald-100"
                                                     title="Enviar WhatsApp"
                                                 >
-                                                    <MessageSquare className="w-4 h-4" />
+                                                    <MessageSquare className="w-5 h-5" />
                                                 </a>
                                             </div>
                                         </td>

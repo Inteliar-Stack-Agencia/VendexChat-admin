@@ -442,40 +442,40 @@ Firma de la tienda obligatoria: — ${storeSignature}` }
                                                 <div className="flex items-center justify-end gap-1">
                                                     <button
                                                         onClick={() => { setSelectedCustomer(customer); setNotes(customer.notes || ''); setIsEditingNotes(true) }}
-                                                        className="p-2 rounded-lg hover:bg-white hover:shadow-sm text-slate-400 hover:text-indigo-600 transition-all border border-transparent hover:border-indigo-100"
+                                                        className="p-2.5 rounded-xl bg-indigo-50/60 hover:bg-indigo-100 text-indigo-600 hover:text-indigo-700 transition-all border border-indigo-100"
                                                         title="Notas internas"
                                                     >
-                                                        <ClipboardList className="w-4 h-4" />
+                                                        <ClipboardList className="w-5 h-5" />
                                                     </button>
                                                     <button
                                                         onClick={() => handleViewOrders(customer)}
-                                                        className="p-2 rounded-lg hover:bg-white hover:shadow-sm text-slate-400 hover:text-amber-600 transition-all border border-transparent hover:border-amber-100"
+                                                        className="p-2.5 rounded-xl bg-amber-50/60 hover:bg-amber-100 text-amber-600 hover:text-amber-700 transition-all border border-amber-100"
                                                         title="Ver pedidos"
                                                     >
-                                                        <ShoppingBag className="w-4 h-4" />
+                                                        <ShoppingBag className="w-5 h-5" />
                                                     </button>
                                                     <button
                                                         onClick={() => handleAIAnalysis(customer)}
-                                                        className="p-2 rounded-lg hover:bg-white hover:shadow-sm text-slate-400 hover:text-violet-600 transition-all border border-transparent hover:border-violet-100"
+                                                        className="p-2.5 rounded-xl bg-violet-50/60 hover:bg-violet-100 text-violet-600 hover:text-violet-700 transition-all border border-violet-100"
                                                         title="Análisis IA del cliente"
                                                     >
-                                                        <Bot className="w-4 h-4" />
+                                                        <Bot className="w-5 h-5" />
                                                     </button>
                                                     <button
-                                                        onClick={() => handleAIMessage(customer, messageGoal)}
-                                                        className="p-2 rounded-lg hover:bg-white hover:shadow-sm text-slate-400 hover:text-pink-600 transition-all border border-transparent hover:border-pink-100"
+                                                        onClick={() => handleAIMessage(customer)}
+                                                        className="p-2.5 rounded-xl bg-pink-50/60 hover:bg-pink-100 text-pink-600 hover:text-pink-700 transition-all border border-pink-100"
                                                         title="Generar mensaje WhatsApp con IA"
                                                     >
-                                                        <Sparkles className="w-4 h-4" />
+                                                        <Sparkles className="w-5 h-5" />
                                                     </button>
                                                     <a
                                                         href={whatsappLink(customer.whatsapp)}
                                                         target="_blank"
                                                         rel="noopener noreferrer"
-                                                        className="p-2 rounded-lg hover:bg-white hover:shadow-sm text-emerald-600 transition-all border border-transparent hover:border-emerald-100"
+                                                        className="p-2.5 rounded-xl bg-emerald-50/60 hover:bg-emerald-100 text-emerald-600 hover:text-emerald-700 transition-all border border-emerald-100"
                                                         title="Enviar WhatsApp"
                                                     >
-                                                        <MessageSquare className="w-4 h-4" />
+                                                        <MessageSquare className="w-5 h-5" />
                                                     </a>
                                                 </div>
                                             </td>
@@ -592,7 +592,7 @@ Firma de la tienda obligatoria: — ${storeSignature}` }
                             >
                                 {copied
                                     ? <><CheckCircle2 className="w-4 h-4 text-emerald-600" /> Copiado</>
-                                    : <><Copy className="w-4 h-4" /> Copiar</>
+                                    : <><Copy className="w-5 h-5" /> Copiar</>
                                 }
                             </button>
                         </div>
@@ -653,7 +653,7 @@ Firma de la tienda obligatoria: — ${storeSignature}` }
                                 rel="noopener noreferrer"
                                 className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl transition-all"
                             >
-                                <MessageSquare className="w-4 h-4" />
+                                <MessageSquare className="w-5 h-5" />
                                 Abrir en WhatsApp
                             </a>
                             <button
@@ -662,7 +662,7 @@ Firma de la tienda obligatoria: — ${storeSignature}` }
                             >
                                 {copied
                                     ? <><CheckCircle2 className="w-4 h-4 text-emerald-600" /> Copiado</>
-                                    : <><Copy className="w-4 h-4" /> Copiar</>
+                                    : <><Copy className="w-5 h-5" /> Copiar</>
                                 }
                             </button>
                         </div>
