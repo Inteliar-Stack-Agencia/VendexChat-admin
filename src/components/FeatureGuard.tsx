@@ -95,8 +95,12 @@ export default function FeatureGuard({
                 </p>
             </div>
             <Link to="/subscription">
-                <Button className="bg-white text-indigo-600 font-black uppercase tracking-widest text-xs px-8 py-4 rounded-2xl hover:bg-slate-50 shadow-lg shadow-black/10">
-                    Explorar Planes
+                <Button
+                    variant="secondary"
+                    className="bg-white !text-indigo-700 font-black uppercase tracking-widest text-xs px-8 py-4 rounded-2xl hover:bg-slate-50 shadow-lg shadow-black/10 border border-white/70"
+                >
+                    <Zap className="w-4 h-4" />
+                    Subir de categoría
                 </Button>
             </Link>
         </div>
