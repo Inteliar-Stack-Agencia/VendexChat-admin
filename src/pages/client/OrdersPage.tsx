@@ -20,6 +20,7 @@ export default function OrdersPage() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [dateFilter, setDateFilter] = useState('')
   const [archiveFilter, setArchiveFilter] = useState<'active' | 'archived' | 'all'>('active')
+  const [deliveryFilter, setDeliveryFilter] = useState<'all' | 'delivery' | 'pickup'>('all')
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([])
@@ -27,6 +28,16 @@ export default function OrdersPage() {
   const [processingAction, setProcessingAction] = useState(false)
 
   const isArchived = (order: Order) => Boolean((order.metadata as Record<string, unknown> | null)?.archived)
+
+
+  const getDeliveryType = (order: Order): 'delivery' | 'pickup' => {
+    const metadata = (order.metadata || {}) as Record<string, unknown>
+    const metadataDelivery = metadata.delivery_type
+    if (metadataDelivery === 'delivery' || metadataDelivery === 'pickup') {
+      return metadataDelivery
+    }
+    return order.customer_address ? 'delivery' : 'pickup'
+  }
 
   const loadOrders = useCallback(async () => {
     setLoading(true)
@@ -62,14 +73,19 @@ export default function OrdersPage() {
   }, [loadOrders])
 
   const filteredOrders = useMemo(() => {
-    if (archiveFilter === 'all') return orders
-    if (archiveFilter === 'archived') return orders.filter(isArchived)
-    return orders.filter(order => !isArchived(order))
-  }, [orders, archiveFilter])
+    const archiveScoped = archiveFilter === 'all'
+      ? orders
+      : archiveFilter === 'archived'
+        ? orders.filter(isArchived)
+        : orders.filter(order => !isArchived(order))
+
+    if (deliveryFilter === 'all') return archiveScoped
+    return archiveScoped.filter(order => getDeliveryType(order) === deliveryFilter)
+  }, [orders, archiveFilter, deliveryFilter])
 
   useEffect(() => {
     setSelectedOrderIds([])
-  }, [orders, archiveFilter, page])
+  }, [orders, archiveFilter, deliveryFilter, page])
 
   const allVisibleSelected = filteredOrders.length > 0 && filteredOrders.every(order => selectedOrderIds.includes(order.id))
 
@@ -206,6 +222,30 @@ export default function OrdersPage() {
               <option value="archived">Archivados</option>
               <option value="all">Todos</option>
             </select>
+
+            <div className="flex items-center gap-1 p-1 rounded-lg border border-gray-200 bg-gray-50">
+              <button
+                type="button"
+                onClick={() => setDeliveryFilter('all')}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${deliveryFilter === 'all' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+              >
+                Todos
+              </button>
+              <button
+                type="button"
+                onClick={() => setDeliveryFilter('delivery')}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${deliveryFilter === 'delivery' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+              >
+                Envío a domicilio
+              </button>
+              <button
+                type="button"
+                onClick={() => setDeliveryFilter('pickup')}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${deliveryFilter === 'pickup' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+              >
+                Retiro en local
+              </button>
+            </div>
           </div>
 
           <p className="text-xs text-gray-500">Archivados temporales se guardan en metadata.archived.</p>
@@ -319,6 +359,7 @@ export default function OrdersPage() {
                           <Badge color={statusConf?.color} bg={statusConf?.bg}>
                             {statusConf?.label || order.status}
                           </Badge>
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600">{getDeliveryType(order) === 'delivery' ? 'Delivery' : 'Retiro'}</span>
                           {archived && <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">Archivado</span>}
                         </div>
                       </td>
