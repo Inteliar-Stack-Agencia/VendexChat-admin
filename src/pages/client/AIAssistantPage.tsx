@@ -250,8 +250,8 @@ ${snap.lowStockProducts.length > 0 ? snap.lowStockProducts.map(p => `⚠️ ${p.
 
     // ─── Render ───────────────────────────────────────────────────────────────
     return (
-        <FeatureGuard feature="ai-analyst" minPlan="vip">
-            <div className="max-w-5xl mx-auto space-y-6 animate-fade-in pb-20">
+        <FeatureGuard feature="ai-analyst" minPlan="pro">
+            <div className="max-w-6xl mx-auto space-y-6 animate-fade-in pb-20">
                 {/* Header */}
                 <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 px-1">
                     <div>
