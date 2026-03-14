@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, MessageCircle, Printer } from 'lucide-react'
+import { ArrowLeft, MessageCircle, Printer, ClipboardCheck } from 'lucide-react'
 import { Card, Badge, Button, LoadingSpinner, Select } from '../../components/common'
 import { showToast } from '../../components/common/Toast'
 import { ordersApi } from '../../services/api'
@@ -16,6 +16,10 @@ export default function OrderDetailPage() {
   const [loading, setLoading] = useState(true)
   const [newStatus, setNewStatus] = useState<string>('')
   const [updatingStatus, setUpdatingStatus] = useState(false)
+  const [deliveryType, setDeliveryType] = useState<'delivery' | 'pickup'>('pickup')
+  const [fulfillmentDone, setFulfillmentDone] = useState(false)
+  const [paymentDone, setPaymentDone] = useState(false)
+  const [savingChecklist, setSavingChecklist] = useState(false)
 
   useEffect(() => {
     if (id) {
@@ -28,6 +32,14 @@ export default function OrderDetailPage() {
           setOrder(orderData)
           setTenant(tenantData)
           setNewStatus(orderData.status)
+          const metadata = (orderData.metadata || {}) as Record<string, unknown>
+          const metaDeliveryType = metadata.delivery_type === 'delivery' || metadata.delivery_type === 'pickup'
+            ? (metadata.delivery_type as 'delivery' | 'pickup')
+            : undefined
+          const inferredDeliveryType = metaDeliveryType || (orderData.customer_address ? 'delivery' : 'pickup')
+          setDeliveryType(inferredDeliveryType)
+          setFulfillmentDone(Boolean(metadata.fulfillment_done) || orderData.status === 'completed')
+          setPaymentDone((metadata.payment_status as string | undefined) === 'paid')
         })
         .catch((err) => {
           console.error(err)
@@ -49,6 +61,27 @@ export default function OrderDetailPage() {
       showToast('error', 'Error al actualizar el estado')
     } finally {
       setUpdatingStatus(false)
+    }
+  }
+
+  const handleChecklistSave = async () => {
+    if (!order) return
+    setSavingChecklist(true)
+    try {
+      const mergedMetadata = {
+        ...(order.metadata || {}),
+        delivery_type: deliveryType,
+        fulfillment_done: fulfillmentDone,
+        fulfillment_status: fulfillmentDone ? 'completed' : 'pending',
+        payment_status: paymentDone ? 'paid' : 'pending',
+      }
+      const updated = await ordersApi.updateMetadata(order.id, mergedMetadata)
+      setOrder(updated)
+      showToast('success', 'Checklist guardado')
+    } catch {
+      showToast('error', 'No se pudo guardar el checklist')
+    } finally {
+      setSavingChecklist(false)
     }
   }
 
@@ -247,6 +280,73 @@ export default function OrderDetailPage() {
             <span className="text-gray-900">Total</span>
             <span className="text-emerald-600">{formatPrice(order.total)}</span>
           </div>
+        </div>
+      </Card>
+
+      <Card>
+        <h2 className="text-sm font-semibold text-gray-500 uppercase mb-3">Guía rápida de estados</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+          <div className="p-3 rounded-xl border border-amber-100 bg-amber-50">
+            <p className="font-semibold text-amber-800 mb-1">Pendiente</p>
+            <p className="text-amber-700">Pedido recibido, todavía sin validar disponibilidad/pago.</p>
+          </div>
+          <div className="p-3 rounded-xl border border-blue-100 bg-blue-50">
+            <p className="font-semibold text-blue-800 mb-1">Confirmado</p>
+            <p className="text-blue-700">Pedido aceptado por la tienda y en preparación/logística.</p>
+          </div>
+          <div className="p-3 rounded-xl border border-emerald-100 bg-emerald-50">
+            <p className="font-semibold text-emerald-800 mb-1">Completado</p>
+            <p className="text-emerald-700">Pedido entregado o retirado por cliente y finalizado.</p>
+          </div>
+          <div className="p-3 rounded-xl border border-rose-100 bg-rose-50">
+            <p className="font-semibold text-rose-800 mb-1">Cancelado</p>
+            <p className="text-rose-700">Pedido anulado por tienda o cliente.</p>
+          </div>
+        </div>
+      </Card>
+
+      <Card>
+        <div className="flex items-center gap-2 mb-3">
+          <ClipboardCheck className="w-4 h-4 text-indigo-600" />
+          <h2 className="text-sm font-semibold text-gray-500 uppercase">Checklist operativo</h2>
+        </div>
+
+        <div className="space-y-3 text-sm">
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 mb-1">Tipo de entrega</label>
+            <Select
+              value={deliveryType}
+              onChange={(e) => setDeliveryType(e.target.value as 'delivery' | 'pickup')}
+              options={[
+                { value: 'pickup', label: 'Retiro en tienda' },
+                { value: 'delivery', label: 'Envío a domicilio' },
+              ]}
+            />
+          </div>
+
+          <label className="flex items-center gap-2 p-3 rounded-lg border border-gray-200 bg-gray-50">
+            <input
+              type="checkbox"
+              checked={fulfillmentDone}
+              onChange={(e) => setFulfillmentDone(e.target.checked)}
+              className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+            />
+            <span className="text-gray-700">Pedido completado ({deliveryType === 'delivery' ? 'entregado' : 'retirado'})</span>
+          </label>
+
+          <label className="flex items-center gap-2 p-3 rounded-lg border border-gray-200 bg-gray-50">
+            <input
+              type="checkbox"
+              checked={paymentDone}
+              onChange={(e) => setPaymentDone(e.target.checked)}
+              className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+            />
+            <span className="text-gray-700">Pago confirmado</span>
+          </label>
+        </div>
+
+        <div className="mt-4 flex justify-end">
+          <Button onClick={handleChecklistSave} loading={savingChecklist}>Guardar checklist</Button>
         </div>
       </Card>
 
