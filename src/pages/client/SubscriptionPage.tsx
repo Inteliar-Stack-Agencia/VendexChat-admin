@@ -4,9 +4,6 @@ import {
     Zap,
     Shield,
     Crown,
-    CreditCard,
-    Clock,
-    AlertCircle,
     ArrowRight,
     MessageCircle
 } from 'lucide-react'
@@ -19,6 +16,19 @@ import MPPaymentBrick from '../../components/billing/MPPaymentBrick'
 
 // Países donde Mercado Pago está disponible
 const MP_COUNTRIES = ['Argentina', 'Uruguay', 'Chile', 'México', 'Colombia', 'Perú', 'Ecuador', 'Paraguay', 'Bolivia']
+
+
+const ROI_MESSAGES: Record<string, string> = {
+    free: 'Ideal para validar tu idea y captar tus primeros pedidos sin costo.',
+    pro: 'Ahorra tiempo operativo y aumenta conversión con IA y automatización comercial.',
+    vip: 'Reduce tareas manuales, acelera entregas y mejora recompra con CRM + logística + bot IA.',
+    ultra: 'Escala con soporte dedicado e implementación estratégica a medida.'
+}
+
+const VIP_DIFFERENTIATORS = [
+    'Seguimiento postventa y reactivación de clientes desde CRM IA.',
+    'Operación más ágil: bot + logística + soporte prioritario en un solo plan.'
+]
 
 export default function SubscriptionPage() {
     const { refreshSubscription, user } = useAuth()
@@ -102,11 +112,6 @@ export default function SubscriptionPage() {
                     <h2 className="text-3xl font-black text-slate-900 tracking-tight">Planes y Facturación</h2>
                     <p className="text-slate-500 font-medium mt-1">Escala tu negocio con herramientas avanzadas y soporte dedicado.</p>
                 </div>
-                <div className="flex items-center gap-3">
-                    <Button variant="outline" className="bg-white border-slate-200">
-                        Configurar Facturación
-                    </Button>
-                </div>
             </header>
 
             {/* Current Plan Banner */}
@@ -182,6 +187,9 @@ export default function SubscriptionPage() {
                             </span>
                         </button>
                     </div>
+                    <p className="mt-3 text-xs text-emerald-700 font-semibold">
+                        Plan anual recomendado: ahorrás hasta 2 meses por año frente al pago mensual.
+                    </p>
                 </div>
 
                 {(plans.length > 0) && (
@@ -189,6 +197,8 @@ export default function SubscriptionPage() {
                         {plans.map((plan) => {
                             const isCurrent = currentSub?.plan_type === plan.id && (currentSub?.billing_cycle === billingCycle || (plan.id === 'free'))
                             const isPopular = plan.is_popular
+                            const monthlyEquivalent = plan.id === 'ultra' ? 0 : Number((plan.annual_price / 12).toFixed(2))
+                            const annualSavings = plan.id === 'free' || plan.id === 'ultra' ? 0 : Number(((plan.price * 12) - plan.annual_price).toFixed(2))
 
                             // Configuración de estilos por plan
                             const planStyles: Record<string, any> = {
@@ -254,11 +264,34 @@ export default function SubscriptionPage() {
                                             {plan.id !== 'ultra' && <span className="text-slate-400 text-xs font-bold">/ mes</span>}
                                         </div>
                                         {billingCycle === 'annual' && plan.annual_price > 0 && (
-                                            <p className="text-[10px] font-bold text-emerald-600 mt-1 uppercase tracking-tighter">
-                                                Facturado anualmente (${plan.annual_price})
-                                            </p>
+                                            <div className="mt-2 p-2 rounded-xl bg-emerald-50 border border-emerald-100">
+                                                <p className="text-[10px] font-black text-emerald-700 uppercase tracking-tighter">
+                                                    Facturado anualmente (${plan.annual_price})
+                                                </p>
+                                                <p className="text-[11px] font-semibold text-emerald-700">
+                                                    Equivale a USD ${monthlyEquivalent.toFixed(2)}/mes · Ahorrás USD ${annualSavings.toFixed(2)} al año.
+                                                </p>
+                                            </div>
                                         )}
                                     </div>
+
+                                    <div className="mb-4 p-3 rounded-xl bg-indigo-50 border border-indigo-100">
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-indigo-700">ROI estimado</p>
+                                        <p className="text-xs text-indigo-700 font-semibold">
+                                            {ROI_MESSAGES[plan.id] || 'Automatizá tareas y mejorá tu eficiencia operativa.'}
+                                        </p>
+                                    </div>
+
+                                    {plan.id === 'vip' && (
+                                        <div className="mb-4 p-3 rounded-xl bg-amber-50 border border-amber-100">
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-amber-700">Diferencial VIP</p>
+                                            <ul className="mt-1 space-y-1">
+                                                {VIP_DIFFERENTIATORS.map((item) => (
+                                                    <li key={item} className="text-xs text-amber-700 font-semibold">• {item}</li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                    )}
 
                                     <div className="space-y-4 mb-8 flex-1">
                                         {plan.features.map((feature, i) => (
@@ -307,74 +340,7 @@ export default function SubscriptionPage() {
                 )}
             </div>
 
-            {/* billing history */}
-            <div className="mt-20 bg-white rounded-[2.5rem] border border-slate-100 shadow-2xl shadow-slate-100/50 overflow-hidden">
-                <div className="p-8 border-b border-slate-50 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50/30">
-                    <div>
-                        <h3 className="font-black text-lg text-slate-900 flex items-center gap-2 uppercase tracking-tight">
-                            <Clock className="w-5 h-5 text-indigo-500" />
-                            Historial de Pagos
-                        </h3>
-                        <p className="text-xs text-slate-400 font-medium">Gestiona tus facturas y comprobantes anteriores.</p>
-                    </div>
-                    <button className="px-6 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-black text-slate-600 uppercase tracking-widest hover:border-indigo-600 hover:text-indigo-600 transition-all shadow-sm">
-                        Descargar todo (.zip)
-                    </button>
-                </div>
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left">
-                        <thead>
-                            <tr className="bg-slate-50/50 text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">
-                                <th className="px-8 py-5">Fecha</th>
-                                <th className="px-8 py-5">Descripción</th>
-                                <th className="px-8 py-5">Monto</th>
-                                <th className="px-8 py-5">Estado</th>
-                                <th className="px-8 py-5 text-right">Acción</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-50">
-                            {[
-                                { date: '2024-02-01', desc: 'Suscripción VENDEx Pro - Febrero', amount: '$15.00', status: 'paid' },
-                                { date: '2024-01-01', desc: 'Suscripción VENDEx Pro - Enero', amount: '$15.00', status: 'paid' },
-                            ].map((invoice, i) => (
-                                <tr key={i} className="group hover:bg-slate-50/50 transition-colors">
-                                    <td className="px-8 py-5">
-                                        <p className="font-bold text-slate-900">{new Date(invoice.date).toLocaleDateString()}</p>
-                                    </td>
-                                    <td className="px-8 py-5">
-                                        <p className="text-sm font-medium text-slate-600">{invoice.desc}</p>
-                                    </td>
-                                    <td className="px-8 py-5">
-                                        <p className="font-black text-slate-900">{invoice.amount}</p>
-                                    </td>
-                                    <td className="px-8 py-5">
-                                        <div className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-100 text-[10px] font-black uppercase text-emerald-600">Pagado</div>
-                                    </td>
-                                    <td className="px-8 py-5 text-right">
-                                        <button className="w-9 h-9 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-slate-400 hover:border-indigo-600 hover:text-indigo-600 transition-all shadow-sm">
-                                            <CreditCard className="w-4 h-4" />
-                                        </button>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
 
-            <div className="bg-indigo-950 rounded-[2.5rem] p-10 flex flex-col md:flex-row items-center gap-8 border border-white/10 shadow-2xl relative overflow-hidden">
-                <div className="relative z-10 w-16 h-16 bg-white/10 rounded-2xl flex items-center justify-center backdrop-blur-xl shrink-0">
-                    <Shield className="w-8 h-8 text-indigo-400" />
-                </div>
-                <div className="relative z-10 text-center md:text-left">
-                    <h4 className="font-black text-white uppercase text-xs tracking-widest mb-2 opacity-50">Garantía VENDEx</h4>
-                    <h3 className="text-xl font-bold text-white mb-2">Tus pagos están 100% protegidos</h3>
-                    <p className="text-indigo-200/60 text-sm leading-relaxed max-w-2xl">
-                        Utilizamos Mercado Pago para procesar todos tus pagos de forma segura. Tus datos están cifrados y nunca almacenamos información sensible de tarjetas en nuestros servidores.
-                    </p>
-                </div>
-                <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 blur-[100px] rounded-full" />
-            </div>
 
             {/* Real Checkout Modal — flujo según país */}
             <Modal
