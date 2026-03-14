@@ -98,7 +98,7 @@ export default function App() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
             <Route path="/recover-password" element={<RecoverPasswordPage />} />
-            <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
             <Route path="/select-store" element={<SelectStorePage />} />
             <Route path="/legal/:type" element={<LegalPage />} />
 

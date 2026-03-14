@@ -140,14 +140,14 @@ const GUIDES_CONTENT = {
 }
 
 export default function HelpPage() {
-    const whatsappSupport = "https://wa.me/5491165689145?text=Hola!%20Necesito%20ayuda%20con%20VendexChat"
+    const whatsappSupport = "https://wa.me/5491165689145?text=Hola!%20Necesito%20ayuda%20con%20VENDExChat"
     const [selectedGuide, setSelectedGuide] = useState<keyof typeof GUIDES_CONTENT | null>(null)
 
     return (
         <div className="space-y-8 animate-fade-in pb-20">
             <div className="px-1">
                 <h1 className="text-3xl font-black text-slate-900 tracking-tight">Centro de Ayuda</h1>
-                <p className="text-slate-400 font-bold uppercase text-[10px] tracking-widest mt-1">Saca el máximo provecho a VendexChat</p>
+                <p className="text-slate-400 font-bold uppercase text-[10px] tracking-widest mt-1">Saca el máximo provecho a VENDExChat</p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
