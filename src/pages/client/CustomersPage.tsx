@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Users, Search, MessageSquare, ClipboardList, ShoppingBag, TrendingUp, UserCheck, DollarSign } from 'lucide-react'
 import { Card, LoadingSpinner, EmptyState, Modal, Button, showToast, Pagination } from '../../components/common'
 import { customersApi } from '../../services/api'
@@ -7,6 +8,7 @@ import { formatPrice, formatShortDate, whatsappLink, orderStatusConfig } from '.
 import type { Customer } from '../../types'
 
 export default function CustomersPage() {
+    const navigate = useNavigate()
     const { selectedStoreId } = useAuth()
     const [customers, setCustomers] = useState<Customer[]>([])
     const [loading, setLoading] = useState(true)
@@ -76,6 +78,13 @@ export default function CustomersPage() {
         }
     }
 
+
+
+    const handleOpenOrderDetail = (orderId: string) => {
+        setIsViewingOrders(false)
+        setCustomerOrders([])
+        navigate(`/orders/${orderId}`)
+    }
     // Métricas calculadas en el cliente (solo sobre la página actual o aproximadas)
     // Nota: Para precisión absoluta deberían venir del servidor, pero para feedback visual sirve.
 
@@ -439,11 +448,18 @@ export default function CustomersPage() {
                 ) : customerOrders.length === 0 ? (
                     <p className="text-sm text-gray-500 text-center py-6">No se encontraron pedidos registrados.</p>
                 ) : (
-                    <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+                    <div className="space-y-2">
+                        <p className="text-xs text-gray-500">Doble click en un pedido para abrir su detalle.</p>
+                        <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
                         {customerOrders.map((order) => {
                             const statusCfg = orderStatusConfig[order.status] || orderStatusConfig.pending
                             return (
-                                <div key={order.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100">
+                                <div
+                                    key={order.id}
+                                    onDoubleClick={() => handleOpenOrderDetail(order.id)}
+                                    title="Doble click para abrir detalle"
+                                    className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100 cursor-pointer hover:bg-gray-100 transition-colors"
+                                >
                                     <div>
                                         <p className="text-sm font-bold text-gray-800">#{order.order_number}</p>
                                         <p className="text-xs text-gray-400">{formatShortDate(order.created_at)}</p>
@@ -459,6 +475,7 @@ export default function CustomersPage() {
                                 </div>
                             )
                         })}
+                        </div>
                     </div>
                 )}
             </Modal>

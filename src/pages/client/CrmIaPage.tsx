@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
     Users, Search, MessageSquare, ClipboardList, ShoppingBag,
     TrendingUp, UserCheck, DollarSign, Bot, Sparkles, Copy, CheckCircle2
@@ -85,6 +86,7 @@ function inferRecommendedGoal(customer: Customer, allCustomers: Customer[]): Mes
 }
 
 function CrmIaPageInner() {
+    const navigate = useNavigate()
     const { selectedStoreId, subscription } = useAuth()
     const plan = subscription?.plan_type ?? 'free'
     const [customers, setCustomers] = useState<Customer[]>([])
@@ -166,6 +168,13 @@ function CrmIaPageInner() {
         }
     }
 
+
+
+    const handleOpenOrderDetail = (orderId: string) => {
+        setIsViewingOrders(false)
+        setCustomerOrders([])
+        navigate(`/orders/${orderId}`)
+    }
     const handleAIAnalysis = async (customer: Customer) => {
         setSelectedCustomer(customer)
         setAiAnalysisText('')
@@ -517,11 +526,18 @@ Firma de la tienda obligatoria: — ${storeSignature}` }
                 ) : customerOrders.length === 0 ? (
                     <p className="text-sm text-gray-500 text-center py-6">No se encontraron pedidos registrados.</p>
                 ) : (
-                    <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+                    <div className="space-y-2">
+                        <p className="text-xs text-gray-500">Doble click en un pedido para abrir su detalle.</p>
+                        <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
                         {customerOrders.map((order) => {
                             const statusCfg = orderStatusConfig[order.status] || orderStatusConfig.pending
                             return (
-                                <div key={order.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100">
+                                <div
+                                    key={order.id}
+                                    onDoubleClick={() => handleOpenOrderDetail(order.id)}
+                                    title="Doble click para abrir detalle"
+                                    className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100 cursor-pointer hover:bg-gray-100 transition-colors"
+                                >
                                     <div>
                                         <p className="text-sm font-bold text-gray-800">#{order.order_number}</p>
                                         <p className="text-xs text-gray-400">{formatShortDate(order.created_at)}</p>
@@ -537,6 +553,7 @@ Firma de la tienda obligatoria: — ${storeSignature}` }
                                 </div>
                             )
                         })}
+                        </div>
                     </div>
                 )}
             </Modal>
@@ -579,7 +596,7 @@ Firma de la tienda obligatoria: — ${storeSignature}` }
                                 }
                             </button>
                         </div>
-                    </div>
+                        </div>
                 )}
             </Modal>
 
@@ -649,7 +666,7 @@ Firma de la tienda obligatoria: — ${storeSignature}` }
                                 }
                             </button>
                         </div>
-                    </div>
+                        </div>
                 )}
             </Modal>
         </div>
