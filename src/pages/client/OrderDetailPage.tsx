@@ -75,8 +75,21 @@ export default function OrderDetailPage() {
         fulfillment_status: fulfillmentDone ? 'completed' : 'pending',
         payment_status: paymentDone ? 'paid' : 'pending',
       }
-      const updated = await ordersApi.updateMetadata(order.id, mergedMetadata)
-      setOrder(updated)
+      const updatedMetadataOrder = await ordersApi.updateMetadata(order.id, mergedMetadata)
+
+      // Si se marca como completado en checklist, sincronizamos automáticamente el estado del pedido
+      if (fulfillmentDone && updatedMetadataOrder.status !== 'completed') {
+        const updatedStatusOrder = await ordersApi.updateStatus(updatedMetadataOrder.id, 'completed')
+        setOrder(updatedStatusOrder)
+        setNewStatus('completed')
+        showToast('success', 'Checklist guardado y estado actualizado a Completado')
+        return
+      }
+
+      setOrder(updatedMetadataOrder)
+      if (!fulfillmentDone && newStatus === 'completed') {
+        setNewStatus(updatedMetadataOrder.status)
+      }
       showToast('success', 'Checklist guardado')
     } catch {
       showToast('error', 'No se pudo guardar el checklist')
@@ -328,7 +341,11 @@ export default function OrderDetailPage() {
             <input
               type="checkbox"
               checked={fulfillmentDone}
-              onChange={(e) => setFulfillmentDone(e.target.checked)}
+              onChange={(e) => {
+                const checked = e.target.checked
+                setFulfillmentDone(checked)
+                if (checked) setNewStatus('completed')
+              }}
               className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
             />
             <span className="text-gray-700">Pedido completado ({deliveryType === 'delivery' ? 'entregado' : 'retirado'})</span>

@@ -276,7 +276,6 @@ export default function SubscriptionPage() {
                                     </div>
 
                                     <div className="mb-4 p-3 rounded-xl bg-indigo-50 border border-indigo-100">
-                                        <p className="text-[10px] font-black uppercase tracking-widest text-indigo-700">ROI estimado</p>
                                         <p className="text-xs text-indigo-700 font-semibold">
                                             {ROI_MESSAGES[plan.id] || 'Automatizá tareas y mejorá tu eficiencia operativa.'}
                                         </p>
@@ -294,14 +293,17 @@ export default function SubscriptionPage() {
                                     )}
 
                                     <div className="space-y-4 mb-8 flex-1">
-                                        {plan.features.map((feature, i) => (
-                                            <div key={i} className="flex items-start gap-3">
-                                                <div className="mt-1 w-5 h-5 rounded-full bg-emerald-50 flex items-center justify-center shrink-0 border border-emerald-100">
-                                                    <Check className="w-3 h-3 text-emerald-600" />
+                                        {plan.features.map((feature, i) => {
+                                            const isIAFeature = feature.toLowerCase().includes('asistente de ventas ia') || feature.toLowerCase().includes('importador masivo con ia')
+                                            return (
+                                                <div key={i} className={`flex items-start gap-3 ${isIAFeature ? 'p-2 rounded-xl bg-violet-50 border border-violet-100' : ''}`}>
+                                                    <div className={`mt-1 w-5 h-5 rounded-full flex items-center justify-center shrink-0 border ${isIAFeature ? 'bg-violet-100 border-violet-200' : 'bg-emerald-50 border-emerald-100'}`}>
+                                                        <Check className={`w-3 h-3 ${isIAFeature ? 'text-violet-700' : 'text-emerald-600'}`} />
+                                                    </div>
+                                                    <span className={`text-[11px] font-bold leading-tight ${isIAFeature ? 'text-violet-800' : 'text-slate-600'}`}>{feature}</span>
                                                 </div>
-                                                <span className="text-[11px] text-slate-600 font-bold leading-tight">{feature}</span>
-                                            </div>
-                                        ))}
+                                            )
+                                        })}
                                     </div>
 
                                     <div className="space-y-3">
