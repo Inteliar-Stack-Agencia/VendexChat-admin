@@ -1,26 +1,21 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import {
-    Wand2,
+    Sparkles,
     Send,
     Bot,
-    Sparkles,
-    ShoppingCart,
-    Calendar,
+    Wand2,
     FileText,
-    Download,
     Copy,
-    Share2,
-    CheckCircle2,
-    AlertCircle,
     Loader2,
-    Search,
-    Filter,
-    Building2
+    RefreshCw,
+    Zap,
+    Database,
 } from 'lucide-react'
-import { Card, Button, Badge, LoadingSpinner } from '../../components/common'
+import { Card, Button, Badge } from '../../components/common'
 import { ordersApi } from '../../services/api'
-import { Order } from '../../types'
-import { formatPrice, formatDate } from '../../utils/helpers'
+import { productsApi } from '../../services/productsApi'
+import { statsApi } from '../../services/statsApi'
+import { formatPrice } from '../../utils/helpers'
 import { showToast } from '../../components/common/Toast'
 import FeatureGuard from '../../components/FeatureGuard'
 import { useAuth } from '../../contexts/AuthContext'
@@ -30,309 +25,417 @@ interface Message {
     id: string
     role: 'user' | 'assistant'
     content: string
-    data?: any
 }
+
+interface StoreSnapshot {
+    generatedAt: string
+    stats: {
+        totalSales30d: number
+        totalOrders30d: number
+        avgTicket: number
+        totalSales7d: number
+        totalOrders7d: number
+    }
+    recentOrders: any[]
+    topCustomers: any[]
+    topProducts: any[]
+    lowStockProducts: any[]
+    allProducts: any[]
+}
+
+const QUICK_CHIPS = [
+    '¿Cuánto vendí este mes?',
+    '¿Cuáles son mis pedidos de hoy?',
+    '¿Qué productos tienen poco stock?',
+    '¿Quién es mi mejor cliente?',
+    '¿Cuál es el producto más vendido?',
+    '¿Qué tengo que preparar hoy?',
+]
 
 export default function AIAssistantPage() {
     const { subscription } = useAuth()
     const plan = subscription?.plan_type ?? 'free'
-    const [messages, setMessages] = useState<Message[]>([
-        {
-            id: '1',
-            role: 'assistant',
-            content: '¡Hola! Soy tu Analista de Datos IA. ¿En qué reporte puedo ayudarte hoy? Por ejemplo: "Mostrame los pedidos de la empresa Morfi Viandas de la semana pasada".'
-        }
-    ])
+
+    const [messages, setMessages] = useState<Message[]>([{
+        id: '0',
+        role: 'assistant',
+        content: '¡Hola! Soy tu analista de tienda. Estoy cargando el estado actual de tu negocio... un momento. 🔄'
+    }])
+
     const [input, setInput] = useState('')
     const [isTyping, setIsTyping] = useState(false)
-    const [filteredOrders, setFilteredOrders] = useState<Order[]>([])
-    const [reportText, setReportText] = useState<string | null>(null)
-    const [isExecuting, setIsExecuting] = useState(false)
+    const [snapshot, setSnapshot] = useState<StoreSnapshot | null>(null)
+    const [isLoadingSnapshot, setIsLoadingSnapshot] = useState(true)
     const chatEndRef = useRef<HTMLDivElement>(null)
 
     useEffect(() => {
         chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }, [messages])
 
-    const handleSend = async () => {
-        if (!input.trim() || isTyping) return
+    // ─── Carga el contexto completo de la tienda ─────────────────────────────
+    const loadStoreSnapshot = useCallback(async () => {
+        setIsLoadingSnapshot(true)
+        try {
+            const [stats30d, stats7d, recentOrdersRes, topCustomersRaw, topProductsRaw, productsRes] =
+                await Promise.all([
+                    statsApi.getOverview('30d'),
+                    statsApi.getOverview('7d'),
+                    ordersApi.list({ limit: 100 }),
+                    statsApi.getTopCustomers(),
+                    statsApi.getTopProducts(),
+                    productsApi.list({ limit: 200 }),
+                ])
 
-        const userMsg: Message = { id: Date.now().toString(), role: 'user', content: input }
+            // Agrupa top customers
+            const customerMap: Record<string, { name: string; phone: string; total: number; orders: number }> = {}
+            topCustomersRaw.forEach((o: any) => {
+                const key = o.customer_whatsapp || o.customer_name || 'desconocido'
+                if (!customerMap[key]) customerMap[key] = { name: o.customer_name, phone: o.customer_whatsapp, total: 0, orders: 0 }
+                customerMap[key].total += Number(o.total) || 0
+                customerMap[key].orders++
+            })
+            const topCustomers = Object.values(customerMap).sort((a, b) => b.total - a.total).slice(0, 10)
+
+            // Agrupa top products
+            const productMap: Record<string, { name: string; qty: number; revenue: number }> = {}
+            topProductsRaw.forEach((item: any) => {
+                const name = item.products?.name || 'Sin nombre'
+                if (!productMap[name]) productMap[name] = { name, qty: 0, revenue: 0 }
+                productMap[name].qty += Number(item.quantity) || 0
+                productMap[name].revenue += (Number(item.price) || 0) * (Number(item.quantity) || 0)
+            })
+            const topProducts = Object.values(productMap).sort((a, b) => b.qty - a.qty).slice(0, 10)
+
+            // Stock bajo
+            const lowStockProducts = productsRes.data.filter(p => !p.unlimited_stock && (p.stock ?? 0) <= 5)
+
+            const snap: StoreSnapshot = {
+                generatedAt: new Date().toISOString(),
+                stats: {
+                    totalSales30d: stats30d.totalSales,
+                    totalOrders30d: stats30d.totalOrders,
+                    avgTicket: stats30d.avgTicket,
+                    totalSales7d: stats7d.totalSales,
+                    totalOrders7d: stats7d.totalOrders,
+                },
+                recentOrders: recentOrdersRes.data.slice(0, 50).map(o => ({
+                    id: o.id.slice(0, 8),
+                    num: o.order_number,
+                    cliente: o.customer_name,
+                    empresa: (o as any).metadata?.company_name || null,
+                    total: o.total,
+                    estado: o.status,
+                    fecha: o.created_at?.slice(0, 10),
+                })),
+                topCustomers,
+                topProducts,
+                lowStockProducts: lowStockProducts.map(p => ({ nombre: p.name, stock: p.stock, precio: p.price })),
+                allProducts: productsRes.data.map(p => ({
+                    nombre: p.name,
+                    precio: p.price,
+                    stock: p.unlimited_stock ? '∞' : p.stock,
+                    activo: p.is_active
+                })),
+            }
+
+            setSnapshot(snap)
+
+            const today = new Date().toISOString().slice(0, 10)
+            const todayOrders = snap.recentOrders.filter(o => o.fecha === today)
+
+            setMessages([{
+                id: Date.now().toString(),
+                role: 'assistant',
+                content: `✅ ¡Contexto cargado! Así está tu tienda ahora mismo:\n\n📦 **Pedidos de hoy:** ${todayOrders.length}\n💰 **Ventas (30d):** ${formatPrice(snap.stats.totalSales30d)} (${snap.stats.totalOrders30d} pedidos)\n⚡ **Ticket promedio:** ${formatPrice(snap.stats.avgTicket)}${snap.lowStockProducts.length > 0 ? `\n⚠️ **Productos con poco stock:** ${snap.lowStockProducts.length}` : ''}\n\nPreguntame cualquier cosa sobre tu tienda 🙌`
+            }])
+        } catch (err) {
+            console.error('Error loading snapshot:', err)
+            showToast('error', 'No se pudo cargar el contexto de la tienda')
+            setMessages([{
+                id: Date.now().toString(),
+                role: 'assistant',
+                content: '❌ Hubo un error al cargar los datos. Usá el botón ↺ para reintentar.'
+            }])
+        } finally {
+            setIsLoadingSnapshot(false)
+        }
+    }, [])
+
+    useEffect(() => { loadStoreSnapshot() }, [loadStoreSnapshot])
+
+    // ─── System prompt con snapshot completo ─────────────────────────────────
+    const buildSystemPrompt = (snap: StoreSnapshot): string => {
+        const today = new Date().toISOString().slice(0, 10)
+        const todayOrders = snap.recentOrders.filter(o => o.fecha === today)
+
+        return `Sos el analista de datos experto de una tienda de ecommerce. TENÉS ACCESO A TODOS LOS DATOS REALES DE LA TIENDA en este momento.
+
+CONTEXTO ACTUAL (actualizado: ${new Date(snap.generatedAt).toLocaleString('es-AR')}):
+
+═══ ESTADÍSTICAS ═══
+- Ventas últimos 30 días: ${formatPrice(snap.stats.totalSales30d)} (${snap.stats.totalOrders30d} pedidos)
+- Ventas últimos 7 días: ${formatPrice(snap.stats.totalSales7d)} (${snap.stats.totalOrders7d} pedidos)
+- Ticket promedio: ${formatPrice(snap.stats.avgTicket)}
+- Pedidos de hoy (${today}): ${todayOrders.length}
+
+═══ PEDIDOS DE HOY ═══
+${todayOrders.length > 0 ? todayOrders.map(o => `- #${o.num || o.id} | ${o.cliente}${o.empresa ? ` (${o.empresa})` : ''} | ${formatPrice(o.total)} | ${o.estado}`).join('\n') : '(Sin pedidos hoy todavía)'}
+
+═══ ÚLTIMOS 50 PEDIDOS ═══
+${snap.recentOrders.map(o => `- #${o.num || o.id} | ${o.fecha} | ${o.cliente}${o.empresa ? ` [${o.empresa}]` : ''} | ${formatPrice(o.total)} | ${o.estado}`).join('\n')}
+
+═══ TOP 10 CLIENTES ═══
+${snap.topCustomers.map((c, i) => `${i + 1}. ${c.name} | ${c.orders} pedidos | Total: ${formatPrice(c.total)}`).join('\n')}
+
+═══ TOP 10 PRODUCTOS MÁS VENDIDOS ═══
+${snap.topProducts.map((p, i) => `${i + 1}. ${p.name} | ${p.qty} unidades | Recaudado: ${formatPrice(p.revenue)}`).join('\n')}
+
+═══ CATÁLOGO COMPLETO (${snap.allProducts.length} productos) ═══
+${snap.allProducts.map(p => `- ${p.nombre} | Precio: ${formatPrice(p.precio)} | Stock: ${p.stock} | Activo: ${p.activo ? 'Sí' : 'No'}`).join('\n')}
+
+═══ PRODUCTOS CON STOCK BAJO (≤5) ═══
+${snap.lowStockProducts.length > 0 ? snap.lowStockProducts.map(p => `⚠️ ${p.nombre} | Stock: ${p.stock} | Precio: ${formatPrice(p.precio)}`).join('\n') : '(Ninguno)'}
+
+═══ INSTRUCCIONES ═══
+- Respondé en español, de forma directa y concisa
+- Usá los datos reales de arriba para responder cualquier pregunta
+- Podés hacer cálculos, comparaciones y recomendaciones
+- Si te piden un reporte, generálo estructurado con los datos reales
+- Si te piden pedidos de una empresa, filtrá por el campo empresa
+- Usá emojis para que sea más visual y amigable`
+    }
+
+    // ─── Enviar mensaje ───────────────────────────────────────────────────────
+    const handleSend = async (overrideInput?: string) => {
+        const query = (overrideInput ?? input).trim()
+        if (!query || isTyping) return
+
+        const userMsg: Message = { id: Date.now().toString(), role: 'user', content: query }
         setMessages(prev => [...prev, userMsg])
         setInput('')
         setIsTyping(true)
 
         try {
-            // Llamada a la IA para interpretar la intención
-            const systemPrompt = `Actúa como un experto analista de datos para un ecommerce. 
-            Tu objetivo es entender qué pedidos quiere ver el usuario y traducir su pedido a un filtro estructurado.
-            
-            ESQUEMA DE DATOS (TABLA ORDERS):
-            - customer_name: Nombre del cliente
-            - customer_company: Empresa/Razón Social (puede estar en la metadata company_name)
-            - created_at: Fecha de creación
-            - total: Monto total
-            - status: ['pending', 'confirmed', 'completed', 'cancelled']
-
-            RESPONDE EXCLUSIVAMENTE EN FORMATO JSON:
-            {
-                "analysis": "Breve explicación de lo que entendiste",
-                "filter": {
-                    "company_name": "Nombre o null",
-                    "date_range": "today" | "yesterday" | "this_week" | "last_week" | "this_month" | "all",
-                    "status": "completed" | "all"
-                },
-                "message": "Respuesta amigable para el usuario"
+            if (!snapshot) {
+                setMessages(prev => [...prev, { id: Date.now().toString(), role: 'assistant', content: 'Todavía estoy cargando los datos. Esperá un momento...' }])
+                return
             }
-            
-            REGLA: Si el usuario pide "pedidos de [EMPRESA]", busca ese nombre. Si no especifica empresa, company_name es null.`;
+
+            const systemPrompt = buildSystemPrompt(snapshot)
+            const history = messages.slice(-10).map(m => ({ role: m.role as 'user' | 'assistant', content: m.content }))
 
             const aiText = await callAI([
                 { role: 'system', content: systemPrompt },
-                { role: 'user', content: input }
+                ...history,
+                { role: 'user', content: query }
             ], plan)
-            let aiResponse;
-            try {
-                // Limpiar posible markdown
-                const jsonStr = aiText.includes('```') ? aiText.match(/```(?:json)?\s*([\s\S]*?)\s*```/)?.[1] || aiText : aiText;
-                aiResponse = JSON.parse(jsonStr)
-            } catch (e) {
-                aiResponse = { message: aiText, filter: null }
-            }
 
-            setMessages(prev => [...prev, {
-                id: (Date.now() + 1).toString(),
-                role: 'assistant',
-                content: aiResponse.message || "Entendido. Voy a buscar esa información."
-            }])
-
-            if (aiResponse.filter) {
-                await executeQuery(aiResponse.filter)
-            }
-
+            setMessages(prev => [...prev, { id: Date.now().toString(), role: 'assistant', content: aiText }])
         } catch (err) {
-            console.error('AI Analyst Error:', err)
+            console.error('AI Error:', err)
             showToast('error', 'Error al consultar la IA')
+            setMessages(prev => [...prev, { id: Date.now().toString(), role: 'assistant', content: 'Ocurrió un error. Intentá de nuevo.' }])
         } finally {
             setIsTyping(false)
         }
     }
 
-    const executeQuery = async (filter: any) => {
-        setIsExecuting(true)
-        try {
-            const res = await ordersApi.list({ limit: 1000 }) // Buscamos todos para filtrar localmente ya que metadata es complejo
-            let results = res.data
-
-            // Filtrado por Empresa
-            if (filter.company_name) {
-                results = results.filter(o =>
-                    (o as any).metadata?.company_name?.toLowerCase().includes(filter.company_name.toLowerCase()) ||
-                    o.customer_name?.toLowerCase().includes(filter.company_name.toLowerCase())
-                )
-            }
-
-            // Filtrado por Fecha (Simplificado)
-            const now = new Date()
-            if (filter.date_range === 'today') {
-                results = results.filter(o => new Date(o.created_at).toDateString() === now.toDateString())
-            } else if (filter.date_range === 'yesterday') {
-                const yesterday = new Date(now)
-                yesterday.setDate(now.getDate() - 1)
-                results = results.filter(o => new Date(o.created_at).toDateString() === yesterday.toDateString())
-            } else if (filter.date_range === 'this_week') {
-                const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-                results = results.filter(o => new Date(o.created_at) >= weekAgo)
-            }
-
-            setFilteredOrders(results)
-
-            if (results.length > 0) {
-                generateReport(results, filter.company_name || 'General')
-            }
-        } catch (err) {
-            showToast('error', 'Error al ejecutar la consulta')
-        } finally {
-            setIsExecuting(false)
+    const copyLastResponse = () => {
+        const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant')
+        if (lastAssistant?.content) {
+            navigator.clipboard.writeText(lastAssistant.content)
+            showToast('success', 'Copiado al portapapeles')
         }
     }
 
-    const generateReport = (orders: Order[], company: string) => {
-        const total = orders.reduce((acc, curr) => acc + curr.total, 0)
-        const dateStr = new Date().toLocaleDateString('es-AR')
-
-        let text = `📋 *REPORTE DE CONTROL PARA FACTURACIÓN*\n`
-        text += `🏢 *Empresa:* ${company}\n`
-        text += `📅 *Fecha de Generación:* ${dateStr}\n`
-        text += `🔢 *Cant. Pedidos:* ${orders.length}\n`
-        text += `--------------------------------\n\n`
-
-        orders.forEach(o => {
-            text += `🔹 ID: #${o.order_number || o.id.slice(0, 6)} | ${formatDate(o.created_at)} | *${formatPrice(o.total)}*\n`
-        })
-
-        text += `\n--------------------------------\n`
-        text += `💰 *TOTAL A FACTURAR: ${formatPrice(total)}*\n`
-        text += `\n_Generado automáticamente por VENDEx AI Inteligencia_`
-
-        setReportText(text)
-    }
-
-    const copyReport = () => {
-        if (reportText) {
-            navigator.clipboard.writeText(reportText)
-            showToast('success', 'Reporte copiado al portapapeles')
-        }
-    }
-
+    // ─── Render ───────────────────────────────────────────────────────────────
     return (
-        <FeatureGuard feature="ai-analyst" minPlan="vip">
+        <FeatureGuard feature="ai-analyst" minPlan="pro">
             <div className="max-w-6xl mx-auto space-y-6 animate-fade-in pb-20">
                 {/* Header */}
-                <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 px-1">
+                <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 px-1">
                     <div>
                         <div className="flex items-center gap-3 mb-2">
                             <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-200">
                                 <Sparkles className="w-6 h-6 text-white" />
                             </div>
-                            <Badge className="bg-amber-100 text-amber-700 border-amber-200 font-black uppercase text-[9px]">Análisis Predictivo</Badge>
+                            <Badge className="bg-amber-100 text-amber-700 border-amber-200 font-black uppercase text-[9px]">
+                                Contexto en tiempo real
+                            </Badge>
                         </div>
                         <h1 className="text-3xl font-black text-slate-900 tracking-tight uppercase">VENDEx AI Inteligencia</h1>
-                        <p className="text-slate-500 font-medium mt-1">Consultá tus métricas y generá reportes de facturación usando lenguaje natural.</p>
+                        <p className="text-slate-500 font-medium mt-1">
+                            Tu asistente conoce toda tu tienda. Preguntale lo que quieras.
+                        </p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        {snapshot && (
+                            <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-xl px-4 py-2">
+                                <Database className="w-4 h-4 text-green-500" />
+                                <span className="text-[10px] font-black text-green-600 uppercase">Datos cargados</span>
+                            </div>
+                        )}
+                        <button
+                            onClick={loadStoreSnapshot}
+                            disabled={isLoadingSnapshot}
+                            className="p-2.5 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors disabled:opacity-50"
+                            title="Actualizar datos de la tienda"
+                        >
+                            <RefreshCw className={`w-4 h-4 text-slate-600 ${isLoadingSnapshot ? 'animate-spin' : ''}`} />
+                        </button>
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 h-[700px]">
-                    {/* Chat Section */}
-                    <Card className="flex flex-col h-full border-indigo-100 shadow-2xl shadow-indigo-50/50 rounded-[2.5rem] overflow-hidden">
-                        <div className="p-6 border-b border-indigo-50 bg-indigo-50/30 flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-sm">
-                                    <Bot className="w-5 h-5 text-indigo-600" />
-                                </div>
-                                <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest">Data Analyst Chat</h3>
+                {/* Chat */}
+                <Card className="flex flex-col border-indigo-100 shadow-2xl shadow-indigo-50/50 rounded-[2.5rem] overflow-hidden h-[65vh]">
+                    <div className="p-5 border-b border-indigo-50 bg-indigo-50/30 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-sm">
+                                <Bot className="w-5 h-5 text-indigo-600" />
                             </div>
-                            {isTyping && <Badge className="bg-indigo-500 text-white animate-pulse text-[8px]">Analizando consulta...</Badge>}
+                            <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest">Analista IA de Tienda</h3>
                         </div>
-
-                        <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-white">
-                            {messages.map((m) => (
-                                <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                    <div className={`max-w-[85%] p-4 rounded-3xl text-sm font-medium ${m.role === 'user'
-                                            ? 'bg-slate-900 text-white rounded-tr-none'
-                                            : 'bg-indigo-50 text-slate-800 rounded-tl-none border border-indigo-100'
-                                        }`}>
-                                        {m.content}
-                                    </div>
-                                </div>
-                            ))}
-                            <div ref={chatEndRef} />
+                        <div className="flex items-center gap-2">
+                            {isLoadingSnapshot && (
+                                <Badge className="bg-amber-100 text-amber-600 animate-pulse text-[8px] flex items-center gap-1">
+                                    <Loader2 className="w-3 h-3 animate-spin" /> Cargando tienda...
+                                </Badge>
+                            )}
+                            {isTyping && (
+                                <Badge className="bg-indigo-500 text-white animate-pulse text-[8px]">
+                                    Analizando...
+                                </Badge>
+                            )}
                         </div>
+                    </div>
 
-                        <div className="p-6 bg-slate-50 border-t border-slate-100">
-                            <div className="flex gap-3">
-                                <input
-                                    type="text"
-                                    value={input}
-                                    onChange={(e) => setInput(e.target.value)}
-                                    onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                                    placeholder="Ej: Dame los pedidos de hoy..."
-                                    className="flex-1 bg-white border border-slate-200 rounded-2xl px-5 py-4 text-sm font-bold focus:ring-2 focus:ring-indigo-500/20 outline-none shadow-sm"
-                                />
-                                <button
-                                    onClick={handleSend}
-                                    disabled={!input.trim() || isTyping}
-                                    className="p-4 bg-indigo-600 text-white rounded-2xl shadow-xl shadow-indigo-100 hover:bg-slate-900 transition-all disabled:opacity-50"
-                                >
-                                    <Send className="w-5 h-5" />
-                                </button>
-                            </div>
-                        </div>
-                    </Card>
-
-                    {/* Results & Report Section */}
-                    <div className="flex flex-col gap-6 h-full">
-                        {/* Result Table Preview */}
-                        <Card className="flex-1 border-slate-100 bg-white shadow-xl overflow-hidden flex flex-col">
-                            <div className="p-5 border-b border-slate-50 flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                    <Filter className="w-4 h-4 text-slate-400" />
-                                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Vista de Datos Filtrados</h3>
-                                </div>
-                                <Badge className="bg-indigo-50 text-indigo-600 font-black">{filteredOrders.length} Pedidos</Badge>
-                            </div>
-
-                            <div className="flex-1 overflow-y-auto">
-                                {isExecuting ? (
-                                    <div className="h-full flex flex-col items-center justify-center p-12">
-                                        <Loader2 className="w-8 h-8 text-indigo-500 animate-spin mb-4" />
-                                        <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Extrayendo datos...</p>
-                                    </div>
-                                ) : filteredOrders.length > 0 ? (
-                                    <table className="w-full text-left">
-                                        <thead className="sticky top-0 bg-slate-50/80 backdrop-blur-md">
-                                            <tr className="text-[9px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
-                                                <th className="px-5 py-3">ID</th>
-                                                <th className="px-5 py-3">Cliente / Empresa</th>
-                                                <th className="px-5 py-3 text-right">Total</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-slate-50">
-                                            {filteredOrders.map(o => (
-                                                <tr key={o.id} className="hover:bg-slate-50/50 transition-colors">
-                                                    <td className="px-5 py-3 font-bold text-slate-900 text-xs">#{o.order_number || o.id.slice(0, 6)}</td>
-                                                    <td className="px-5 py-3">
-                                                        <div className="flex flex-col">
-                                                            <span className="text-xs font-bold text-slate-800">{o.customer_name}</span>
-                                                            <span className="text-[9px] font-black text-indigo-500 uppercase">{(o as any).metadata?.company_name || 'Sin Empresa'}</span>
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-5 py-3 text-right font-black text-slate-900 text-xs">{formatPrice(o.total)}</td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                ) : (
-                                    <div className="h-full flex flex-col items-center justify-center p-12 text-center">
-                                        <ShoppingCart className="w-12 h-12 text-slate-100 mb-4" />
-                                        <p className="text-sm font-bold text-slate-300">Si pides un reporte, aparecerá aquí.</p>
+                    {/* Mensajes */}
+                    <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-white">
+                        {messages.map((m) => (
+                            <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                {m.role === 'assistant' && (
+                                    <div className="w-7 h-7 bg-indigo-100 rounded-lg flex items-center justify-center mr-2 mt-1 flex-shrink-0">
+                                        <Bot className="w-4 h-4 text-indigo-600" />
                                     </div>
                                 )}
+                                <div className={`max-w-[85%] p-4 rounded-3xl text-sm font-medium whitespace-pre-wrap ${m.role === 'user'
+                                    ? 'bg-slate-900 text-white rounded-tr-none'
+                                    : 'bg-indigo-50 text-slate-800 rounded-tl-none border border-indigo-100'
+                                    }`}>
+                                    {m.content}
+                                </div>
                             </div>
-                        </Card>
-
-                        {/* Report Generator Box */}
-                        <Card className="h-fit bg-slate-900 text-white border-0 shadow-2xl relative overflow-hidden group">
-                            <div className="p-6 relative z-10 space-y-4">
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                        <FileText className="w-5 h-5 text-indigo-400" />
-                                        <h3 className="text-xs font-black uppercase tracking-widest text-indigo-400">Reporte de Control</h3>
+                        ))}
+                        {isTyping && (
+                            <div className="flex items-start gap-2">
+                                <div className="w-7 h-7 bg-indigo-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                                    <Loader2 className="w-4 h-4 text-indigo-600 animate-spin" />
+                                </div>
+                                <div className="bg-indigo-50 border border-indigo-100 rounded-3xl rounded-tl-none p-4">
+                                    <div className="flex gap-1.5">
+                                        <span className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                                        <span className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                                        <span className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                                     </div>
-                                    {reportText && (
-                                        <div className="flex gap-2">
-                                            <button onClick={copyReport} className="p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors" title="Copiar">
-                                                <Copy className="w-4 h-4" />
-                                            </button>
-                                        </div>
-                                    )}
                                 </div>
-
-                                <div className="bg-white/5 rounded-2xl p-4 font-mono text-[11px] leading-relaxed max-h-[150px] overflow-y-auto scrollbar-hide border border-white/10 whitespace-pre-line">
-                                    {reportText || 'Sin reporte generado. Realizá una consulta a la IA para comenzar.'}
-                                </div>
-
-                                <Button
-                                    disabled={!reportText}
-                                    onClick={copyReport}
-                                    className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black uppercase tracking-widest text-[10px] py-4 rounded-xl shadow-xl shadow-indigo-900/50 flex items-center justify-center gap-2"
-                                >
-                                    <Share2 className="w-4 h-4" /> Copiar para WhatsApp / Facturación
-                                </Button>
                             </div>
-                            <Wand2 className="absolute -bottom-4 -right-4 w-32 h-32 text-white/5 group-hover:rotate-12 transition-transform duration-700" />
-                        </Card>
+                        )}
+                        <div ref={chatEndRef} />
                     </div>
+
+                    {/* Chips de acceso rápido */}
+                    <div className="px-6 pt-3 pb-1 bg-slate-50/80 border-t border-slate-100 flex flex-wrap gap-2">
+                        {QUICK_CHIPS.map(chip => (
+                            <button
+                                key={chip}
+                                onClick={() => handleSend(chip)}
+                                disabled={isTyping || isLoadingSnapshot}
+                                className="text-[10px] font-black px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-slate-600 hover:border-indigo-300 hover:text-indigo-600 transition-all disabled:opacity-40 shadow-sm whitespace-nowrap"
+                            >
+                                {chip}
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* Input */}
+                    <div className="p-4 bg-slate-50">
+                        <div className="flex gap-3">
+                            <input
+                                type="text"
+                                value={input}
+                                onChange={(e) => setInput(e.target.value)}
+                                onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                                placeholder="Preguntame cualquier cosa sobre tu tienda..."
+                                disabled={isLoadingSnapshot}
+                                className="flex-1 bg-white border border-slate-200 rounded-2xl px-5 py-4 text-sm font-bold focus:ring-2 focus:ring-indigo-500/20 outline-none shadow-sm disabled:opacity-50"
+                            />
+                            <button
+                                onClick={() => handleSend()}
+                                disabled={!input.trim() || isTyping || isLoadingSnapshot}
+                                className="p-4 bg-indigo-600 text-white rounded-2xl shadow-xl shadow-indigo-100 hover:bg-slate-900 transition-all disabled:opacity-50"
+                            >
+                                <Send className="w-5 h-5" />
+                            </button>
+                        </div>
+                    </div>
+                </Card>
+
+                {/* Footer cards */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Copiar respuesta */}
+                    <Card className="bg-slate-900 text-white border-0 shadow-2xl relative overflow-hidden group">
+                        <div className="p-6 relative z-10 space-y-4">
+                            <div className="flex items-center gap-2">
+                                <FileText className="w-5 h-5 text-indigo-400" />
+                                <h3 className="text-xs font-black uppercase tracking-widest text-indigo-400">Copiar respuesta</h3>
+                            </div>
+                            <p className="text-[11px] text-slate-400">
+                                Pedile a la IA un reporte de pedidos o ventas y copiarlo para WhatsApp o facturación.
+                            </p>
+                            <Button
+                                onClick={copyLastResponse}
+                                className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black uppercase tracking-widest text-[10px] py-4 rounded-xl shadow-xl shadow-indigo-900/50 flex items-center justify-center gap-2"
+                            >
+                                <Copy className="w-4 h-4" /> Copiar última respuesta
+                            </Button>
+                        </div>
+                        <Wand2 className="absolute -bottom-4 -right-4 w-32 h-32 text-white/5 group-hover:rotate-12 transition-transform duration-700" />
+                    </Card>
+
+                    {/* Info del snapshot */}
+                    <Card className="border-slate-100 bg-slate-50 shadow-sm">
+                        <div className="p-6 space-y-3">
+                            <div className="flex items-center gap-2">
+                                <Database className="w-5 h-5 text-slate-400" />
+                                <h3 className="text-xs font-black uppercase tracking-widest text-slate-400">Qué conoce la IA ahora</h3>
+                            </div>
+                            {snapshot ? (
+                                <div className="space-y-1.5">
+                                    {[
+                                        `${snapshot.recentOrders.length} pedidos recientes`,
+                                        `${snapshot.topCustomers.length} mejores clientes`,
+                                        `${snapshot.topProducts.length} productos más vendidos`,
+                                        `${snapshot.allProducts.length} productos en catálogo`,
+                                        `${snapshot.lowStockProducts.length} con stock bajo`,
+                                        `Estadísticas de 7d y 30d`,
+                                    ].map((label, i) => (
+                                        <div key={i} className="flex items-center gap-2 text-[11px] text-slate-600 font-medium">
+                                            <Zap className="w-3 h-3 text-green-500" />
+                                            {label}
+                                        </div>
+                                    ))}
+                                    <p className="text-[9px] text-slate-400 pt-1">
+                                        Actualizado: {new Date(snapshot.generatedAt).toLocaleTimeString('es-AR')}
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="flex items-center gap-2 text-[11px] text-slate-500">
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                    Cargando datos de la tienda...
+                                </div>
+                            )}
+                        </div>
+                    </Card>
                 </div>
             </div>
         </FeatureGuard>

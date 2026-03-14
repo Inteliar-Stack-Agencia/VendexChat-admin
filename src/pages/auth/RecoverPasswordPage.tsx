@@ -20,6 +20,7 @@ export default function RecoverPasswordPage() {
     setLoading(true)
     try {
       await authApi.requestPasswordReset(email)
+      showToast('success', 'Si el email existe, te enviaremos un enlace de recuperación.')
       setSent(true)
     } catch {
       // Siempre mostrar éxito por seguridad
@@ -37,7 +38,7 @@ export default function RecoverPasswordPage() {
             <Store className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-2xl font-bold text-gray-900">Recuperar contraseña</h1>
-          <p className="text-gray-500 mt-1">Te enviaremos un enlace de recuperación</p>
+          <p className="text-gray-500 mt-1">Te enviaremos un enlace por email para recuperar tu contraseña</p>
         </div>
 
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">

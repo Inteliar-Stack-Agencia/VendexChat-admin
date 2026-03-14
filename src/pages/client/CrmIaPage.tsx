@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
     Users, Search, MessageSquare, ClipboardList, ShoppingBag,
     TrendingUp, UserCheck, DollarSign, Bot, Sparkles, Copy, CheckCircle2
 } from 'lucide-react'
 import FeatureGuard from '../../components/FeatureGuard'
 import { Card, LoadingSpinner, EmptyState, Modal, Button, showToast } from '../../components/common'
-import { customersApi } from '../../services/api'
+import { customersApi, tenantApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import { formatPrice, formatShortDate, whatsappLink, orderStatusConfig } from '../../utils/helpers'
 import type { Customer } from '../../types'
@@ -54,7 +55,38 @@ import { callAI as callAIService } from '../../services/aiService'
 
 const TAG_FILTERS = ['Todos', 'VIP', 'Frecuente', 'En riesgo', 'Inactivo', 'Nuevo']
 
+
+type MessageGoal = 'thankyou' | 'discount' | 'reminder' | 'reactivation'
+
+const MESSAGE_GOAL_OPTIONS: { key: MessageGoal; label: string; prompt: string }[] = [
+    { key: 'thankyou', label: 'Agradecimiento', prompt: 'objetivo: agradecer la compra reciente y reforzar confianza para próxima compra.' },
+    { key: 'discount', label: 'Descuento', prompt: 'objetivo: comunicar promoción/descuento con sentido de oportunidad y CTA claro.' },
+    { key: 'reminder', label: 'Recordatorio', prompt: 'objetivo: recordar productos o reposición de compra de forma útil y no invasiva.' },
+    { key: 'reactivation', label: 'Reactivación', prompt: 'objetivo: recuperar cliente inactivo con tono cercano y propuesta de valor.' },
+]
+
+
+const SEGMENT_RULES = [
+    '⭐ VIP: top 20% por gasto total (si hay al menos 5 clientes).',
+    '🔄 Frecuente: 3 o más pedidos y activo (< 60 días).',
+    '⚠️ En riesgo: 20-59 días sin comprar y al menos 2 pedidos históricos.',
+    '😴 Inactivo: 60+ días sin comprar.',
+    '🆕 Nuevo: primer pedido registrado (1 pedido).',
+]
+
+function inferRecommendedGoal(customer: Customer, allCustomers: Customer[]): MessageGoal {
+    const tags = getCustomerTags(customer, allCustomers).map(tag => tag.label)
+
+    if (tags.some(tag => tag.includes('Inactivo'))) return 'reactivation'
+    if (tags.some(tag => tag.includes('En riesgo'))) return 'discount'
+    if (tags.some(tag => tag.includes('Frecuente'))) return 'reminder'
+    if (tags.some(tag => tag.includes('VIP'))) return 'discount'
+
+    return 'thankyou'
+}
+
 function CrmIaPageInner() {
+    const navigate = useNavigate()
     const { selectedStoreId, subscription } = useAuth()
     const plan = subscription?.plan_type ?? 'free'
     const [customers, setCustomers] = useState<Customer[]>([])
@@ -82,9 +114,21 @@ function CrmIaPageInner() {
     const [aiMessageText, setAiMessageText] = useState('')
     const [loadingAI, setLoadingAI] = useState(false)
     const [copied, setCopied] = useState(false)
+    const [messageGoal, setMessageGoal] = useState<MessageGoal>('thankyou')
+    const [storeSignature, setStoreSignature] = useState('Tu tienda')
 
     useEffect(() => {
         loadCustomers()
+    }, [selectedStoreId])
+
+    useEffect(() => {
+        tenantApi.getMe()
+            .then((store) => {
+                setStoreSignature(store.name?.trim() || 'Tu tienda')
+            })
+            .catch(() => {
+                setStoreSignature('Tu tienda')
+            })
     }, [selectedStoreId])
 
     const loadCustomers = () => {
@@ -124,6 +168,13 @@ function CrmIaPageInner() {
         }
     }
 
+
+
+    const handleOpenOrderDetail = (orderId: string) => {
+        setIsViewingOrders(false)
+        setCustomerOrders([])
+        navigate(`/orders/${orderId}`)
+    }
     const handleAIAnalysis = async (customer: Customer) => {
         setSelectedCustomer(customer)
         setAiAnalysisText('')
@@ -152,21 +203,40 @@ Notas internas: ${customer.notes || 'ninguna'}` }
         }
     }
 
-    const handleAIMessage = async (customer: Customer) => {
+    const appendStoreSignature = (message: string) => {
+        const cleanMessage = message.trim()
+        const signatureLine = `— ${storeSignature}`
+
+        if (cleanMessage.toLowerCase().includes(signatureLine.toLowerCase())) {
+            return cleanMessage
+        }
+
+        return `${cleanMessage}
+
+${signatureLine}`
+    }
+
+    const handleAIMessage = async (customer: Customer, goal?: MessageGoal) => {
+        const resolvedGoal = goal || inferRecommendedGoal(customer, customers)
         setSelectedCustomer(customer)
+        setMessageGoal(resolvedGoal)
+        setCopied(false)
         setAiMessageText('')
         setIsAIMessage(true)
         setLoadingAI(true)
         const days = getDaysSince(customer.last_order_at) ?? 'varios'
+        const selectedGoal = MESSAGE_GOAL_OPTIONS.find(option => option.key === resolvedGoal)
         try {
             const text = await callAIService([
-                { role: 'system', content: `Eres un experto en marketing conversacional para ecommerce latinoamericano. Genera un mensaje de WhatsApp personalizado, cálido y natural (NO genérico ni corporativo) para reconectar con el cliente. El mensaje debe ser corto (máximo 3 oraciones), usar el nombre del cliente, y tener un call-to-action sutil. Responde SOLO con el texto del mensaje, listo para copiar y enviar. No uses asteriscos ni markdown.` },
+                { role: 'system', content: `Eres un experto en marketing conversacional para ecommerce latinoamericano. Genera un mensaje de WhatsApp personalizado, cálido y natural (NO genérico ni corporativo) para reconectar con el cliente. El mensaje debe ser corto (máximo 3 oraciones), usar el nombre del cliente, incluir ${selectedGoal?.prompt || 'objetivo comercial claro'} y cerrar con una firma en línea final con formato: — ${storeSignature}. Responde SOLO con el texto del mensaje, listo para copiar y enviar. No uses asteriscos ni markdown.` },
                 { role: 'user', content: `Nombre del cliente: ${customer.name}
+Objetivo del mensaje: ${selectedGoal?.label || 'Agradecimiento'}
 Pedidos realizados: ${customer.total_orders}
 Días sin comprar: ${days}
-Notas del vendedor: ${customer.notes || 'ninguna'}` }
+Notas del vendedor: ${customer.notes || 'ninguna'}
+Firma de la tienda obligatoria: — ${storeSignature}` }
             ], plan)
-            setAiMessageText(text)
+            setAiMessageText(appendStoreSignature(text))
         } catch {
             showToast('error', 'Error al consultar la IA')
             setIsAIMessage(false)
@@ -191,6 +261,12 @@ Notas del vendedor: ${customer.notes || 'ninguna'}` }
         const tags = getCustomerTags(c, customers)
         return tags.some(t => t.label.includes(tagFilter))
     })
+
+
+    const selectedCustomerDays = selectedCustomer ? getDaysSince(selectedCustomer.last_order_at) : null
+    const selectedCustomerAvgTicket = selectedCustomer && selectedCustomer.total_orders > 0
+        ? Number(selectedCustomer.total_spent) / selectedCustomer.total_orders
+        : 0
 
     // Métricas
     const totalSpent = customers.reduce((acc, c) => acc + (Number(c.total_spent) || 0), 0)
@@ -282,6 +358,18 @@ Notas del vendedor: ${customer.notes || 'ninguna'}` }
                 </div>
             </Card>
 
+            <Card>
+                <div className="space-y-2">
+                    <p className="text-xs font-black uppercase tracking-widest text-gray-400">Cómo se clasifican los clientes</p>
+                    <ul className="space-y-1">
+                        {SEGMENT_RULES.map((rule) => (
+                            <li key={rule} className="text-sm text-gray-600">• {rule}</li>
+                        ))}
+                    </ul>
+                    <p className="text-xs text-gray-500">Estas etiquetas son reglas automáticas del CRM (no una decisión arbitraria de IA) y se usan para sugerir el mejor tipo de mensaje.</p>
+                </div>
+            </Card>
+
             {/* Tabla */}
             {loading ? (
                 <LoadingSpinner text="Cargando clientes..." />
@@ -354,40 +442,40 @@ Notas del vendedor: ${customer.notes || 'ninguna'}` }
                                                 <div className="flex items-center justify-end gap-1">
                                                     <button
                                                         onClick={() => { setSelectedCustomer(customer); setNotes(customer.notes || ''); setIsEditingNotes(true) }}
-                                                        className="p-2 rounded-lg hover:bg-white hover:shadow-sm text-slate-400 hover:text-indigo-600 transition-all border border-transparent hover:border-indigo-100"
+                                                        className="p-2.5 rounded-xl bg-indigo-50/60 hover:bg-indigo-100 text-indigo-600 hover:text-indigo-700 transition-all border border-indigo-100"
                                                         title="Notas internas"
                                                     >
-                                                        <ClipboardList className="w-4 h-4" />
+                                                        <ClipboardList className="w-5 h-5" />
                                                     </button>
                                                     <button
                                                         onClick={() => handleViewOrders(customer)}
-                                                        className="p-2 rounded-lg hover:bg-white hover:shadow-sm text-slate-400 hover:text-amber-600 transition-all border border-transparent hover:border-amber-100"
+                                                        className="p-2.5 rounded-xl bg-amber-50/60 hover:bg-amber-100 text-amber-600 hover:text-amber-700 transition-all border border-amber-100"
                                                         title="Ver pedidos"
                                                     >
-                                                        <ShoppingBag className="w-4 h-4" />
+                                                        <ShoppingBag className="w-5 h-5" />
                                                     </button>
                                                     <button
                                                         onClick={() => handleAIAnalysis(customer)}
-                                                        className="p-2 rounded-lg hover:bg-white hover:shadow-sm text-slate-400 hover:text-violet-600 transition-all border border-transparent hover:border-violet-100"
+                                                        className="p-2.5 rounded-xl bg-violet-50/60 hover:bg-violet-100 text-violet-600 hover:text-violet-700 transition-all border border-violet-100"
                                                         title="Análisis IA del cliente"
                                                     >
-                                                        <Bot className="w-4 h-4" />
+                                                        <Bot className="w-5 h-5" />
                                                     </button>
                                                     <button
                                                         onClick={() => handleAIMessage(customer)}
-                                                        className="p-2 rounded-lg hover:bg-white hover:shadow-sm text-slate-400 hover:text-pink-600 transition-all border border-transparent hover:border-pink-100"
+                                                        className="p-2.5 rounded-xl bg-pink-50/60 hover:bg-pink-100 text-pink-600 hover:text-pink-700 transition-all border border-pink-100"
                                                         title="Generar mensaje WhatsApp con IA"
                                                     >
-                                                        <Sparkles className="w-4 h-4" />
+                                                        <Sparkles className="w-5 h-5" />
                                                     </button>
                                                     <a
                                                         href={whatsappLink(customer.whatsapp)}
                                                         target="_blank"
                                                         rel="noopener noreferrer"
-                                                        className="p-2 rounded-lg hover:bg-white hover:shadow-sm text-emerald-600 transition-all border border-transparent hover:border-emerald-100"
+                                                        className="p-2.5 rounded-xl bg-emerald-50/60 hover:bg-emerald-100 text-emerald-600 hover:text-emerald-700 transition-all border border-emerald-100"
                                                         title="Enviar WhatsApp"
                                                     >
-                                                        <MessageSquare className="w-4 h-4" />
+                                                        <MessageSquare className="w-5 h-5" />
                                                     </a>
                                                 </div>
                                             </td>
@@ -398,7 +486,24 @@ Notas del vendedor: ${customer.notes || 'ninguna'}` }
                         </table>
                     </div>
                 </Card>
-            )}
+)}
+
+            <Card>
+                <details>
+                    <summary className="cursor-pointer text-xs font-black uppercase tracking-widest text-gray-400 select-none">
+                        Cómo se clasifican los clientes
+                    </summary>
+                    <div className="mt-3 space-y-2">
+                        <ul className="space-y-1">
+                            {SEGMENT_RULES.map((rule) => (
+                                <li key={rule} className="text-xs text-gray-600">• {rule}</li>
+                            ))}
+                        </ul>
+                        <p className="text-xs text-gray-500">Estas etiquetas son reglas automáticas del CRM (no una decisión arbitraria de IA) y se usan para sugerir el mejor tipo de mensaje.</p>
+                    </div>
+                </details>
+            </Card>
+
 
             {/* Modal: Notas */}
             <Modal
@@ -438,11 +543,18 @@ Notas del vendedor: ${customer.notes || 'ninguna'}` }
                 ) : customerOrders.length === 0 ? (
                     <p className="text-sm text-gray-500 text-center py-6">No se encontraron pedidos registrados.</p>
                 ) : (
-                    <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+                    <div className="space-y-2">
+                        <p className="text-xs text-gray-500">Doble click en un pedido para abrir su detalle.</p>
+                        <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
                         {customerOrders.map((order) => {
                             const statusCfg = orderStatusConfig[order.status] || orderStatusConfig.pending
                             return (
-                                <div key={order.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100">
+                                <div
+                                    key={order.id}
+                                    onDoubleClick={() => handleOpenOrderDetail(order.id)}
+                                    title="Doble click para abrir detalle"
+                                    className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100 cursor-pointer hover:bg-gray-100 transition-colors"
+                                >
                                     <div>
                                         <p className="text-sm font-bold text-gray-800">#{order.order_number}</p>
                                         <p className="text-xs text-gray-400">{formatShortDate(order.created_at)}</p>
@@ -458,6 +570,7 @@ Notas del vendedor: ${customer.notes || 'ninguna'}` }
                                 </div>
                             )
                         })}
+                        </div>
                     </div>
                 )}
             </Modal>
@@ -475,6 +588,17 @@ Notas del vendedor: ${customer.notes || 'ninguna'}` }
                     </div>
                 ) : (
                     <div className="space-y-4">
+                        <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                            <p className="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-2">Base del análisis</p>
+                            <ul className="space-y-1 text-xs text-slate-600">
+                                <li>• Pedidos totales: <span className="font-semibold">{selectedCustomer?.total_orders ?? 0}</span></li>
+                                <li>• Total gastado: <span className="font-semibold">{formatPrice(Number(selectedCustomer?.total_spent || 0))}</span></li>
+                                <li>• Ticket promedio: <span className="font-semibold">{formatPrice(selectedCustomerAvgTicket)}</span></li>
+                                <li>• Días sin comprar: <span className="font-semibold">{selectedCustomerDays ?? 'Sin pedidos'}</span></li>
+                                <li>• Notas internas: <span className="font-semibold">{selectedCustomer?.notes || 'ninguna'}</span></li>
+                            </ul>
+                        </div>
+
                         <div className="p-4 bg-violet-50 border border-violet-100 rounded-2xl">
                             <p className="text-sm text-gray-700 leading-relaxed">{aiAnalysisText}</p>
                         </div>
@@ -485,11 +609,11 @@ Notas del vendedor: ${customer.notes || 'ninguna'}` }
                             >
                                 {copied
                                     ? <><CheckCircle2 className="w-4 h-4 text-emerald-600" /> Copiado</>
-                                    : <><Copy className="w-4 h-4" /> Copiar</>
+                                    : <><Copy className="w-5 h-5" /> Copiar</>
                                 }
                             </button>
                         </div>
-                    </div>
+                        </div>
                 )}
             </Modal>
 
@@ -509,11 +633,36 @@ Notas del vendedor: ${customer.notes || 'ninguna'}` }
                         <p className="text-xs text-gray-400 font-semibold uppercase tracking-widest">
                             Mensaje generado por IA — revisá antes de enviar
                         </p>
+
+                        <p className="text-xs text-indigo-600 font-semibold">
+                            Sugerencia automática según segmento: {MESSAGE_GOAL_OPTIONS.find(option => option.key === messageGoal)?.label}
+                        </p>
+
+                        <div className="flex flex-wrap gap-2">
+                            {MESSAGE_GOAL_OPTIONS.map((option) => (
+                                <button
+                                    key={option.key}
+                                    onClick={() => selectedCustomer && handleAIMessage(selectedCustomer, option.key)}
+                                    className={`px-3 py-1 rounded-full text-xs font-semibold transition-all border ${messageGoal === option.key
+                                        ? 'bg-indigo-600 text-white border-indigo-600'
+                                        : 'bg-white text-gray-600 border-gray-300 hover:border-indigo-400 hover:text-indigo-600'
+                                        }`}
+                                >
+                                    {option.label}
+                                </button>
+                            ))}
+                        </div>
+
                         <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl">
                             <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">
                                 {aiMessageText}
                             </p>
                         </div>
+
+                        <p className="text-xs text-gray-500">
+                            Firma incluida automáticamente: <span className="font-semibold">— {storeSignature}</span>
+                        </p>
+
                         <div className="flex items-center justify-between gap-3">
                             <a
                                 href={whatsappLink(selectedCustomer?.whatsapp || '', aiMessageText)}
@@ -521,7 +670,7 @@ Notas del vendedor: ${customer.notes || 'ninguna'}` }
                                 rel="noopener noreferrer"
                                 className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl transition-all"
                             >
-                                <MessageSquare className="w-4 h-4" />
+                                <MessageSquare className="w-5 h-5" />
                                 Abrir en WhatsApp
                             </a>
                             <button
@@ -530,11 +679,11 @@ Notas del vendedor: ${customer.notes || 'ninguna'}` }
                             >
                                 {copied
                                     ? <><CheckCircle2 className="w-4 h-4 text-emerald-600" /> Copiado</>
-                                    : <><Copy className="w-4 h-4" /> Copiar</>
+                                    : <><Copy className="w-5 h-5" /> Copiar</>
                                 }
                             </button>
                         </div>
-                    </div>
+                        </div>
                 )}
             </Modal>
         </div>
