@@ -64,6 +64,26 @@ const MESSAGE_GOAL_OPTIONS: { key: MessageGoal; label: string; prompt: string }[
     { key: 'reactivation', label: 'Reactivación', prompt: 'objetivo: recuperar cliente inactivo con tono cercano y propuesta de valor.' },
 ]
 
+
+const SEGMENT_RULES = [
+    '⭐ VIP: top 20% por gasto total (si hay al menos 5 clientes).',
+    '🔄 Frecuente: 3 o más pedidos y activo (< 60 días).',
+    '⚠️ En riesgo: 20-59 días sin comprar y al menos 2 pedidos históricos.',
+    '😴 Inactivo: 60+ días sin comprar.',
+    '🆕 Nuevo: primer pedido registrado (1 pedido).',
+]
+
+function inferRecommendedGoal(customer: Customer, allCustomers: Customer[]): MessageGoal {
+    const tags = getCustomerTags(customer, allCustomers).map(tag => tag.label)
+
+    if (tags.some(tag => tag.includes('Inactivo'))) return 'reactivation'
+    if (tags.some(tag => tag.includes('En riesgo'))) return 'discount'
+    if (tags.some(tag => tag.includes('Frecuente'))) return 'reminder'
+    if (tags.some(tag => tag.includes('VIP'))) return 'discount'
+
+    return 'thankyou'
+}
+
 function CrmIaPageInner() {
     const { selectedStoreId, subscription } = useAuth()
     const plan = subscription?.plan_type ?? 'free'
@@ -187,15 +207,16 @@ Notas internas: ${customer.notes || 'ninguna'}` }
 ${signatureLine}`
     }
 
-    const handleAIMessage = async (customer: Customer, goal: MessageGoal = messageGoal) => {
+    const handleAIMessage = async (customer: Customer, goal?: MessageGoal) => {
+        const resolvedGoal = goal || inferRecommendedGoal(customer, customers)
         setSelectedCustomer(customer)
-        setMessageGoal(goal)
+        setMessageGoal(resolvedGoal)
         setCopied(false)
         setAiMessageText('')
         setIsAIMessage(true)
         setLoadingAI(true)
         const days = getDaysSince(customer.last_order_at) ?? 'varios'
-        const selectedGoal = MESSAGE_GOAL_OPTIONS.find(option => option.key === goal)
+        const selectedGoal = MESSAGE_GOAL_OPTIONS.find(option => option.key === resolvedGoal)
         try {
             const text = await callAIService([
                 { role: 'system', content: `Eres un experto en marketing conversacional para ecommerce latinoamericano. Genera un mensaje de WhatsApp personalizado, cálido y natural (NO genérico ni corporativo) para reconectar con el cliente. El mensaje debe ser corto (máximo 3 oraciones), usar el nombre del cliente, incluir ${selectedGoal?.prompt || 'objetivo comercial claro'} y cerrar con una firma en línea final con formato: — ${storeSignature}. Responde SOLO con el texto del mensaje, listo para copiar y enviar. No uses asteriscos ni markdown.` },
@@ -231,6 +252,12 @@ Firma de la tienda obligatoria: — ${storeSignature}` }
         const tags = getCustomerTags(c, customers)
         return tags.some(t => t.label.includes(tagFilter))
     })
+
+
+    const selectedCustomerDays = selectedCustomer ? getDaysSince(selectedCustomer.last_order_at) : null
+    const selectedCustomerAvgTicket = selectedCustomer && selectedCustomer.total_orders > 0
+        ? Number(selectedCustomer.total_spent) / selectedCustomer.total_orders
+        : 0
 
     // Métricas
     const totalSpent = customers.reduce((acc, c) => acc + (Number(c.total_spent) || 0), 0)
@@ -319,6 +346,18 @@ Firma de la tienda obligatoria: — ${storeSignature}` }
                             </button>
                         ))}
                     </div>
+                </div>
+            </Card>
+
+            <Card>
+                <div className="space-y-2">
+                    <p className="text-xs font-black uppercase tracking-widest text-gray-400">Cómo se clasifican los clientes</p>
+                    <ul className="space-y-1">
+                        {SEGMENT_RULES.map((rule) => (
+                            <li key={rule} className="text-sm text-gray-600">• {rule}</li>
+                        ))}
+                    </ul>
+                    <p className="text-xs text-gray-500">Estas etiquetas son reglas automáticas del CRM (no una decisión arbitraria de IA) y se usan para sugerir el mejor tipo de mensaje.</p>
                 </div>
             </Card>
 
@@ -515,6 +554,17 @@ Firma de la tienda obligatoria: — ${storeSignature}` }
                     </div>
                 ) : (
                     <div className="space-y-4">
+                        <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                            <p className="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-2">Base del análisis</p>
+                            <ul className="space-y-1 text-xs text-slate-600">
+                                <li>• Pedidos totales: <span className="font-semibold">{selectedCustomer?.total_orders ?? 0}</span></li>
+                                <li>• Total gastado: <span className="font-semibold">{formatPrice(Number(selectedCustomer?.total_spent || 0))}</span></li>
+                                <li>• Ticket promedio: <span className="font-semibold">{formatPrice(selectedCustomerAvgTicket)}</span></li>
+                                <li>• Días sin comprar: <span className="font-semibold">{selectedCustomerDays ?? 'Sin pedidos'}</span></li>
+                                <li>• Notas internas: <span className="font-semibold">{selectedCustomer?.notes || 'ninguna'}</span></li>
+                            </ul>
+                        </div>
+
                         <div className="p-4 bg-violet-50 border border-violet-100 rounded-2xl">
                             <p className="text-sm text-gray-700 leading-relaxed">{aiAnalysisText}</p>
                         </div>
@@ -548,6 +598,10 @@ Firma de la tienda obligatoria: — ${storeSignature}` }
                     <div className="space-y-4">
                         <p className="text-xs text-gray-400 font-semibold uppercase tracking-widest">
                             Mensaje generado por IA — revisá antes de enviar
+                        </p>
+
+                        <p className="text-xs text-indigo-600 font-semibold">
+                            Sugerencia automática según segmento: {MESSAGE_GOAL_OPTIONS.find(option => option.key === messageGoal)?.label}
                         </p>
 
                         <div className="flex flex-wrap gap-2">

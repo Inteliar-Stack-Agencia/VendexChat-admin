@@ -137,6 +137,15 @@ export default function CustomersPage() {
         }
     }
 
+
+
+    const segmentRules = [
+        'VIP: 5+ pedidos o $150.000+ gastados',
+        'Frecuente: 3-4 pedidos',
+        'Nuevo: 1 pedido y último pedido en <= 7 días',
+        'En riesgo: más de 30 días sin comprar',
+        'Inactivo: más de 60 días sin comprar',
+    ]
     const filteredCustomers = useMemo(() => {
         if (activeSegment === 'all') return customers
         return customers.filter(customer => getCustomerSegment(customer).key === activeSegment)
@@ -252,6 +261,10 @@ export default function CustomersPage() {
 
                     <p className="text-xs text-gray-500 font-medium">
                         Mostrando {filteredCustomers.length} de {customers.length} clientes.
+                    </p>
+
+                    <p className="text-xs text-gray-500">
+                        Criterios: {segmentRules.join(' · ')}.
                     </p>
                 </div>
             </Card>
