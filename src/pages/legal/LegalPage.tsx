@@ -9,11 +9,11 @@ const CONTENT = {
         sections: [
             {
                 title: '1. Aceptación de los Términos',
-                content: 'Al acceder y utilizar VendexChat, usted acepta estar sujeto a estos términos y condiciones. Si no está de acuerdo con alguna parte de estos términos, no podrá utilizar nuestros servicios.'
+                content: 'Al acceder y utilizar VENDExChat, usted acepta estar sujeto a estos términos y condiciones. Si no está de acuerdo con alguna parte de estos términos, no podrá utilizar nuestros servicios.'
             },
             {
                 title: '2. Descripción del Servicio',
-                content: 'VendexChat proporciona una plataforma para que los comerciantes gestionen sus ventas a través de catálogos dinámicos conectados con WhatsApp. No somos responsables de las transacciones directas entre comerciantes y sus clientes finales.'
+                content: 'VENDExChat proporciona una plataforma para que los comerciantes gestionen sus ventas a través de catálogos dinámicos conectados con WhatsApp. No somos responsables de las transacciones directas entre comerciantes y sus clientes finales.'
             },
             {
                 title: '3. Responsabilidades del Usuario',
@@ -68,7 +68,7 @@ export default function LegalPage() {
                                 <ScrollText className="w-4 h-4 text-white" />
                             )}
                         </div>
-                        <span className="font-bold text-slate-900">VendexChat</span>
+                        <span className="font-bold text-slate-900">VENDExChat</span>
                     </div>
                     <Button
                         variant="ghost"
