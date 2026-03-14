@@ -21,7 +21,6 @@ import {
   Truck,
   Wand2,
   BarChart3,
-  Sparkles,
   Brain
 } from 'lucide-react'
 
@@ -68,7 +67,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${(isSuperadmin && !isImpersonating) ? 'bg-indigo-600' : 'bg-emerald-600'}`}>
               <Store className="w-5 h-5 text-white" />
             </div>
-            <span className="font-bold text-gray-900">VendexChat</span>
+            <span className="font-bold text-gray-900">VENDExChat</span>
           </div>
           <button onClick={onClose} className="lg:hidden p-1 rounded hover:bg-gray-100">
             <X className="w-5 h-5 text-gray-500" />
@@ -124,18 +123,23 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                   Clientes
                   <span className="ml-auto text-[8px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded font-black uppercase">PRO</span>
                 </NavLink>
+                <NavLink to="/stats" className={linkClass} onClick={onClose}>
+                  <BarChart3 className="w-5 h-5" />
+                  Estadísticas
+                  <span className="ml-auto text-[8px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded font-black uppercase">PRO</span>
+                </NavLink>
+                <NavLink to="/ai-importer" className={linkClass} onClick={onClose}>
+                  <Wand2 className="w-5 h-5" />
+                  Importador IA
+                  <span className="ml-auto text-[8px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded font-black uppercase">PRO</span>
+                </NavLink>
               </div>
 
               <div className="pt-2 pb-2">
-                <p className="px-4 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Módulos PRO</p>
+                <p className="px-4 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Módulos VIP</p>
                 <NavLink to="/crm-ia" className={linkClass} onClick={onClose}>
                   <Brain className="w-5 h-5" />
                   CRM IA
-                  <span className="ml-auto text-[8px] bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded font-black uppercase">VIP</span>
-                </NavLink>
-                <NavLink to="/bot" className={linkClass} onClick={onClose}>
-                  <Bot className="w-5 h-5" />
-                  VENDEx Bot
                   <span className="ml-auto text-[8px] bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded font-black uppercase">VIP</span>
                 </NavLink>
                 <NavLink to="/logistics" className={linkClass} onClick={onClose}>
@@ -143,20 +147,10 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                   Logística
                   <span className="ml-auto text-[8px] bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded font-black uppercase">VIP</span>
                 </NavLink>
-                <NavLink to="/ai-importer" className={linkClass} onClick={onClose}>
-                  <Wand2 className="w-5 h-5" />
-                  Importador IA
+                <NavLink to="/bot" className={linkClass} onClick={onClose}>
+                  <Bot className="w-5 h-5" />
+                  VENDEx Bot
                   <span className="ml-auto text-[8px] bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded font-black uppercase">VIP</span>
-                </NavLink>
-                <NavLink to="/ai-intelligence" className={linkClass} onClick={onClose}>
-                  <Sparkles className="w-5 h-5" />
-                  AI Inteligencia
-                  <span className="ml-auto text-[8px] bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded font-black uppercase">VIP</span>
-                </NavLink>
-                <NavLink to="/stats" className={linkClass} onClick={onClose}>
-                  <BarChart3 className="w-5 h-5" />
-                  Estadísticas
-                  <span className="ml-auto text-[8px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded font-black uppercase">PRO</span>
                 </NavLink>
               </div>
             </>

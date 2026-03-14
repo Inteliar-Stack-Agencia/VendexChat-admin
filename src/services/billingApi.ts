@@ -5,8 +5,8 @@ export const billingApi = {
     getPlans: async (): Promise<any[]> => {
         return [
             { id: 'free', name: 'Free', description: 'Empezá gratis y digitalizá tu negocio en minutos.', price: 0, annual_price: 0, features: ['2 Categorías', '10 Productos por cat.', 'Menú Digital QR', 'Pedidos por WhatsApp'] },
-            { id: 'pro', name: 'Premium (Pro)', description: 'Todo lo que necesitás para crecer y vender más.', price: 9.99, annual_price: 99.90, features: ['Categorías Ilimitadas', 'Productos Ilimitados', 'Dominios Personalizados', 'Estadísticas de Venta', 'Importador de Productos con IA'], is_popular: true },
-            { id: 'vip', name: 'VIP (Business)', description: 'Automatizá tu operación con IA, logística y soporte dedicado.', price: 14.99, annual_price: 149.90, features: ['Todo lo del plan Pro', 'VENDEx Bot con IA', 'Logística Integrada', 'CRM con IA & Analítica', 'Soporte Prioritario'] },
+            { id: 'pro', name: 'PRO', description: 'Todo lo que necesitás para crecer y vender más. Incluye Asistente de Ventas IA.', price: 13.99, annual_price: 139.90, features: ['Categorías Ilimitadas', 'Productos Ilimitados', 'Dominios Personalizados', 'Estadísticas de Venta', 'Importador masivo con IA: con un click cargás todos los productos a tu catálogo', 'Asistente de Ventas IA'] },
+            { id: 'vip', name: 'VIP', description: 'Automatizá tu operación con IA, logística y soporte dedicado.', price: 19.99, annual_price: 199.90, features: ['Todo lo del plan Pro', 'VENDEx Bot con IA', 'Logística Integrada', 'CRM con IA & Analítica', 'Soporte Prioritario'], is_popular: true },
             { id: 'ultra', name: 'ULTRA', description: 'Solución empresarial a medida con infraestructura propia.', price: 0, annual_price: 0, features: ['Desarrollo a Medida', 'Web & Hosting Propio', 'Bots & Automatizaciones', 'Consultoría Estratégica', 'Soporte 24/7 VIP'] },
         ]
     },
