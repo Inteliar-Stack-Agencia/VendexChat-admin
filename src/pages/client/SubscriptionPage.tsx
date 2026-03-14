@@ -20,6 +20,19 @@ import MPPaymentBrick from '../../components/billing/MPPaymentBrick'
 // Países donde Mercado Pago está disponible
 const MP_COUNTRIES = ['Argentina', 'Uruguay', 'Chile', 'México', 'Colombia', 'Perú', 'Ecuador', 'Paraguay', 'Bolivia']
 
+
+const ROI_MESSAGES: Record<string, string> = {
+    free: 'Ideal para validar tu idea y captar tus primeros pedidos sin costo.',
+    pro: 'Ahorra tiempo operativo y aumenta conversión con IA y automatización comercial.',
+    vip: 'Reduce tareas manuales, acelera entregas y mejora recompra con CRM + logística + bot IA.',
+    ultra: 'Escala con soporte dedicado e implementación estratégica a medida.'
+}
+
+const VIP_DIFFERENTIATORS = [
+    'Seguimiento postventa y reactivación de clientes desde CRM IA.',
+    'Operación más ágil: bot + logística + soporte prioritario en un solo plan.'
+]
+
 export default function SubscriptionPage() {
     const { refreshSubscription, user } = useAuth()
     const [plans, setPlans] = useState<SubscriptionPlan[]>([])
@@ -102,11 +115,6 @@ export default function SubscriptionPage() {
                     <h2 className="text-3xl font-black text-slate-900 tracking-tight">Planes y Facturación</h2>
                     <p className="text-slate-500 font-medium mt-1">Escala tu negocio con herramientas avanzadas y soporte dedicado.</p>
                 </div>
-                <div className="flex items-center gap-3">
-                    <Button variant="outline" className="bg-white border-slate-200">
-                        Configurar Facturación
-                    </Button>
-                </div>
             </header>
 
             {/* Current Plan Banner */}
@@ -182,6 +190,9 @@ export default function SubscriptionPage() {
                             </span>
                         </button>
                     </div>
+                    <p className="mt-3 text-xs text-emerald-700 font-semibold">
+                        Plan anual recomendado: ahorrás hasta 2 meses por año frente al pago mensual.
+                    </p>
                 </div>
 
                 {(plans.length > 0) && (
@@ -189,6 +200,8 @@ export default function SubscriptionPage() {
                         {plans.map((plan) => {
                             const isCurrent = currentSub?.plan_type === plan.id && (currentSub?.billing_cycle === billingCycle || (plan.id === 'free'))
                             const isPopular = plan.is_popular
+                            const monthlyEquivalent = plan.id === 'ultra' ? 0 : Number((plan.annual_price / 12).toFixed(2))
+                            const annualSavings = plan.id === 'free' || plan.id === 'ultra' ? 0 : Number(((plan.price * 12) - plan.annual_price).toFixed(2))
 
                             // Configuración de estilos por plan
                             const planStyles: Record<string, any> = {
@@ -254,11 +267,34 @@ export default function SubscriptionPage() {
                                             {plan.id !== 'ultra' && <span className="text-slate-400 text-xs font-bold">/ mes</span>}
                                         </div>
                                         {billingCycle === 'annual' && plan.annual_price > 0 && (
-                                            <p className="text-[10px] font-bold text-emerald-600 mt-1 uppercase tracking-tighter">
-                                                Facturado anualmente (${plan.annual_price})
-                                            </p>
+                                            <div className="mt-2 p-2 rounded-xl bg-emerald-50 border border-emerald-100">
+                                                <p className="text-[10px] font-black text-emerald-700 uppercase tracking-tighter">
+                                                    Facturado anualmente (${plan.annual_price})
+                                                </p>
+                                                <p className="text-[11px] font-semibold text-emerald-700">
+                                                    Equivale a USD ${monthlyEquivalent.toFixed(2)}/mes · Ahorrás USD ${annualSavings.toFixed(2)} al año.
+                                                </p>
+                                            </div>
                                         )}
                                     </div>
+
+                                    <div className="mb-4 p-3 rounded-xl bg-indigo-50 border border-indigo-100">
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-indigo-700">ROI estimado</p>
+                                        <p className="text-xs text-indigo-700 font-semibold">
+                                            {ROI_MESSAGES[plan.id] || 'Automatizá tareas y mejorá tu eficiencia operativa.'}
+                                        </p>
+                                    </div>
+
+                                    {plan.id === 'vip' && (
+                                        <div className="mb-4 p-3 rounded-xl bg-amber-50 border border-amber-100">
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-amber-700">Diferencial VIP</p>
+                                            <ul className="mt-1 space-y-1">
+                                                {VIP_DIFFERENTIATORS.map((item) => (
+                                                    <li key={item} className="text-xs text-amber-700 font-semibold">• {item}</li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                    )}
 
                                     <div className="space-y-4 mb-8 flex-1">
                                         {plan.features.map((feature, i) => (
