@@ -42,4 +42,23 @@ export const ordersApi = {
         if (error) throw error
         return data as Order
     },
+
+    updateMetadata: async (id: string | number, metadata: Record<string, unknown>) => {
+        const { data, error } = await supabase
+            .from('orders')
+            .update({ metadata })
+            .eq('id', id)
+            .select()
+            .single()
+        if (error) throw error
+        return data as Order
+    },
+
+    remove: async (id: string | number) => {
+        const { error } = await supabase
+            .from('orders')
+            .delete()
+            .eq('id', id)
+        if (error) throw error
+    },
 }
