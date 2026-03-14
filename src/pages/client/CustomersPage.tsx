@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Users, Search, MessageSquare, ClipboardList, ShoppingBag, TrendingUp, UserCheck, DollarSign } from 'lucide-react'
-import { Card, LoadingSpinner, EmptyState, Modal, Button, showToast, Pagination } from '../../components/common'
+import { Users, Search, MessageSquare, ClipboardList, ShoppingBag, TrendingUp, UserCheck, DollarSign, Trash2, Tag } from 'lucide-react'
+import { Card, LoadingSpinner, EmptyState, Modal, Button, showToast, Pagination, ConfirmDialog } from '../../components/common'
 import { customersApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import { formatPrice, formatShortDate, whatsappLink, orderStatusConfig } from '../../utils/helpers'
@@ -24,6 +24,8 @@ export default function CustomersPage() {
     const [activeSegment, setActiveSegment] = useState<'all' | 'vip' | 'frequent' | 'new' | 'atRisk' | 'inactive'>('all')
     const [customerOrders, setCustomerOrders] = useState<{ id: string; order_number: number; total: number; status: string; created_at: string }[]>([])
     const [loadingOrders, setLoadingOrders] = useState(false)
+    const [deletingCustomerId, setDeletingCustomerId] = useState<string | null>(null)
+    const [customerToDelete, setCustomerToDelete] = useState<Customer | null>(null)
 
     // Debounce search
     useEffect(() => {
@@ -88,6 +90,56 @@ export default function CustomersPage() {
     // Métricas calculadas en el cliente (solo sobre la página actual o aproximadas)
     // Nota: Para precisión absoluta deberían venir del servidor, pero para feedback visual sirve.
 
+
+    const statusMarkerRegex = /\[ESTADO:([^\]]+)\]/i
+
+    const stripStatusMarker = (notesText?: string | null) => (notesText || '').replace(statusMarkerRegex, '').trim()
+
+    const getManualStatus = (customer: Customer) => {
+        const match = (customer.notes || '').match(statusMarkerRegex)
+        const value = match?.[1]?.toLowerCase()
+        const allowed = ['vip', 'frequent', 'new', 'atRisk', 'inactive', 'all']
+        return allowed.includes(value || '') ? value as 'vip' | 'frequent' | 'new' | 'atRisk' | 'inactive' | 'all' : null
+    }
+
+    const upsertStatusMarker = (notesText: string | null | undefined, status: 'vip' | 'frequent' | 'new' | 'atRisk' | 'inactive' | 'all') => {
+        const clean = stripStatusMarker(notesText)
+        if (status === 'all') return clean
+        const marker = `[ESTADO:${status}]`
+        return clean ? `${marker} ${clean}` : marker
+    }
+
+    const handleDeleteCustomer = async () => {
+        if (!customerToDelete) return
+        setDeletingCustomerId(customerToDelete.id)
+        try {
+            await customersApi.remove(customerToDelete.id)
+            showToast('success', 'Cliente eliminado')
+            setCustomerToDelete(null)
+            loadCustomers()
+        } catch {
+            showToast('error', 'No se pudo eliminar el cliente')
+        } finally {
+            setDeletingCustomerId(null)
+        }
+    }
+
+    const handleChangeCustomerStatus = async (customer: Customer) => {
+        const current = getCustomerSegment(customer).key
+        const flow: Array<'vip' | 'frequent' | 'atRisk' | 'inactive' | 'new' | 'all'> = ['new', 'frequent', 'vip', 'atRisk', 'inactive', 'all']
+        const index = flow.indexOf((current as typeof flow[number]) || 'all')
+        const nextStatus = flow[(index + 1) % flow.length]
+
+        try {
+            const updatedNotes = upsertStatusMarker(customer.notes, nextStatus)
+            await customersApi.updateNotes(customer.id, updatedNotes)
+            showToast('success', `Estado actualizado a ${nextStatus === 'all' ? 'Automático' : nextStatus}`)
+            loadCustomers()
+        } catch {
+            showToast('error', 'No se pudo cambiar el estado')
+        }
+    }
+
     const getDaysSinceLastOrder = (lastOrderAt?: string | null) => {
         if (!lastOrderAt) return Number.POSITIVE_INFINITY
         const diff = Date.now() - new Date(lastOrderAt).getTime()
@@ -95,6 +147,18 @@ export default function CustomersPage() {
     }
 
     const getCustomerSegment = (customer: Customer) => {
+        const manualStatus = getManualStatus(customer)
+        if (manualStatus && manualStatus !== 'all') {
+            const manualMap: Record<'vip' | 'frequent' | 'new' | 'atRisk' | 'inactive', { key: string; label: string; className: string }> = {
+                vip: { key: 'vip', label: 'VIP', className: 'bg-violet-100 text-violet-700' },
+                frequent: { key: 'frequent', label: 'Frecuente', className: 'bg-blue-100 text-blue-700' },
+                new: { key: 'new', label: 'Nuevo', className: 'bg-emerald-100 text-emerald-700' },
+                atRisk: { key: 'atRisk', label: 'En riesgo', className: 'bg-amber-100 text-amber-700' },
+                inactive: { key: 'inactive', label: 'Inactivo', className: 'bg-slate-100 text-slate-700' },
+            }
+            return manualMap[manualStatus as 'vip' | 'frequent' | 'new' | 'atRisk' | 'inactive']
+        }
+
         const orders = Number(customer.total_orders) || 0
         const spent = Number(customer.total_spent) || 0
         const daysSinceLastOrder = getDaysSinceLastOrder(customer.last_order_at)
@@ -381,6 +445,20 @@ export default function CustomersPage() {
                                                 >
                                                     <ShoppingBag className="w-4 h-4" />
                                                 </button>
+                                                <button
+                                                    onClick={() => handleChangeCustomerStatus(customer)}
+                                                    className="p-2 rounded-lg hover:bg-white hover:shadow-sm text-slate-400 hover:text-violet-600 transition-all border border-transparent hover:border-violet-100"
+                                                    title="Cambiar estado (color)"
+                                                >
+                                                    <Tag className="w-4 h-4" />
+                                                </button>
+                                                <button
+                                                    onClick={() => setCustomerToDelete(customer)}
+                                                    className="p-2 rounded-lg hover:bg-white hover:shadow-sm text-slate-400 hover:text-red-600 transition-all border border-transparent hover:border-red-100"
+                                                    title="Eliminar cliente"
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                </button>
                                                 <a
                                                     href={whatsappLink(customer.whatsapp)}
                                                     target="_blank"
@@ -479,6 +557,16 @@ export default function CustomersPage() {
                     </div>
                 )}
             </Modal>
+            <ConfirmDialog
+                isOpen={!!customerToDelete}
+                onClose={() => setCustomerToDelete(null)}
+                onConfirm={handleDeleteCustomer}
+                loading={deletingCustomerId === customerToDelete?.id}
+                title="Eliminar cliente"
+                message={`¿Seguro que quieres eliminar a ${customerToDelete?.name || 'este cliente'}? Esta acción no se puede deshacer.`}
+                confirmText="Eliminar"
+                confirmVariant="danger"
+            />
         </div>
     )
 }
