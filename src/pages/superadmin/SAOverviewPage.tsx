@@ -17,7 +17,7 @@ export default function SAOverviewPage() {
         <div className="space-y-10 animate-in fade-in duration-700">
             <header>
                 <h2 className="text-3xl font-bold text-slate-900 tracking-tight">SaaS Overview</h2>
-                <p className="text-slate-500 mt-1">Monitorea el estado global de VendexChat.</p>
+                <p className="text-slate-500 mt-1">Monitorea el estado global de VENDExChat.</p>
             </header>
 
             {/* Stats Grid */}

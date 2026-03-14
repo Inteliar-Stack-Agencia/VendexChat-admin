@@ -186,7 +186,7 @@ export default function AIAssistantPage() {
     }
 
     return (
-        <FeatureGuard feature="ai-analyst" minPlan="vip">
+        <FeatureGuard feature="ai-analyst" minPlan="pro">
             <div className="max-w-6xl mx-auto space-y-6 animate-fade-in pb-20">
                 {/* Header */}
                 <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 px-1">
