@@ -41,6 +41,7 @@ import { dashboardApi, tenantApi } from '../../services/api'
 import { DashboardStats, Tenant } from '../../types'
 import { formatPrice, formatDate, orderStatusConfig } from '../../utils/helpers'
 import { useAuth } from '../../contexts/AuthContext'
+import FeatureGuard from '../../components/FeatureGuard'
 
 function generatePromptTemplate(tenant: Tenant): string {
   const lines: string[] = []
@@ -342,6 +343,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Asistente de Ventas IA */}
+      <FeatureGuard feature="ai-analyst" minPlan="pro" fallback="hide">
       <div className="space-y-3">
         <div className="flex items-center justify-between px-1">
           <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
@@ -417,6 +419,7 @@ export default function DashboardPage() {
           )}
         </Card>
       </div>
+      </FeatureGuard>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Últimos pedidos */}
