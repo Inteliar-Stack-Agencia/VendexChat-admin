@@ -1,12 +1,14 @@
-import { useState, useEffect } from 'react'
-import { Users, Search, MessageSquare, ClipboardList, ShoppingBag, TrendingUp, UserCheck, DollarSign } from 'lucide-react'
-import { Card, LoadingSpinner, EmptyState, Modal, Button, showToast, Pagination } from '../../components/common'
+import { useState, useEffect, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { Users, Search, MessageSquare, ClipboardList, ShoppingBag, TrendingUp, UserCheck, DollarSign, Trash2, Tag } from 'lucide-react'
+import { Card, LoadingSpinner, EmptyState, Modal, Button, showToast, Pagination, ConfirmDialog } from '../../components/common'
 import { customersApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import { formatPrice, formatShortDate, whatsappLink, orderStatusConfig } from '../../utils/helpers'
 import type { Customer } from '../../types'
 
 export default function CustomersPage() {
+    const navigate = useNavigate()
     const { selectedStoreId } = useAuth()
     const [customers, setCustomers] = useState<Customer[]>([])
     const [loading, setLoading] = useState(true)
@@ -19,8 +21,11 @@ export default function CustomersPage() {
     const [isViewingOrders, setIsViewingOrders] = useState(false)
     const [notes, setNotes] = useState('')
     const [saving, setSaving] = useState(false)
+    const [activeSegment, setActiveSegment] = useState<'all' | 'vip' | 'frequent' | 'new' | 'atRisk' | 'inactive'>('all')
     const [customerOrders, setCustomerOrders] = useState<{ id: string; order_number: number; total: number; status: string; created_at: string }[]>([])
     const [loadingOrders, setLoadingOrders] = useState(false)
+    const [deletingCustomerId, setDeletingCustomerId] = useState<string | null>(null)
+    const [customerToDelete, setCustomerToDelete] = useState<Customer | null>(null)
 
     // Debounce search
     useEffect(() => {
@@ -75,8 +80,158 @@ export default function CustomersPage() {
         }
     }
 
+
+
+    const handleOpenOrderDetail = (orderId: string) => {
+        setIsViewingOrders(false)
+        setCustomerOrders([])
+        navigate(`/orders/${orderId}`)
+    }
     // Métricas calculadas en el cliente (solo sobre la página actual o aproximadas)
     // Nota: Para precisión absoluta deberían venir del servidor, pero para feedback visual sirve.
+
+
+    const statusMarkerRegex = /\[ESTADO:([^\]]+)\]/i
+
+    const stripStatusMarker = (notesText?: string | null) => (notesText || '').replace(statusMarkerRegex, '').trim()
+
+    const getManualStatus = (customer: Customer) => {
+        const match = (customer.notes || '').match(statusMarkerRegex)
+        const value = match?.[1]?.toLowerCase()
+        const allowed = ['vip', 'frequent', 'new', 'atRisk', 'inactive', 'all']
+        return allowed.includes(value || '') ? value as 'vip' | 'frequent' | 'new' | 'atRisk' | 'inactive' | 'all' : null
+    }
+
+    const upsertStatusMarker = (notesText: string | null | undefined, status: 'vip' | 'frequent' | 'new' | 'atRisk' | 'inactive' | 'all') => {
+        const clean = stripStatusMarker(notesText)
+        if (status === 'all') return clean
+        const marker = `[ESTADO:${status}]`
+        return clean ? `${marker} ${clean}` : marker
+    }
+
+    const handleDeleteCustomer = async () => {
+        if (!customerToDelete) return
+        setDeletingCustomerId(customerToDelete.id)
+        try {
+            await customersApi.remove(customerToDelete.id)
+            showToast('success', 'Cliente eliminado')
+            setCustomerToDelete(null)
+            loadCustomers()
+        } catch {
+            showToast('error', 'No se pudo eliminar el cliente')
+        } finally {
+            setDeletingCustomerId(null)
+        }
+    }
+
+    const handleChangeCustomerStatus = async (customer: Customer) => {
+        const current = getCustomerSegment(customer).key
+        const flow: Array<'vip' | 'frequent' | 'atRisk' | 'inactive' | 'new' | 'all'> = ['new', 'frequent', 'vip', 'atRisk', 'inactive', 'all']
+        const index = flow.indexOf((current as typeof flow[number]) || 'all')
+        const nextStatus = flow[(index + 1) % flow.length]
+
+        try {
+            const updatedNotes = upsertStatusMarker(customer.notes, nextStatus)
+            await customersApi.updateNotes(customer.id, updatedNotes)
+            showToast('success', `Estado actualizado a ${nextStatus === 'all' ? 'Automático' : nextStatus}`)
+            loadCustomers()
+        } catch {
+            showToast('error', 'No se pudo cambiar el estado')
+        }
+    }
+
+    const getDaysSinceLastOrder = (lastOrderAt?: string | null) => {
+        if (!lastOrderAt) return Number.POSITIVE_INFINITY
+        const diff = Date.now() - new Date(lastOrderAt).getTime()
+        return Math.floor(diff / (1000 * 60 * 60 * 24))
+    }
+
+    const getCustomerSegment = (customer: Customer) => {
+        const manualStatus = getManualStatus(customer)
+        if (manualStatus && manualStatus !== 'all') {
+            const manualMap: Record<'vip' | 'frequent' | 'new' | 'atRisk' | 'inactive', { key: string; label: string; className: string }> = {
+                vip: { key: 'vip', label: 'VIP', className: 'bg-violet-100 text-violet-700' },
+                frequent: { key: 'frequent', label: 'Frecuente', className: 'bg-blue-100 text-blue-700' },
+                new: { key: 'new', label: 'Nuevo', className: 'bg-emerald-100 text-emerald-700' },
+                atRisk: { key: 'atRisk', label: 'En riesgo', className: 'bg-amber-100 text-amber-700' },
+                inactive: { key: 'inactive', label: 'Inactivo', className: 'bg-slate-100 text-slate-700' },
+            }
+            return manualMap[manualStatus as 'vip' | 'frequent' | 'new' | 'atRisk' | 'inactive']
+        }
+
+        const orders = Number(customer.total_orders) || 0
+        const spent = Number(customer.total_spent) || 0
+        const daysSinceLastOrder = getDaysSinceLastOrder(customer.last_order_at)
+
+        if (orders >= 5 || spent >= 150000) {
+            return {
+                key: 'vip',
+                label: 'VIP',
+                className: 'bg-violet-100 text-violet-700'
+            }
+        }
+
+        if (orders >= 3) {
+            return {
+                key: 'frequent',
+                label: 'Frecuente',
+                className: 'bg-blue-100 text-blue-700'
+            }
+        }
+
+        if (orders <= 1 && daysSinceLastOrder <= 7) {
+            return {
+                key: 'new',
+                label: 'Nuevo',
+                className: 'bg-emerald-100 text-emerald-700'
+            }
+        }
+
+        if (daysSinceLastOrder > 60) {
+            return {
+                key: 'inactive',
+                label: 'Inactivo',
+                className: 'bg-slate-100 text-slate-700'
+            }
+        }
+
+        if (daysSinceLastOrder > 30) {
+            return {
+                key: 'atRisk',
+                label: 'En riesgo',
+                className: 'bg-amber-100 text-amber-700'
+            }
+        }
+
+        return {
+            key: 'all',
+            label: 'Activo',
+            className: 'bg-teal-100 text-teal-700'
+        }
+    }
+
+
+
+    const segmentRules = [
+        'VIP: 5+ pedidos o $150.000+ gastados',
+        'Frecuente: 3-4 pedidos',
+        'Nuevo: 1 pedido y último pedido en <= 7 días',
+        'En riesgo: más de 30 días sin comprar',
+        'Inactivo: más de 60 días sin comprar',
+    ]
+    const filteredCustomers = useMemo(() => {
+        if (activeSegment === 'all') return customers
+        return customers.filter(customer => getCustomerSegment(customer).key === activeSegment)
+    }, [customers, activeSegment])
+
+    const segmentCounts = useMemo(() => ({
+        all: customers.length,
+        vip: customers.filter(c => getCustomerSegment(c).key === 'vip').length,
+        frequent: customers.filter(c => getCustomerSegment(c).key === 'frequent').length,
+        new: customers.filter(c => getCustomerSegment(c).key === 'new').length,
+        atRisk: customers.filter(c => getCustomerSegment(c).key === 'atRisk').length,
+        inactive: customers.filter(c => getCustomerSegment(c).key === 'inactive').length,
+    }), [customers])
 
     // Métricas calculadas en el cliente
     const totalSpent = customers.reduce((acc, c) => acc + (Number(c.total_spent) || 0), 0)
@@ -142,15 +297,48 @@ export default function CustomersPage() {
 
             {/* Búsqueda */}
             <Card>
-                <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                    <input
-                        type="text"
-                        placeholder="Buscar por nombre o WhatsApp..."
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    />
+                <div className="space-y-4">
+                    <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <input
+                            type="text"
+                            placeholder="Buscar por nombre o WhatsApp..."
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        />
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                        {[
+                            { key: 'all', label: 'Todos' },
+                            { key: 'vip', label: 'VIP' },
+                            { key: 'frequent', label: 'Frecuente' },
+                            { key: 'atRisk', label: 'En riesgo' },
+                            { key: 'inactive', label: 'Inactivo' },
+                            { key: 'new', label: 'Nuevo' },
+                        ].map(segment => (
+                            <button
+                                key={segment.key}
+                                onClick={() => setActiveSegment(segment.key as typeof activeSegment)}
+                                className={`px-3 py-1.5 rounded-full border text-sm font-semibold transition-colors ${
+                                    activeSegment === segment.key
+                                        ? 'bg-indigo-600 border-indigo-600 text-white'
+                                        : 'bg-white border-gray-200 text-gray-600 hover:border-indigo-300 hover:text-indigo-700'
+                                }`}
+                            >
+                                {segment.label} ({segmentCounts[segment.key as keyof typeof segmentCounts]})
+                            </button>
+                        ))}
+                    </div>
+
+                    <p className="text-xs text-gray-500 font-medium">
+                        Mostrando {filteredCustomers.length} de {customers.length} clientes.
+                    </p>
+
+                    <p className="text-xs text-gray-500">
+                        Criterios: {segmentRules.join(' · ')}.
+                    </p>
                 </div>
             </Card>
 
@@ -187,6 +375,12 @@ export default function CustomersPage() {
                     title="No hay clientes"
                     description="Los clientes aparecerán aquí cuando realicen su primer pedido."
                 />
+            ) : filteredCustomers.length === 0 ? (
+                <EmptyState
+                    icon={<Users className="w-16 h-16" />}
+                    title="No hay clientes para este segmento"
+                    description="Probá cambiar el filtro para ver otros clientes."
+                />
             ) : (
                 <Card padding={false}>
                     <div className="overflow-x-auto">
@@ -201,11 +395,18 @@ export default function CustomersPage() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
-                                {customers.map((customer) => (
+                                {filteredCustomers.map((customer) => {
+                                    const segment = getCustomerSegment(customer)
+                                    return (
                                     <tr key={customer.id} className="hover:bg-gray-50 transition-colors group">
                                         <td className="px-6 py-4">
                                             <div className="flex flex-col">
-                                                <span className="font-bold text-gray-900">{customer.name}</span>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="font-bold text-gray-900">{customer.name}</span>
+                                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${segment.className}`}>
+                                                        {segment.label}
+                                                    </span>
+                                                </div>
                                                 <span className="text-[10px] text-gray-400 font-medium">
                                                     Último: {customer.last_order_at ? formatShortDate(customer.last_order_at) : 'N/A'}
                                                 </span>
@@ -244,6 +445,20 @@ export default function CustomersPage() {
                                                 >
                                                     <ShoppingBag className="w-4 h-4" />
                                                 </button>
+                                                <button
+                                                    onClick={() => handleChangeCustomerStatus(customer)}
+                                                    className="p-2 rounded-lg hover:bg-white hover:shadow-sm text-slate-400 hover:text-violet-600 transition-all border border-transparent hover:border-violet-100"
+                                                    title="Cambiar estado (color)"
+                                                >
+                                                    <Tag className="w-4 h-4" />
+                                                </button>
+                                                <button
+                                                    onClick={() => setCustomerToDelete(customer)}
+                                                    className="p-2 rounded-lg hover:bg-white hover:shadow-sm text-slate-400 hover:text-red-600 transition-all border border-transparent hover:border-red-100"
+                                                    title="Eliminar cliente"
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                </button>
                                                 <a
                                                     href={whatsappLink(customer.whatsapp)}
                                                     target="_blank"
@@ -256,7 +471,7 @@ export default function CustomersPage() {
                                             </div>
                                         </td>
                                     </tr>
-                                ))}
+                                )})}
                             </tbody>
                         </table>
                     </div>
@@ -311,11 +526,18 @@ export default function CustomersPage() {
                 ) : customerOrders.length === 0 ? (
                     <p className="text-sm text-gray-500 text-center py-6">No se encontraron pedidos registrados.</p>
                 ) : (
-                    <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+                    <div className="space-y-2">
+                        <p className="text-xs text-gray-500">Doble click en un pedido para abrir su detalle.</p>
+                        <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
                         {customerOrders.map((order) => {
                             const statusCfg = orderStatusConfig[order.status] || orderStatusConfig.pending
                             return (
-                                <div key={order.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100">
+                                <div
+                                    key={order.id}
+                                    onDoubleClick={() => handleOpenOrderDetail(order.id)}
+                                    title="Doble click para abrir detalle"
+                                    className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100 cursor-pointer hover:bg-gray-100 transition-colors"
+                                >
                                     <div>
                                         <p className="text-sm font-bold text-gray-800">#{order.order_number}</p>
                                         <p className="text-xs text-gray-400">{formatShortDate(order.created_at)}</p>
@@ -331,9 +553,20 @@ export default function CustomersPage() {
                                 </div>
                             )
                         })}
+                        </div>
                     </div>
                 )}
             </Modal>
+            <ConfirmDialog
+                isOpen={!!customerToDelete}
+                onClose={() => setCustomerToDelete(null)}
+                onConfirm={handleDeleteCustomer}
+                loading={deletingCustomerId === customerToDelete?.id}
+                title="Eliminar cliente"
+                message={`¿Seguro que quieres eliminar a ${customerToDelete?.name || 'este cliente'}? Esta acción no se puede deshacer.`}
+                confirmText="Eliminar"
+                confirmVariant="danger"
+            />
         </div>
     )
 }
