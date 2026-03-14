@@ -58,7 +58,7 @@ export default function OnboardingChecklist({ tenant, stats }: OnboardingCheckli
             <div className="relative z-10 space-y-6">
                 <header className="flex items-center justify-between">
                     <div>
-                        <h2 className="text-xl font-black text-indigo-900 tracking-tight">¡Bienvenido a VendexChat! 🚀</h2>
+                        <h2 className="text-xl font-black text-indigo-900 tracking-tight">¡Bienvenido a VENDExChat! 🚀</h2>
                         <p className="text-indigo-600/80 text-sm font-medium">Completa estos pasos para lanzar tu tienda profesionalmente.</p>
                     </div>
                     <div className="text-right">
