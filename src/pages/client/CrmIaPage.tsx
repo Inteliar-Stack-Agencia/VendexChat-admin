@@ -253,6 +253,12 @@ Firma de la tienda obligatoria: — ${storeSignature}` }
         return tags.some(t => t.label.includes(tagFilter))
     })
 
+
+    const selectedCustomerDays = selectedCustomer ? getDaysSince(selectedCustomer.last_order_at) : null
+    const selectedCustomerAvgTicket = selectedCustomer && selectedCustomer.total_orders > 0
+        ? Number(selectedCustomer.total_spent) / selectedCustomer.total_orders
+        : 0
+
     // Métricas
     const totalSpent = customers.reduce((acc, c) => acc + (Number(c.total_spent) || 0), 0)
     const totalOrders = customers.reduce((acc, c) => acc + (Number(c.total_orders) || 0), 0)
@@ -548,6 +554,17 @@ Firma de la tienda obligatoria: — ${storeSignature}` }
                     </div>
                 ) : (
                     <div className="space-y-4">
+                        <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                            <p className="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-2">Base del análisis</p>
+                            <ul className="space-y-1 text-xs text-slate-600">
+                                <li>• Pedidos totales: <span className="font-semibold">{selectedCustomer?.total_orders ?? 0}</span></li>
+                                <li>• Total gastado: <span className="font-semibold">{formatPrice(Number(selectedCustomer?.total_spent || 0))}</span></li>
+                                <li>• Ticket promedio: <span className="font-semibold">{formatPrice(selectedCustomerAvgTicket)}</span></li>
+                                <li>• Días sin comprar: <span className="font-semibold">{selectedCustomerDays ?? 'Sin pedidos'}</span></li>
+                                <li>• Notas internas: <span className="font-semibold">{selectedCustomer?.notes || 'ninguna'}</span></li>
+                            </ul>
+                        </div>
+
                         <div className="p-4 bg-violet-50 border border-violet-100 rounded-2xl">
                             <p className="text-sm text-gray-700 leading-relaxed">{aiAnalysisText}</p>
                         </div>
