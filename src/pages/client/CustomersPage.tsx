@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Users, Search, MessageSquare, ClipboardList, ShoppingBag, TrendingUp, UserCheck, DollarSign, Trash2, Tag } from 'lucide-react'
+import { Users, Search, MessageSquare, ClipboardList, ShoppingBag, TrendingUp, UserCheck, DollarSign, Trash2 } from 'lucide-react'
 import { Card, LoadingSpinner, EmptyState, Modal, Button, showToast, Pagination, ConfirmDialog } from '../../components/common'
 import { customersApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
@@ -91,29 +91,6 @@ export default function CustomersPage() {
     // Nota: Para precisión absoluta deberían venir del servidor, pero para feedback visual sirve.
 
 
-    const operationStatusMarkerRegex = /\[GESTION:([^\]]+)\]/i
-
-    const operationStatusConfig: Record<'pending' | 'accepted' | 'paid' | 'completed', { label: string; className: string }> = {
-        pending: { label: 'Pendiente', className: 'bg-amber-100 text-amber-700' },
-        accepted: { label: 'Aceptado', className: 'bg-blue-100 text-blue-700' },
-        paid: { label: 'Pagado', className: 'bg-violet-100 text-violet-700' },
-        completed: { label: 'Completado', className: 'bg-emerald-100 text-emerald-700' },
-    }
-
-    const stripOperationStatusMarker = (notesText?: string | null) => (notesText || '').replace(operationStatusMarkerRegex, '').trim()
-
-    const getOperationStatus = (customer: Customer): 'pending' | 'accepted' | 'paid' | 'completed' => {
-        const match = (customer.notes || '').match(operationStatusMarkerRegex)
-        const value = match?.[1]?.toLowerCase()
-        if (value === 'accepted' || value === 'paid' || value === 'completed') return value
-        return 'pending'
-    }
-
-    const upsertOperationStatusMarker = (notesText: string | null | undefined, status: 'pending' | 'accepted' | 'paid' | 'completed') => {
-        const clean = stripOperationStatusMarker(notesText)
-        const marker = `[GESTION:${status}]`
-        return clean ? `${marker} ${clean}` : marker
-    }
 
     const handleDeleteCustomer = async () => {
         if (!customerToDelete) return
@@ -127,22 +104,6 @@ export default function CustomersPage() {
             showToast('error', 'No se pudo eliminar el cliente')
         } finally {
             setDeletingCustomerId(null)
-        }
-    }
-
-    const handleChangeCustomerStatus = async (customer: Customer) => {
-        const current = getOperationStatus(customer)
-        const flow: Array<'pending' | 'accepted' | 'paid' | 'completed'> = ['pending', 'accepted', 'paid', 'completed']
-        const index = flow.indexOf(current)
-        const nextStatus = flow[(index + 1) % flow.length]
-
-        try {
-            const updatedNotes = upsertOperationStatusMarker(customer.notes, nextStatus)
-            await customersApi.updateNotes(customer.id, updatedNotes)
-            showToast('success', `Estado actualizado a ${operationStatusConfig[nextStatus].label}`)
-            loadCustomers()
-        } catch {
-            showToast('error', 'No se pudo cambiar el estado')
         }
     }
 
@@ -391,8 +352,6 @@ export default function CustomersPage() {
                             <tbody className="divide-y divide-gray-100">
                                 {filteredCustomers.map((customer) => {
                                     const segment = getCustomerSegment(customer)
-                                    const operationStatus = getOperationStatus(customer)
-                                    const operationBadge = operationStatusConfig[operationStatus]
                                     return (
                                     <tr key={customer.id} className="hover:bg-gray-50 transition-colors group">
                                         <td className="px-6 py-4">
@@ -401,9 +360,6 @@ export default function CustomersPage() {
                                                     <span className="font-bold text-gray-900">{customer.name}</span>
                                                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${segment.className}`}>
                                                         {segment.label}
-                                                    </span>
-                                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${operationBadge.className}`}>
-                                                        {operationBadge.label}
                                                     </span>
                                                 </div>
                                                 <span className="text-[10px] text-gray-400 font-medium">
@@ -445,32 +401,11 @@ export default function CustomersPage() {
                                                     <ShoppingBag className="w-5 h-5" />
                                                 </button>
                                                 <button
-                                                    onClick={() => handleChangeCustomerStatus(customer)}
-                                                    className="p-2.5 rounded-xl bg-violet-50/60 hover:bg-violet-100 text-violet-600 hover:text-violet-700 transition-all border border-violet-100"
-                                                    title="Cambiar estado de gestión (pendiente/aceptado/pagado/completado)"
-                                                >
-                                                    <Tag className="w-5 h-5" />
-                                                </button>
-                                                <button
                                                     onClick={() => setCustomerToDelete(customer)}
                                                     className="p-2.5 rounded-xl bg-rose-50/60 hover:bg-rose-100 text-rose-600 hover:text-rose-700 transition-all border border-rose-100"
                                                     title="Eliminar cliente"
                                                 >
                                                     <Trash2 className="w-5 h-5" />
-                                                </button>
-                                                <button
-                                                    onClick={() => handleChangeCustomerStatus(customer)}
-                                                    className="p-2 rounded-lg hover:bg-white hover:shadow-sm text-slate-400 hover:text-violet-600 transition-all border border-transparent hover:border-violet-100"
-                                                    title="Cambiar estado (color)"
-                                                >
-                                                    <Tag className="w-4 h-4" />
-                                                </button>
-                                                <button
-                                                    onClick={() => setCustomerToDelete(customer)}
-                                                    className="p-2 rounded-lg hover:bg-white hover:shadow-sm text-slate-400 hover:text-red-600 transition-all border border-transparent hover:border-red-100"
-                                                    title="Eliminar cliente"
-                                                >
-                                                    <Trash2 className="w-4 h-4" />
                                                 </button>
                                                 <a
                                                     href={whatsappLink(customer.whatsapp)}
