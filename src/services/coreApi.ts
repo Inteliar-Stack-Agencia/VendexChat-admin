@@ -34,6 +34,9 @@ export const getStoreId = async (): Promise<string> => {
     }
 
     // 3. Fallback: Obtener de perfiles (Si no hay en local storage)
+    // Si ya sincronizamos el store_id en esta sesión (sin localStorage), devolverlo de inmediato
+    if (_lastSyncedStoreId) return _lastSyncedStoreId
+
     const { data: profile } = await supabase.from('profiles').select('store_id').eq('id', user.id).single()
     if (profile?.store_id) {
         _lastSyncedStoreId = profile.store_id
