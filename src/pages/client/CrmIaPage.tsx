@@ -5,7 +5,7 @@ import {
 } from 'lucide-react'
 import FeatureGuard from '../../components/FeatureGuard'
 import { Card, LoadingSpinner, EmptyState, Modal, Button, showToast } from '../../components/common'
-import { customersApi } from '../../services/api'
+import { customersApi, tenantApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import { formatPrice, formatShortDate, whatsappLink, orderStatusConfig } from '../../utils/helpers'
 import type { Customer } from '../../types'
@@ -54,6 +54,16 @@ import { callAI as callAIService } from '../../services/aiService'
 
 const TAG_FILTERS = ['Todos', 'VIP', 'Frecuente', 'En riesgo', 'Inactivo', 'Nuevo']
 
+
+type MessageGoal = 'thankyou' | 'discount' | 'reminder' | 'reactivation'
+
+const MESSAGE_GOAL_OPTIONS: { key: MessageGoal; label: string; prompt: string }[] = [
+    { key: 'thankyou', label: 'Agradecimiento', prompt: 'objetivo: agradecer la compra reciente y reforzar confianza para próxima compra.' },
+    { key: 'discount', label: 'Descuento', prompt: 'objetivo: comunicar promoción/descuento con sentido de oportunidad y CTA claro.' },
+    { key: 'reminder', label: 'Recordatorio', prompt: 'objetivo: recordar productos o reposición de compra de forma útil y no invasiva.' },
+    { key: 'reactivation', label: 'Reactivación', prompt: 'objetivo: recuperar cliente inactivo con tono cercano y propuesta de valor.' },
+]
+
 function CrmIaPageInner() {
     const { selectedStoreId, subscription } = useAuth()
     const plan = subscription?.plan_type ?? 'free'
@@ -82,9 +92,21 @@ function CrmIaPageInner() {
     const [aiMessageText, setAiMessageText] = useState('')
     const [loadingAI, setLoadingAI] = useState(false)
     const [copied, setCopied] = useState(false)
+    const [messageGoal, setMessageGoal] = useState<MessageGoal>('thankyou')
+    const [storeSignature, setStoreSignature] = useState('Tu tienda')
 
     useEffect(() => {
         loadCustomers()
+    }, [selectedStoreId])
+
+    useEffect(() => {
+        tenantApi.getMe()
+            .then((store) => {
+                setStoreSignature(store.name?.trim() || 'Tu tienda')
+            })
+            .catch(() => {
+                setStoreSignature('Tu tienda')
+            })
     }, [selectedStoreId])
 
     const loadCustomers = () => {
@@ -152,21 +174,39 @@ Notas internas: ${customer.notes || 'ninguna'}` }
         }
     }
 
-    const handleAIMessage = async (customer: Customer) => {
+    const appendStoreSignature = (message: string) => {
+        const cleanMessage = message.trim()
+        const signatureLine = `— ${storeSignature}`
+
+        if (cleanMessage.toLowerCase().includes(signatureLine.toLowerCase())) {
+            return cleanMessage
+        }
+
+        return `${cleanMessage}
+
+${signatureLine}`
+    }
+
+    const handleAIMessage = async (customer: Customer, goal: MessageGoal = messageGoal) => {
         setSelectedCustomer(customer)
+        setMessageGoal(goal)
+        setCopied(false)
         setAiMessageText('')
         setIsAIMessage(true)
         setLoadingAI(true)
         const days = getDaysSince(customer.last_order_at) ?? 'varios'
+        const selectedGoal = MESSAGE_GOAL_OPTIONS.find(option => option.key === goal)
         try {
             const text = await callAIService([
-                { role: 'system', content: `Eres un experto en marketing conversacional para ecommerce latinoamericano. Genera un mensaje de WhatsApp personalizado, cálido y natural (NO genérico ni corporativo) para reconectar con el cliente. El mensaje debe ser corto (máximo 3 oraciones), usar el nombre del cliente, y tener un call-to-action sutil. Responde SOLO con el texto del mensaje, listo para copiar y enviar. No uses asteriscos ni markdown.` },
+                { role: 'system', content: `Eres un experto en marketing conversacional para ecommerce latinoamericano. Genera un mensaje de WhatsApp personalizado, cálido y natural (NO genérico ni corporativo) para reconectar con el cliente. El mensaje debe ser corto (máximo 3 oraciones), usar el nombre del cliente, incluir ${selectedGoal?.prompt || 'objetivo comercial claro'} y cerrar con una firma en línea final con formato: — ${storeSignature}. Responde SOLO con el texto del mensaje, listo para copiar y enviar. No uses asteriscos ni markdown.` },
                 { role: 'user', content: `Nombre del cliente: ${customer.name}
+Objetivo del mensaje: ${selectedGoal?.label || 'Agradecimiento'}
 Pedidos realizados: ${customer.total_orders}
 Días sin comprar: ${days}
-Notas del vendedor: ${customer.notes || 'ninguna'}` }
+Notas del vendedor: ${customer.notes || 'ninguna'}
+Firma de la tienda obligatoria: — ${storeSignature}` }
             ], plan)
-            setAiMessageText(text)
+            setAiMessageText(appendStoreSignature(text))
         } catch {
             showToast('error', 'Error al consultar la IA')
             setIsAIMessage(false)
@@ -374,7 +414,7 @@ Notas del vendedor: ${customer.notes || 'ninguna'}` }
                                                         <Bot className="w-4 h-4" />
                                                     </button>
                                                     <button
-                                                        onClick={() => handleAIMessage(customer)}
+                                                        onClick={() => handleAIMessage(customer, messageGoal)}
                                                         className="p-2 rounded-lg hover:bg-white hover:shadow-sm text-slate-400 hover:text-pink-600 transition-all border border-transparent hover:border-pink-100"
                                                         title="Generar mensaje WhatsApp con IA"
                                                     >
@@ -509,11 +549,32 @@ Notas del vendedor: ${customer.notes || 'ninguna'}` }
                         <p className="text-xs text-gray-400 font-semibold uppercase tracking-widest">
                             Mensaje generado por IA — revisá antes de enviar
                         </p>
+
+                        <div className="flex flex-wrap gap-2">
+                            {MESSAGE_GOAL_OPTIONS.map((option) => (
+                                <button
+                                    key={option.key}
+                                    onClick={() => selectedCustomer && handleAIMessage(selectedCustomer, option.key)}
+                                    className={`px-3 py-1 rounded-full text-xs font-semibold transition-all border ${messageGoal === option.key
+                                        ? 'bg-indigo-600 text-white border-indigo-600'
+                                        : 'bg-white text-gray-600 border-gray-300 hover:border-indigo-400 hover:text-indigo-600'
+                                        }`}
+                                >
+                                    {option.label}
+                                </button>
+                            ))}
+                        </div>
+
                         <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl">
                             <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">
                                 {aiMessageText}
                             </p>
                         </div>
+
+                        <p className="text-xs text-gray-500">
+                            Firma incluida automáticamente: <span className="font-semibold">— {storeSignature}</span>
+                        </p>
+
                         <div className="flex items-center justify-between gap-3">
                             <a
                                 href={whatsappLink(selectedCustomer?.whatsapp || '', aiMessageText)}
