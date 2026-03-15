@@ -136,10 +136,14 @@ function CrmIaPageInner() {
     const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
     const [chatInput, setChatInput] = useState('')
     const [chatTyping, setChatTyping] = useState(false)
+    const chatContainerRef = useRef<HTMLDivElement>(null)
     const chatEndRef = useRef<HTMLDivElement>(null)
 
     useEffect(() => {
-        chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+        // Scroll only within the chat container, not the whole page
+        if (chatContainerRef.current) {
+            chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight
+        }
     }, [chatMessages])
 
     useEffect(() => {
@@ -464,7 +468,7 @@ Firma de la tienda obligatoria: — ${storeSignature}` }
                         </div>
 
                         {/* Messages */}
-                        <div className="h-80 overflow-y-auto p-6 space-y-3 bg-white">
+                        <div ref={chatContainerRef} className="h-80 overflow-y-auto p-6 space-y-3 bg-white">
                             {chatMessages.map((m) => (
                                 <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                                     <div className={`max-w-[85%] p-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${m.role === 'user'
