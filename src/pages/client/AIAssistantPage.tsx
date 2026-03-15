@@ -14,9 +14,18 @@ import {
     Trash2,
     ChevronUp,
     ChevronDown,
+    MessageCircle,
+    Link,
+    Unlink,
+    Eye,
+    EyeOff,
+    ExternalLink,
+    Check,
+    AlertCircle,
 } from 'lucide-react'
 import { Card, Button, Badge } from '../../components/common'
 import { ordersApi, customersApi } from '../../services/api'
+import { tenantApi } from '../../services/tenantApi'
 import { productsApi } from '../../services/productsApi'
 import { statsApi } from '../../services/statsApi'
 import { formatPrice } from '../../utils/helpers'
@@ -24,6 +33,7 @@ import { showToast } from '../../components/common/Toast'
 import FeatureGuard from '../../components/FeatureGuard'
 import { useAuth } from '../../contexts/AuthContext'
 import { callAI } from '../../services/aiService'
+import { supabase } from '../../supabaseClient'
 
 interface Message {
     id: string
@@ -61,7 +71,7 @@ const QUICK_CHIPS = [
 const DAYS_ES = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
 
 export default function AIAssistantPage() {
-    const { subscription } = useAuth()
+    const { subscription, selectedStoreId } = useAuth()
     const plan = subscription?.plan_type ?? 'free'
 
     const [messages, setMessages] = useState<Message[]>([{
@@ -76,6 +86,159 @@ export default function AIAssistantPage() {
     const [isLoadingSnapshot, setIsLoadingSnapshot] = useState(true)
     const [chatOpen, setChatOpen] = useState(true)
     const chatContainerRef = useRef<HTMLDivElement>(null)
+
+    // Telegram config
+    const [tgToken, setTgToken] = useState('')
+    const [tgEnabled, setTgEnabled] = useState(false)
+    const [tgBotUsername, setTgBotUsername] = useState('')
+    const [tgConnecting, setTgConnecting] = useState(false)
+    const [tgSaving, setTgSaving] = useState(false)
+    const [tgShowToken, setTgShowToken] = useState(false)
+    const [tgAllowedChatIds, setTgAllowedChatIds] = useState('')
+    const [tgLoaded, setTgLoaded] = useState(false)
+
+    // Load Telegram config from tenant metadata
+    useEffect(() => {
+        const loadTgConfig = async () => {
+            try {
+                const tenant = await tenantApi.getMe()
+                const tgConfig = (tenant.metadata as any)?.telegram_bot_config
+                if (tgConfig) {
+                    setTgToken(tgConfig.bot_token || '')
+                    setTgEnabled(tgConfig.enabled || false)
+                    setTgBotUsername(tgConfig.bot_username || '')
+                    setTgAllowedChatIds((tgConfig.allowed_chat_ids || []).join(', '))
+                }
+            } catch (err) {
+                console.error('Error loading telegram config:', err)
+            } finally {
+                setTgLoaded(true)
+            }
+        }
+        loadTgConfig()
+    }, [])
+
+    const handleTgConnect = async () => {
+        if (!tgToken.trim()) {
+            showToast('error', 'Ingresá el token del bot')
+            return
+        }
+        setTgConnecting(true)
+        try {
+            const { data: { session } } = await supabase.auth.getSession()
+            const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+
+            const res = await fetch(`${supabaseUrl}/functions/v1/telegram-bot`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${session?.access_token}`,
+                },
+                body: JSON.stringify({
+                    action: 'setup-webhook',
+                    botToken: tgToken.trim(),
+                    storeId: selectedStoreId,
+                }),
+            })
+
+            const result = await res.json()
+            if (!res.ok) throw new Error(result.error || 'Error al configurar webhook')
+
+            const botUsername = result.botUsername || ''
+            setTgBotUsername(botUsername)
+            setTgEnabled(true)
+
+            // Save to tenant metadata
+            const tenant = await tenantApi.getMe()
+            const currentMetadata = (tenant.metadata || {}) as any
+            const chatIds = tgAllowedChatIds.split(',').map(s => Number(s.trim())).filter(n => !isNaN(n) && n > 0)
+
+            await tenantApi.updateMe({
+                metadata: {
+                    ...currentMetadata,
+                    telegram_bot_config: {
+                        enabled: true,
+                        bot_token: tgToken.trim(),
+                        bot_username: botUsername,
+                        allowed_chat_ids: chatIds,
+                    }
+                }
+            })
+
+            showToast('success', `Bot @${botUsername} conectado exitosamente`)
+        } catch (err: any) {
+            console.error('Telegram connect error:', err)
+            showToast('error', err.message || 'Error al conectar bot de Telegram')
+        } finally {
+            setTgConnecting(false)
+        }
+    }
+
+    const handleTgDisconnect = async () => {
+        setTgSaving(true)
+        try {
+            const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+            const { data: { session } } = await supabase.auth.getSession()
+
+            await fetch(`${supabaseUrl}/functions/v1/telegram-bot`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${session?.access_token}`,
+                },
+                body: JSON.stringify({
+                    action: 'remove-webhook',
+                    botToken: tgToken.trim(),
+                }),
+            })
+
+            const tenant = await tenantApi.getMe()
+            const currentMetadata = (tenant.metadata || {}) as any
+            await tenantApi.updateMe({
+                metadata: {
+                    ...currentMetadata,
+                    telegram_bot_config: {
+                        enabled: false,
+                        bot_token: tgToken.trim(),
+                        bot_username: tgBotUsername,
+                        allowed_chat_ids: [],
+                    }
+                }
+            })
+
+            setTgEnabled(false)
+            showToast('success', 'Bot de Telegram desconectado')
+        } catch (err: any) {
+            console.error('Telegram disconnect error:', err)
+            showToast('error', err.message || 'Error al desconectar')
+        } finally {
+            setTgSaving(false)
+        }
+    }
+
+    const handleTgSaveSettings = async () => {
+        setTgSaving(true)
+        try {
+            const tenant = await tenantApi.getMe()
+            const currentMetadata = (tenant.metadata || {}) as any
+            const chatIds = tgAllowedChatIds.split(',').map(s => Number(s.trim())).filter(n => !isNaN(n) && n > 0)
+
+            await tenantApi.updateMe({
+                metadata: {
+                    ...currentMetadata,
+                    telegram_bot_config: {
+                        ...currentMetadata.telegram_bot_config,
+                        allowed_chat_ids: chatIds,
+                    }
+                }
+            })
+            showToast('success', 'Configuración guardada')
+        } catch (err: any) {
+            showToast('error', 'Error al guardar')
+        } finally {
+            setTgSaving(false)
+        }
+    }
 
     useEffect(() => {
         if (chatContainerRef.current) {
@@ -473,6 +636,160 @@ ${snap.lowStockProducts.length > 0 ? snap.lowStockProducts.map(p => `⚠️ ${p.
                         </div>
                     </Card>
                 </div>
+
+                {/* Telegram Bot Integration */}
+                <Card className="border-purple-100 bg-white shadow-lg overflow-hidden">
+                    <div className="p-6 space-y-5">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-gradient-to-br from-blue-400 to-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-100">
+                                    <MessageCircle className="w-5 h-5 text-white" />
+                                </div>
+                                <div>
+                                    <h3 className="text-sm font-black text-gray-900">Bot de Telegram</h3>
+                                    <p className="text-[11px] text-gray-500">Consultá la IA desde tu celular via Telegram</p>
+                                </div>
+                            </div>
+                            {tgEnabled && tgBotUsername && (
+                                <span className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-600 rounded-full text-[10px] font-black uppercase tracking-widest">
+                                    <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
+                                    Conectado
+                                </span>
+                            )}
+                        </div>
+
+                        {!tgEnabled ? (
+                            <div className="space-y-4">
+                                <div className="p-4 bg-blue-50 rounded-2xl space-y-3">
+                                    <p className="text-xs text-blue-800 font-semibold">Cómo configurar:</p>
+                                    <ol className="text-[11px] text-blue-700 space-y-1.5 list-decimal list-inside">
+                                        <li>Abrí Telegram y buscá <span className="font-bold">@BotFather</span></li>
+                                        <li>Enviá <code className="bg-blue-100 px-1 rounded">/newbot</code> y seguí los pasos</li>
+                                        <li>Copiá el token que te da BotFather</li>
+                                        <li>Pegalo acá abajo y dale a Conectar</li>
+                                    </ol>
+                                </div>
+
+                                <div>
+                                    <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1.5">Token del Bot</label>
+                                    <div className="flex gap-2">
+                                        <div className="relative flex-1">
+                                            <input
+                                                type={tgShowToken ? 'text' : 'password'}
+                                                value={tgToken}
+                                                onChange={(e) => setTgToken(e.target.value)}
+                                                placeholder="123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11"
+                                                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-mono focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300 outline-none pr-10"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => setTgShowToken(!tgShowToken)}
+                                                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                                            >
+                                                {tgShowToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1.5">
+                                        Chat IDs permitidos <span className="text-gray-400 normal-case">(opcional, separados por coma)</span>
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={tgAllowedChatIds}
+                                        onChange={(e) => setTgAllowedChatIds(e.target.value)}
+                                        placeholder="Dejá vacío para permitir cualquier chat"
+                                        className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300 outline-none"
+                                    />
+                                    <p className="text-[10px] text-gray-400 mt-1">Tip: enviá /start al bot y el chat ID aparece en los logs</p>
+                                </div>
+
+                                <Button
+                                    onClick={handleTgConnect}
+                                    disabled={!tgToken.trim() || tgConnecting}
+                                    className="w-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-black uppercase tracking-widest text-[10px] py-4 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-blue-100 disabled:opacity-50"
+                                >
+                                    {tgConnecting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link className="w-4 h-4" />}
+                                    {tgConnecting ? 'Conectando...' : 'Conectar Bot'}
+                                </Button>
+                            </div>
+                        ) : (
+                            <div className="space-y-4">
+                                <div className="p-4 bg-emerald-50 rounded-2xl flex items-center gap-3">
+                                    <Check className="w-5 h-5 text-emerald-500 shrink-0" />
+                                    <div>
+                                        <p className="text-sm font-bold text-emerald-800">
+                                            @{tgBotUsername}
+                                        </p>
+                                        <p className="text-[11px] text-emerald-600">
+                                            El bot está activo y respondiendo consultas con la misma IA de este módulo
+                                        </p>
+                                    </div>
+                                    <a
+                                        href={`https://t.me/${tgBotUsername}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="ml-auto shrink-0 p-2 bg-white hover:bg-emerald-100 rounded-lg transition-colors"
+                                        title="Abrir en Telegram"
+                                    >
+                                        <ExternalLink className="w-4 h-4 text-emerald-600" />
+                                    </a>
+                                </div>
+
+                                <div className="p-4 bg-gray-50 rounded-2xl space-y-3">
+                                    <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Comandos disponibles</p>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {[
+                                            { cmd: '/resumen', desc: 'Resumen ejecutivo' },
+                                            { cmd: '/ventas', desc: 'Reporte de ventas' },
+                                            { cmd: '/stock', desc: 'Stock bajo' },
+                                            { cmd: '/top', desc: 'Top productos y clientes' },
+                                            { cmd: '/limpiar', desc: 'Borrar historial' },
+                                        ].map(c => (
+                                            <div key={c.cmd} className="flex items-center gap-2 text-[11px]">
+                                                <code className="bg-white px-2 py-0.5 rounded border text-blue-600 font-bold">{c.cmd}</code>
+                                                <span className="text-gray-500">{c.desc}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1.5">
+                                        Chat IDs permitidos <span className="text-gray-400 normal-case">(opcional)</span>
+                                    </label>
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="text"
+                                            value={tgAllowedChatIds}
+                                            onChange={(e) => setTgAllowedChatIds(e.target.value)}
+                                            placeholder="Dejá vacío para permitir cualquier chat"
+                                            className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300 outline-none"
+                                        />
+                                        <Button
+                                            onClick={handleTgSaveSettings}
+                                            disabled={tgSaving}
+                                            className="px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-bold"
+                                        >
+                                            {tgSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Guardar'}
+                                        </Button>
+                                    </div>
+                                </div>
+
+                                <button
+                                    onClick={handleTgDisconnect}
+                                    disabled={tgSaving}
+                                    className="w-full flex items-center justify-center gap-2 py-3 border border-red-200 text-red-500 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-50 transition-colors disabled:opacity-50"
+                                >
+                                    {tgSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Unlink className="w-4 h-4" />}
+                                    Desconectar Bot
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                </Card>
             </div>
         </FeatureGuard>
     )

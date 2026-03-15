@@ -12,11 +12,9 @@ export const customersApi = {
             .select('*', { count: 'exact' })
             .eq('store_id', storeId)
 
-        // Filter by archived status (default: show non-archived)
+        // Filter by archived status
         if (params?.archived) {
             query = query.eq('is_archived', true)
-        } else {
-            query = query.or('is_archived.is.null,is_archived.eq.false')
         }
 
         if (params?.search) {
