@@ -601,18 +601,6 @@ Firma de la tienda obligatoria: — ${storeSignature}` }
                 </div>
             </Card>
 
-            <Card>
-                <div className="space-y-2">
-                    <p className="text-xs font-black uppercase tracking-widest text-gray-400">Cómo se clasifican los clientes</p>
-                    <ul className="space-y-1">
-                        {SEGMENT_RULES.map((rule) => (
-                            <li key={rule} className="text-sm text-gray-600">• {rule}</li>
-                        ))}
-                    </ul>
-                    <p className="text-xs text-gray-500">Estas etiquetas son reglas automáticas del CRM (no una decisión arbitraria de IA) y se usan para sugerir el mejor tipo de mensaje.</p>
-                </div>
-            </Card>
-
             {/* Tabla */}
             {loading ? (
                 <LoadingSpinner text="Cargando clientes..." />
