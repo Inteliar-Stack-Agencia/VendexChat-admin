@@ -149,6 +149,11 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                   Logística
                   <span className="ml-auto text-[8px] bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded font-black uppercase">VIP</span>
                 </NavLink>
+                <NavLink to="/bot" className={linkClass} onClick={onClose}>
+                  <Bot className="w-5 h-5" />
+                  Asistente Tienda
+                  <span className="ml-auto text-[8px] bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded font-black uppercase">VIP</span>
+                </NavLink>
               </div>
 
               <div className="pt-2 pb-2">
@@ -165,9 +170,9 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                   Estadísticas IA
                   <span className="ml-auto text-[8px] bg-purple-100 text-purple-600 px-1.5 py-0.5 rounded font-black uppercase">ULTRA</span>
                 </NavLink>
-                <NavLink to="/bot" className={linkClass} onClick={onClose}>
+                <NavLink to="/whatsapp-bot" className={linkClass} onClick={onClose}>
                   <Bot className="w-5 h-5" />
-                  VENDEx Bot
+                  Bot WhatsApp
                   <span className="ml-auto text-[8px] bg-purple-100 text-purple-600 px-1.5 py-0.5 rounded font-black uppercase">ULTRA</span>
                 </NavLink>
               </div>
