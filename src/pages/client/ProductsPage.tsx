@@ -223,6 +223,7 @@ export default function ProductsPage() {
 
   // Ref para controlar la categoría inicial sin disparar re-renders en cascada
   const initializedRef = useRef(false)
+  const skipNextFilterEffect = useRef(false)
 
   const loadProductsOnly = useCallback(async (catId?: string, pg?: number) => {
     const requestId = ++requestCount.current
@@ -254,8 +255,9 @@ export default function ProductsPage() {
     categoriesApi.list().then(cats => {
       setCategories(cats)
       const firstCatId = cats[0]?.id ?? ''
-      setCategoryFilter(String(firstCatId))
       initializedRef.current = true
+      skipNextFilterEffect.current = true
+      setCategoryFilter(String(firstCatId))
       // Cargamos productos de la primera categoría directamente
       loadProductsOnly(String(firstCatId), 1)
     }).catch(err => {
@@ -267,6 +269,11 @@ export default function ProductsPage() {
   // Recarga cuando cambia categoría, página o búsqueda (después de la carga inicial)
   useEffect(() => {
     if (!initializedRef.current) return
+    // Evitar doble carga: la carga inicial ya dispara loadProductsOnly directamente
+    if (skipNextFilterEffect.current) {
+      skipNextFilterEffect.current = false
+      return
+    }
     loadProductsOnly()
   }, [categoryFilter, page, debouncedSearch])
 
@@ -571,7 +578,7 @@ export default function ProductsPage() {
       )}
 
       {/* Skeleton Loading o Tabla */}
-      {loading && products.length === 0 ? (
+      {loading ? (
         <Card padding={false} className="border-indigo-100 shadow-2xl shadow-indigo-50/30 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
