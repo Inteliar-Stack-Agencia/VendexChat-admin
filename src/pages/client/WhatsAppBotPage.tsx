@@ -136,7 +136,7 @@ function WhatsAppBotInner() {
         try {
             const tenant = await tenantApi.getMe()
             const metadata = { ...(tenant as any).metadata, wa_bot_config: config }
-            await tenantApi.update({ metadata } as Partial<Tenant>)
+            await tenantApi.updateMe({ metadata } as Partial<Tenant>)
             showToast('success', 'Configuración del Bot WhatsApp guardada')
         } catch {
             showToast('error', 'Error al guardar')
