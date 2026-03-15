@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
     Users, Search, MessageSquare, ClipboardList, ShoppingBag,
     TrendingUp, UserCheck, DollarSign, Bot, Sparkles, Copy, CheckCircle2,
-    Send, Loader2, RefreshCw, Settings, ChevronDown, ChevronUp
+    Send, Loader2, RefreshCw, Settings, ChevronDown, ChevronUp, Trash2
 } from 'lucide-react'
 import FeatureGuard from '../../components/FeatureGuard'
 import { Card, LoadingSpinner, EmptyState, Modal, Button, showToast } from '../../components/common'
@@ -505,6 +505,16 @@ Firma de la tienda obligatoria: — ${storeSignature}` }
                                     disabled={loading}
                                     className="flex-1 bg-white border border-slate-200 rounded-full px-5 py-3 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-300 outline-none shadow-sm disabled:opacity-50"
                                 />
+                                {chatMessages.length > 0 && (
+                                    <button
+                                        onClick={() => setChatMessages([])}
+                                        disabled={chatTyping}
+                                        title="Limpiar chat"
+                                        className="w-12 h-12 bg-white border border-slate-200 text-slate-400 rounded-full hover:text-rose-500 hover:border-rose-300 transition-all disabled:opacity-50 flex items-center justify-center"
+                                    >
+                                        <Trash2 className="w-4 h-4" />
+                                    </button>
+                                )}
                                 <button
                                     onClick={() => handleChatSend()}
                                     disabled={!chatInput.trim() || chatTyping || loading}
