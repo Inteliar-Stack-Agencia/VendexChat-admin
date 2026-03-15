@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
     Users, Search, MessageSquare, ClipboardList, ShoppingBag,
     TrendingUp, UserCheck, DollarSign, Bot, Sparkles, Copy, CheckCircle2,
-    Send, Loader2, RefreshCw, Settings, ChevronDown, ChevronUp
+    Send, Loader2, RefreshCw, Settings, ChevronDown, ChevronUp, Trash2, Archive, ArchiveRestore
 } from 'lucide-react'
 import FeatureGuard from '../../components/FeatureGuard'
 import { Card, LoadingSpinner, EmptyState, Modal, Button, showToast } from '../../components/common'
@@ -108,6 +108,8 @@ function CrmIaPageInner() {
     const [search, setSearch] = useState('')
     const [tagFilter, setTagFilter] = useState('Todos')
     const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
+    const [showArchived, setShowArchived] = useState(false)
+    const [archivingId, setArchivingId] = useState<string | null>(null)
 
     // Estado de modales
     const [isEditingNotes, setIsEditingNotes] = useState(false)
@@ -148,7 +150,7 @@ function CrmIaPageInner() {
 
     useEffect(() => {
         loadCustomers()
-    }, [selectedStoreId])
+    }, [selectedStoreId, showArchived])
 
     useEffect(() => {
         tenantApi.getMe()
@@ -162,7 +164,7 @@ function CrmIaPageInner() {
 
     const loadCustomers = () => {
         setLoading(true)
-        customersApi.list({ limit: 200 })
+        customersApi.list({ limit: 200, archived: showArchived })
             .then(res => {
                 setCustomers(res.data)
                 // Set initial chat message once customers load
@@ -294,6 +296,20 @@ INSTRUCCIONES:
             showToast('error', 'No se pudieron guardar las notas')
         } finally {
             setSaving(false)
+        }
+    }
+
+    const handleArchiveCustomer = async (customer: Customer) => {
+        setArchivingId(customer.id)
+        try {
+            const willArchive = !customer.is_archived
+            await customersApi.archive(customer.id, willArchive)
+            showToast('success', willArchive ? 'Cliente archivado' : 'Cliente restaurado')
+            loadCustomers()
+        } catch {
+            showToast('error', 'No se pudo archivar el cliente')
+        } finally {
+            setArchivingId(null)
         }
     }
 
@@ -505,6 +521,16 @@ Firma de la tienda obligatoria: — ${storeSignature}` }
                                     disabled={loading}
                                     className="flex-1 bg-white border border-slate-200 rounded-full px-5 py-3 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-300 outline-none shadow-sm disabled:opacity-50"
                                 />
+                                {chatMessages.length > 0 && (
+                                    <button
+                                        onClick={() => setChatMessages([])}
+                                        disabled={chatTyping}
+                                        title="Limpiar chat"
+                                        className="w-12 h-12 bg-white border border-slate-200 text-slate-400 rounded-full hover:text-rose-500 hover:border-rose-300 transition-all disabled:opacity-50 flex items-center justify-center"
+                                    >
+                                        <Trash2 className="w-4 h-4" />
+                                    </button>
+                                )}
                                 <button
                                     onClick={() => handleChatSend()}
                                     disabled={!chatInput.trim() || chatTyping || loading}
@@ -523,7 +549,22 @@ Firma de la tienda obligatoria: — ${storeSignature}` }
             </Card>
 
             {/* ═══ SECCIÓN ORIGINAL: Gestión de clientes ═══ */}
-            <h1 className="text-2xl font-bold text-gray-900">Clientes (CRM)</h1>
+            <div className="flex items-center justify-between">
+                <h1 className="text-2xl font-bold text-gray-900">
+                    {showArchived ? 'Clientes Archivados' : 'Clientes (CRM)'}
+                </h1>
+                <button
+                    onClick={() => { setShowArchived(!showArchived); setTagFilter('Todos') }}
+                    className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all border ${
+                        showArchived
+                            ? 'bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100'
+                            : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
+                    }`}
+                >
+                    <Archive className="w-4 h-4" />
+                    {showArchived ? 'Ver activos' : 'Ver archivados'}
+                </button>
+            </div>
 
             {/* Tarjetas de resumen */}
             {!loading && customers.length > 0 && (
@@ -702,6 +743,18 @@ Firma de la tienda obligatoria: — ${storeSignature}` }
                                                         title="Generar mensaje WhatsApp con IA"
                                                     >
                                                         <Sparkles className="w-5 h-5" />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleArchiveCustomer(customer)}
+                                                        disabled={archivingId === customer.id}
+                                                        className={`p-2.5 rounded-xl transition-all border ${
+                                                            showArchived
+                                                                ? 'bg-emerald-50/60 hover:bg-emerald-100 text-emerald-600 hover:text-emerald-700 border-emerald-100'
+                                                                : 'bg-slate-50/60 hover:bg-slate-100 text-slate-500 hover:text-slate-700 border-slate-100'
+                                                        } disabled:opacity-50`}
+                                                        title={showArchived ? 'Restaurar cliente' : 'Archivar cliente'}
+                                                    >
+                                                        {showArchived ? <ArchiveRestore className="w-5 h-5" /> : <Archive className="w-5 h-5" />}
                                                     </button>
                                                     <a
                                                         href={whatsappLink(customer.whatsapp)}

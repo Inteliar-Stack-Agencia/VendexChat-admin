@@ -628,7 +628,7 @@ function BotConfigPageInner() {
 // ============================================================
 export default function BotConfigPage() {
     return (
-        <FeatureGuard feature="bot" minPlan="vip">
+        <FeatureGuard feature="bot" minPlan="ultra">
             <BotConfigPageInner />
         </FeatureGuard>
     )

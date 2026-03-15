@@ -296,6 +296,7 @@ export interface Customer {
   total_spent: number | string
   last_order_at: string | null
   notes?: string | null
+  is_archived?: boolean
   created_at: string
 }
 

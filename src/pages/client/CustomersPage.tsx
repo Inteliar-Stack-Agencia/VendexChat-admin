@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Users, Search, MessageSquare, ClipboardList, ShoppingBag, TrendingUp, UserCheck, DollarSign, Trash2 } from 'lucide-react'
+import { Users, Search, MessageSquare, ClipboardList, ShoppingBag, TrendingUp, UserCheck, DollarSign, Trash2, Archive, ArchiveRestore } from 'lucide-react'
 import { Card, LoadingSpinner, EmptyState, Modal, Button, showToast, Pagination, ConfirmDialog } from '../../components/common'
 import { customersApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
@@ -26,6 +26,8 @@ export default function CustomersPage() {
     const [loadingOrders, setLoadingOrders] = useState(false)
     const [deletingCustomerId, setDeletingCustomerId] = useState<string | null>(null)
     const [customerToDelete, setCustomerToDelete] = useState<Customer | null>(null)
+    const [showArchived, setShowArchived] = useState(false)
+    const [archivingId, setArchivingId] = useState<string | null>(null)
 
     // Debounce search
     useEffect(() => {
@@ -38,11 +40,11 @@ export default function CustomersPage() {
 
     useEffect(() => {
         loadCustomers()
-    }, [selectedStoreId, debouncedSearch, page])
+    }, [selectedStoreId, debouncedSearch, page, showArchived])
 
     const loadCustomers = () => {
         setLoading(true)
-        customersApi.list({ page, limit: 50, search: debouncedSearch })
+        customersApi.list({ page, limit: 50, search: debouncedSearch, archived: showArchived })
             .then(res => {
                 setCustomers(res.data)
                 setTotalPages(res.total_pages)
@@ -104,6 +106,20 @@ export default function CustomersPage() {
             showToast('error', 'No se pudo eliminar el cliente')
         } finally {
             setDeletingCustomerId(null)
+        }
+    }
+
+    const handleArchiveCustomer = async (customer: Customer) => {
+        setArchivingId(customer.id)
+        try {
+            const willArchive = !customer.is_archived
+            await customersApi.archive(customer.id, willArchive)
+            showToast('success', willArchive ? 'Cliente archivado' : 'Cliente restaurado')
+            loadCustomers()
+        } catch {
+            showToast('error', 'No se pudo archivar el cliente')
+        } finally {
+            setArchivingId(null)
         }
     }
 
@@ -197,7 +213,20 @@ export default function CustomersPage() {
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between">
-                <h1 className="text-2xl font-bold text-gray-900">Clientes (CRM)</h1>
+                <h1 className="text-2xl font-bold text-gray-900">
+                    {showArchived ? 'Clientes Archivados' : 'Clientes (CRM)'}
+                </h1>
+                <button
+                    onClick={() => { setShowArchived(!showArchived); setPage(1); setActiveSegment('all') }}
+                    className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all border ${
+                        showArchived
+                            ? 'bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100'
+                            : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
+                    }`}
+                >
+                    <Archive className="w-4 h-4" />
+                    {showArchived ? 'Ver activos' : 'Ver archivados'}
+                </button>
             </div>
 
             {/* Tarjetas de resumen */}
@@ -399,6 +428,18 @@ export default function CustomersPage() {
                                                     title="Ver pedidos"
                                                 >
                                                     <ShoppingBag className="w-5 h-5" />
+                                                </button>
+                                                <button
+                                                    onClick={() => handleArchiveCustomer(customer)}
+                                                    disabled={archivingId === customer.id}
+                                                    className={`p-2.5 rounded-xl transition-all border ${
+                                                        showArchived
+                                                            ? 'bg-emerald-50/60 hover:bg-emerald-100 text-emerald-600 hover:text-emerald-700 border-emerald-100'
+                                                            : 'bg-slate-50/60 hover:bg-slate-100 text-slate-500 hover:text-slate-700 border-slate-100'
+                                                    } disabled:opacity-50`}
+                                                    title={showArchived ? 'Restaurar cliente' : 'Archivar cliente'}
+                                                >
+                                                    {showArchived ? <ArchiveRestore className="w-5 h-5" /> : <Archive className="w-5 h-5" />}
                                                 </button>
                                                 <button
                                                     onClick={() => setCustomerToDelete(customer)}

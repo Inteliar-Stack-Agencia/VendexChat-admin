@@ -61,8 +61,9 @@ export default function FeatureGuard({
                                     feature === 'bot' ? 'asistente automático de WhatsApp' :
                                         feature === 'logistics' ? 'gestión de repartos y zonas' :
                                             feature === 'ai-importer' ? 'carga masiva de productos con IA' :
-                                                feature === 'ai-intelligence' ? 'análisis de datos con IA' :
-                                                    feature === 'custom-domain' ? 'dominio propio personalizado' : 'esta función'
+                                                feature === 'ai-intelligence' ? 'inteligencia IA predictiva y estratégica' :
+                                                    feature === 'ai-analyst' ? 'estadísticas potenciadas con IA' :
+                                                        feature === 'custom-domain' ? 'dominio propio personalizado' : 'esta función'
                             }.
                         </p>
                         <Link to="/subscription">
@@ -89,8 +90,9 @@ export default function FeatureGuard({
                         feature === 'analytics' ? 'gráficos de rendimiento y ventas real-time' :
                             feature === 'bot' ? 'el BOT que responde y vende por ti 24/7' :
                                 feature === 'logistics' ? 'optimización de rutas y logística de envíos' :
-                                    feature === 'ai-intelligence' ? 'inteligencia de datos para predecir demanda' :
-                                        feature === 'ai-importer' ? 'digitalización de catálogos fotos a productos vía IA' : 'herramientas profesionales'
+                                    feature === 'ai-intelligence' ? 'inteligencia IA que predice demanda y analiza tu negocio' :
+                                        feature === 'ai-analyst' ? 'estadísticas inteligentes con análisis de IA en tiempo real' :
+                                            feature === 'ai-importer' ? 'digitalización de catálogos fotos a productos vía IA' : 'herramientas profesionales'
                     } y llevar tu tienda al siguiente nivel.
                 </p>
             </div>

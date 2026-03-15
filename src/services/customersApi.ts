@@ -2,7 +2,7 @@ import { supabase } from '../supabaseClient'
 import { getStoreId } from './coreApi'
 
 export const customersApi = {
-    list: async (params?: { page?: number; limit?: number; search?: string }) => {
+    list: async (params?: { page?: number; limit?: number; search?: string; archived?: boolean }) => {
         const storeId = await getStoreId()
         const limit = params?.limit || 50
         const page = params?.page || 1
@@ -11,6 +11,13 @@ export const customersApi = {
             .from('customers')
             .select('*', { count: 'exact' })
             .eq('store_id', storeId)
+
+        // Filter by archived status (default: show non-archived)
+        if (params?.archived) {
+            query = query.eq('is_archived', true)
+        } else {
+            query = query.or('is_archived.is.null,is_archived.eq.false')
+        }
 
         if (params?.search) {
             query = query.or(`name.ilike.%${params.search}%,whatsapp.ilike.%${params.search}%`)
@@ -48,6 +55,17 @@ export const customersApi = {
         const { data, error } = await supabase
             .from('customers')
             .update({ notes })
+            .eq('id', id)
+            .select()
+            .single()
+        if (error) throw error
+        return data
+    },
+
+    archive: async (id: string, archived: boolean) => {
+        const { data, error } = await supabase
+            .from('customers')
+            .update({ is_archived: archived })
             .eq('id', id)
             .select()
             .single()
