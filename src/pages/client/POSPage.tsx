@@ -25,7 +25,7 @@ const PAYMENT_METHODS = [
 
 export default function POSPage() {
     const { user } = useAuth()
-    const storeName = user?.store_name || 'Tienda'
+    const storeName = user?.name || 'Tienda'
 
     const [products, setProducts] = useState<Product[]>([])
     const [categories, setCategories] = useState<Category[]>([])
