@@ -11,10 +11,12 @@ Todos los estilos utilizan **Tailwind CSS v4.1** con la paleta por defecto (sin 
 | ---------------- | ------------------------------------------- |
 | **Nombre**       | VENDExChat                                  |
 | **Subtitulo**    | Panel de Administracion                     |
+| **Dominio**      | vendexchat.app                              |
 | **Idioma**       | Espanol (es)                                |
 | **Desarrollador**| @InteliarStack                              |
 | **Favicon**      | `/public/vite.svg`                          |
 | **Logo**         | Icono `Store` de lucide-react sobre fondo emerald-600 / indigo-600 |
+| **Sub-marcas**   | VENDEx Bot, VENDEx WhatsApp, VENDEx AI, VENDEx Auto-Pilot, VENDEx Pro/Premium |
 
 ---
 
@@ -64,7 +66,18 @@ Todos los estilos utilizan **Tailwind CSS v4.1** con la paleta por defecto (sin 
 | `indigo-600`  | `#4f46e5` | Avatar superadmin, logo, texto badge PRO  |
 | `indigo-700`  | `#4338ca` | Texto nav activa superadmin               |
 
-### 2.5 Colores Semanticos
+### 2.5 Colores Adicionales por Contexto
+
+| Familia     | Tonos usados                           | Contexto                          |
+| ----------- | -------------------------------------- | --------------------------------- |
+| **Violet**  | `violet-50`, `violet-600`, `violet-700`| Gradientes superadmin, seguridad  |
+| **Purple**  | `purple-50`-`purple-700`, `fuchsia-500/600` | Features ULTRA, IA          |
+| **Amber**   | `amber-50`, `amber-100`, `amber-600`  | Advertencias, badges VIP          |
+| **Rose**    | `rose-50`, `rose-100`, `rose-500`, `rose-600` | Errores, estados overdue  |
+| **Blue**    | `blue-50`, `blue-100`, `blue-400`-`blue-600` | Info, analytics, charts    |
+| **Cyan**    | `cyan-400`, `cyan-500`, `cyan-600`    | Stats IA, gradientes              |
+
+### 2.6 Colores Semanticos
 
 | Proposito     | Fondo      | Borde       | Texto       | Contexto                  |
 | ------------- | ---------- | ----------- | ----------- | ------------------------- |
@@ -76,7 +89,15 @@ Todos los estilos utilizan **Tailwind CSS v4.1** con la paleta por defecto (sin 
 | **ULTRA**     | `purple-100`| -          | `purple-600`| Badges "ULTRA"            |
 | **Nuevo**     | `emerald-100`| -         | `emerald-600`| Badges "Nuevo"           |
 
-### 2.6 Neutros (Base de la interfaz)
+### 2.7 Colores Especiales (WhatsApp UI)
+
+| Valor       | Uso                                    |
+| ----------- | -------------------------------------- |
+| `#e5ddd5`   | Fondo de chat WhatsApp                 |
+| `#dcf8c6`   | Burbuja de mensaje WhatsApp            |
+| `#10b981`   | Color primario por defecto (settings)  |
+
+### 2.8 Neutros (Base de la interfaz)
 
 | Tono          | Hex       | Uso                                       |
 | ------------- | --------- | ----------------------------------------- |
@@ -235,6 +256,24 @@ Texto:        text-sm text-gray-500
 
 **Tamanos:** sm (w-4 h-4), md (w-8 h-8), lg (w-12 h-12)
 
+### 4.8 Badge (`src/components/common/Badge.tsx`)
+
+```
+Estilo:       inline-flex items-center rounded-full text-xs font-medium
+Padding:      px-2.5 py-0.5
+Defecto:      bg-gray-100 text-gray-800
+Props:        color (clase texto), bg (clase fondo)
+```
+
+**Variaciones comunes en la app:**
+
+| Estado    | Fondo         | Texto          | Borde            |
+| --------- | ------------- | -------------- | ---------------- |
+| Exito     | `emerald-50`  | `emerald-600`  | `emerald-100`    |
+| Error     | `rose-50`     | `rose-600`     | `rose-100`       |
+| Warning   | `amber-50`    | `amber-600`    | `amber-100`      |
+| Info      | `indigo-50`   | `indigo-600`   | `indigo-100`     |
+
 ---
 
 ## 5. Layout
@@ -369,11 +408,72 @@ border-radius: 4px;
 | -------------- | --------------------------------------- |
 | `shadow-sm`    | Botones, tarjetas, enlaces externos     |
 | `shadow-lg`    | Toasts                                  |
+| `shadow-xl`    | Elementos flotantes                     |
 | `shadow-2xl`   | Modal                                   |
+| `shadow-inner` | Sombras internas                        |
+
+**Sombras con color (usadas en paginas):**
+
+| Ejemplo                       | Uso                        |
+| ----------------------------- | -------------------------- |
+| `shadow-indigo-100`           | Tarjetas superadmin        |
+| `shadow-emerald-100`          | Tarjetas merchant          |
+| `shadow-purple-100`           | Features IA/ULTRA          |
+| `shadow-rose-100`             | Alertas de error           |
+| `shadow-blue-100`             | Analytics                  |
 
 ---
 
-## 12. Stack Tecnologico
+## 12. Gradientes
+
+| Direccion y Colores                                     | Uso                        |
+| ------------------------------------------------------- | -------------------------- |
+| `bg-gradient-to-br from-indigo-600 to-indigo-900`       | Cards oscuros superadmin   |
+| `bg-gradient-to-br from-indigo-600 to-violet-700`       | Cards destacados           |
+| `bg-gradient-to-br from-violet-600 via-purple-600 to-fuchsia-500` | Features IA premium |
+| `bg-gradient-to-br from-cyan-600 to-blue-600`           | Analytics                  |
+| `bg-gradient-to-br from-green-500 to-emerald-600`       | Cards merchant             |
+| `bg-gradient-to-r from-emerald-600 to-teal-700`         | Gradiente horizontal marca |
+| `bg-gradient-to-t from-black/60 to-transparent`         | Overlay sobre imagenes     |
+
+---
+
+## 13. Tablas
+
+```
+Header fondo:   bg-slate-50/50
+Header texto:   text-[10px] font-black uppercase text-slate-400 tracking-widest
+Header padding: px-8 py-5
+Filas hover:    hover:bg-slate-50/50 transition-colors group
+Divisor:        divide-y divide-slate-50
+Celdas texto:   text-sm font-bold text-slate-900
+```
+
+---
+
+## 14. Breakpoints Responsive
+
+| Breakpoint | Tamano | Uso principal                              |
+| ---------- | ------ | ------------------------------------------ |
+| `sm`       | 640px  | Mostrar elementos ocultos en movil         |
+| `md`       | 768px  | Texto adicional (ej: "Cambiar Sucursal")   |
+| `lg`       | 1024px | Sidebar estatica, ocultar hamburger menu   |
+| `xl`       | 1280px | Layouts expandidos                         |
+
+**Patrones responsive comunes:**
+
+```
+hidden sm:flex      → Visible desde 640px
+hidden sm:block     → Visible desde 640px
+hidden md:inline    → Visible desde 768px
+lg:hidden           → Oculto desde 1024px (hamburger menu)
+lg:translate-x-0    → Sidebar visible desde 1024px
+lg:static           → Sidebar static desde 1024px
+```
+
+---
+
+## 15. Stack Tecnologico
 
 | Tecnologia           | Version  | Proposito                      |
 | -------------------- | -------- | ------------------------------ |
