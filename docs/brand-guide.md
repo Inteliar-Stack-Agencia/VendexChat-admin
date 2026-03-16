@@ -14,9 +14,38 @@ Todos los estilos utilizan **Tailwind CSS v4.1** con la paleta por defecto (sin 
 | **Dominio**      | vendexchat.app                              |
 | **Idioma**       | Espanol (es)                                |
 | **Desarrollador**| @InteliarStack                              |
-| **Favicon**      | `/public/vite.svg`                          |
-| **Logo**         | Icono `Store` de lucide-react sobre fondo emerald-600 / indigo-600 |
+| **Favicon**      | `/public/vite.svg` (pendiente de reemplazar con logo oficial) |
 | **Sub-marcas**   | VENDEx Bot, VENDEx WhatsApp, VENDEx AI, VENDEx Auto-Pilot, VENDEx Pro/Premium |
+
+### Logo Oficial
+
+El logo de VENDExChat es un **robot amigable dentro de una burbuja de chat**, sobre un fondo verde con esquinas redondeadas tipo app icon.
+
+**Elementos del logo:**
+
+| Elemento                  | Color                      | Descripcion                                |
+| ------------------------- | -------------------------- | ------------------------------------------ |
+| **Fondo**                 | Verde medio (~`#4CAF50`)   | Fondo cuadrado con esquinas muy redondeadas (app icon style) |
+| **Burbuja de chat**       | Violeta/Indigo (~`#3F2B96`)| Burbuja de dialogo con cola en esquina inferior izquierda |
+| **Cuerpo del robot**      | Verde claro (~`#4CD89D`)   | Cabeza redondeada, torso, brazos laterales  |
+| **Detalles del robot**    | Verde oscuro (sombras)     | Sombras sutiles en cabeza y torso           |
+| **Antena**                | Verde menta (~`#5CEDB0`)   | Circulo pequeno sobre la cabeza del robot   |
+| **Ojos**                  | Blanco con pupilas negras  | Dos ojos redondos, expresion amigable       |
+| **Sonrisa**               | Blanco                     | Sonrisa curva debajo de los ojos            |
+
+**Colores clave del logo:**
+
+| Nombre        | Valor aproximado | Rol                              |
+| ------------- | ---------------- | -------------------------------- |
+| Verde fondo   | `#4CAF50`        | Fondo principal del icono        |
+| Violeta       | `#3F2B96`        | Burbuja de chat (identidad dual) |
+| Verde robot   | `#4CD89D`        | Cuerpo del robot                 |
+| Verde menta   | `#5CEDB0`        | Antena, acentos claros           |
+| Blanco        | `#FFFFFF`        | Ojos y sonrisa                   |
+
+**Significado:** El logo combina un chatbot (robot amigable) con una burbuja de conversacion, representando la naturaleza del producto: un asistente de ventas conversacional. Los colores verde y violeta refuerzan la paleta de la marca usada en la app (emerald para merchants, indigo/violet para superadmin).
+
+**Nota:** En la app, el sidebar usa el icono `Store` de lucide-react como representacion simplificada del logo, con fondo `emerald-600` (merchant) o `indigo-600` (superadmin).
 
 ---
 
