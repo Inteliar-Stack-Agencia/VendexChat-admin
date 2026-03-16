@@ -84,6 +84,7 @@ export const ordersApi = {
                 order_number: orderNumber,
                 status: order.status || 'completed',
                 delivery_cost: order.delivery_cost || 0,
+                customer_whatsapp: order.customer_whatsapp || '',
             })
             .select()
             .single()
