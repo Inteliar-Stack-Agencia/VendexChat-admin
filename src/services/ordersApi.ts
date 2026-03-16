@@ -83,6 +83,7 @@ export const ordersApi = {
                 store_id: storeId,
                 order_number: orderNumber,
                 status: order.status || 'completed',
+                delivery_type: order.metadata?.delivery_type || 'pickup',
                 delivery_cost: order.delivery_cost || 0,
                 customer_whatsapp: order.customer_whatsapp || '',
             })
