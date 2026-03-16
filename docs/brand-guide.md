@@ -19,13 +19,12 @@ Todos los estilos utilizan **Tailwind CSS v4.1** con la paleta por defecto (sin 
 
 ### Logo Oficial
 
-El logo de VENDExChat es un **robot amigable dentro de una burbuja de chat**, sobre un fondo verde con esquinas redondeadas tipo app icon.
+El logo de VENDExChat es un **robot amigable dentro de una burbuja de chat**, sobre un fondo verde con esquinas redondeadas tipo app icon. Existen **2 variantes** que difieren en el tono del fondo.
 
-**Elementos del logo:**
+**Elementos del logo (comunes a ambas variantes):**
 
 | Elemento                  | Color                      | Descripcion                                |
 | ------------------------- | -------------------------- | ------------------------------------------ |
-| **Fondo**                 | Verde medio (~`#4CAF50`)   | Fondo cuadrado con esquinas muy redondeadas (app icon style) |
 | **Burbuja de chat**       | Violeta/Indigo (~`#3F2B96`)| Burbuja de dialogo con cola en esquina inferior izquierda |
 | **Cuerpo del robot**      | Verde claro (~`#4CD89D`)   | Cabeza redondeada, torso, brazos laterales  |
 | **Detalles del robot**    | Verde oscuro (sombras)     | Sombras sutiles en cabeza y torso           |
@@ -33,15 +32,24 @@ El logo de VENDExChat es un **robot amigable dentro de una burbuja de chat**, so
 | **Ojos**                  | Blanco con pupilas negras  | Dos ojos redondos, expresion amigable       |
 | **Sonrisa**               | Blanco                     | Sonrisa curva debajo de los ojos            |
 
+**Variantes del logo:**
+
+| Variante             | Fondo                      | Uso recomendado                       |
+| -------------------- | -------------------------- | ------------------------------------- |
+| **Variante 1 (Bright)** | Verde brillante/neon (~`#00D26A`) | Digital, app stores, fondos oscuros   |
+| **Variante 2 (Classic)**| Verde medio/profundo (~`#4CAF50`) | Impresion, fondos claros, formal      |
+
+Ambas variantes tienen formato de **app icon** (cuadrado con esquinas muy redondeadas).
+
 **Colores clave del logo:**
 
-| Nombre        | Valor aproximado | Rol                              |
-| ------------- | ---------------- | -------------------------------- |
-| Verde fondo   | `#4CAF50`        | Fondo principal del icono        |
-| Violeta       | `#3F2B96`        | Burbuja de chat (identidad dual) |
-| Verde robot   | `#4CD89D`        | Cuerpo del robot                 |
-| Verde menta   | `#5CEDB0`        | Antena, acentos claros           |
-| Blanco        | `#FFFFFF`        | Ojos y sonrisa                   |
+| Nombre          | Variante 1 (Bright) | Variante 2 (Classic) | Rol                      |
+| --------------- | -------------------- | -------------------- | ------------------------ |
+| Verde fondo     | `#00D26A`            | `#4CAF50`            | Fondo principal del icono|
+| Violeta         | `#3F2B96`            | `#3F2B96`            | Burbuja de chat          |
+| Verde robot     | `#4CD89D`            | `#4CD89D`            | Cuerpo del robot         |
+| Verde menta     | `#5CEDB0`            | `#5CEDB0`            | Antena, acentos claros   |
+| Blanco          | `#FFFFFF`            | `#FFFFFF`             | Ojos y sonrisa           |
 
 **Significado:** El logo combina un chatbot (robot amigable) con una burbuja de conversacion, representando la naturaleza del producto: un asistente de ventas conversacional. Los colores verde y violeta refuerzan la paleta de la marca usada en la app (emerald para merchants, indigo/violet para superadmin).
 
