@@ -24,6 +24,7 @@ import {
   Brain,
   Cpu,
   Crown,
+  Receipt,
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -107,6 +108,11 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                 <NavLink to="/dashboard" className={linkClass} onClick={onClose}>
                   <LayoutDashboard className="w-5 h-5" />
                   Dashboard
+                </NavLink>
+                <NavLink to="/pos" className={linkClass} onClick={onClose}>
+                  <Receipt className="w-5 h-5" />
+                  POS
+                  <span className="ml-auto text-[8px] bg-emerald-100 text-emerald-600 px-1.5 py-0.5 rounded font-black uppercase">Nuevo</span>
                 </NavLink>
                 <NavLink to="/orders" className={linkClass} onClick={onClose}>
                   <ShoppingCart className="w-5 h-5" />

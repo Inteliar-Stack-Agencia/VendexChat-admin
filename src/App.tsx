@@ -43,6 +43,7 @@ const AIAssistantPage = lazy(() => import('./pages/client/AIAssistantPage'))
 const StatsIAPage = lazy(() => import('./pages/client/StatsIAPage'))
 const WhatsAppBotPage = lazy(() => import('./pages/client/WhatsAppBotPage'))
 const BulkPriceEditorPage = lazy(() => import('./pages/client/BulkPriceEditorPage'))
+const POSPage = lazy(() => import('./pages/client/POSPage'))
 const LegalPage = lazy(() => import('./pages/legal/LegalPage'))
 
 // Empresa portal
@@ -139,6 +140,7 @@ export default function App() {
               <Route path="/stats-ia" element={<StatsIAPage />} />
               <Route path="/whatsapp-bot" element={<WhatsAppBotPage />} />
               <Route path="/bulk-prices" element={<BulkPriceEditorPage />} />
+              <Route path="/pos" element={<POSPage />} />
 
               {/* Redirigir root del merchant a dashboard */}
               <Route index element={<Navigate to="/dashboard" replace />} />
