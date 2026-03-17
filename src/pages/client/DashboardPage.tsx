@@ -90,8 +90,8 @@ export default function DashboardPage() {
   const [isEditing, setIsEditing] = useState(false)
   const [savingPrompt, setSavingPrompt] = useState(false)
 
-  // Límite de palabras por plan (PRO = 150, VIP+ = ilimitado)
-  const PROMPT_WORD_LIMIT = currentPlan === 'pro' ? 150 : Infinity
+  // Límite de palabras por plan (PRO = 160, VIP+ = ilimitado)
+  const PROMPT_WORD_LIMIT = currentPlan === 'pro' ? 160 : Infinity
   const wordCount = aiPromptDraft.trim() ? aiPromptDraft.trim().split(/\s+/).length : 0
   const isOverLimit = wordCount > PROMPT_WORD_LIMIT
 
@@ -395,6 +395,24 @@ export default function DashboardPage() {
             </div>
           )}
         </div>
+
+        {currentPlan === 'pro' && (
+          <div className="flex items-start gap-3 p-4 bg-amber-50/80 border border-amber-100 rounded-xl">
+            <Zap className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <p className="text-[11px] font-bold text-amber-700">Limitaciones del plan PRO</p>
+              <ul className="text-[10px] text-amber-600 space-y-0.5 font-medium">
+                <li>Máximo {PROMPT_WORD_LIMIT} palabras en las instrucciones</li>
+                <li>1 recomendación de producto por respuesta</li>
+                <li>Sin personalización profunda ni argumentos de venta múltiples</li>
+              </ul>
+              <p className="text-[10px] text-amber-500">
+                <Link to="/subscription" className="underline font-bold hover:text-amber-700">Mejorá a VIP</Link>{' '}
+                para desbloquear respuestas ilimitadas, personalidad del bot, FAQs y WhatsApp.
+              </p>
+            </div>
+          </div>
+        )}
 
         <Card className="p-5">
           {!isEditing ? (
