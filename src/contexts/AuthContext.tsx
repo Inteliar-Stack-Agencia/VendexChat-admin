@@ -10,7 +10,7 @@ interface AuthContextType {
   token: string | null
   loading: boolean
   login: (email: string, password: string) => Promise<void>
-  register: (data: { store_name: string; email: string; password: string; slug: string; country: string; city: string }) => Promise<void>
+  register: (data: { store_name: string; email: string; slug: string; country: string; city: string }) => Promise<void>
   logout: () => void
   isAuthenticated: boolean
   isSuperadmin: boolean
@@ -124,18 +124,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSelectedStoreId(null)
   }, [])
 
-  const register = useCallback(async (data: { store_name: string; email: string; password: string; slug: string; country: string; city: string }) => {
-    const response = await authApi.register(data)
-    const payload = resolveAuthPayload(response)
-    const authToken = payload.token ?? payload.access_token
-
-    if (!authToken) {
-      throw new Error('Token no recibido')
-    }
-
-    localStorage.setItem('vendexchat_token', authToken)
-    setToken(authToken)
-    setUser(payload.user)
+  const register = useCallback(async (data: { store_name: string; email: string; slug: string; country: string; city: string }) => {
+    await authApi.register(data)
+    // No se inicia sesión: el usuario debe establecer su contraseña desde el email
   }, [])
 
   const logout = useCallback(() => {

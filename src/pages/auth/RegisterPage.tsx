@@ -1,6 +1,6 @@
 import { useState, FormEvent, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Globe, MapPin } from 'lucide-react'
+import { Mail, CheckCircle } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { Button, Input, Select } from '../../components/common'
 import { showToast } from '../../components/common/Toast'
@@ -25,14 +25,13 @@ const COUNTRIES = [
 export default function RegisterPage() {
   const [storeName, setStoreName] = useState('')
   const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
   const [slug, setSlug] = useState('')
   const [country, setCountry] = useState('Argentina')
   const [city, setCity] = useState('')
   const [slugEdited, setSlugEdited] = useState(false)
   const [acceptTerms, setAcceptTerms] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [registered, setRegistered] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
 
   const { register, user } = useAuth()
@@ -55,9 +54,6 @@ export default function RegisterPage() {
     const newErrors: Record<string, string> = {}
     if (!storeName.trim()) newErrors.storeName = 'El nombre de la tienda es obligatorio'
     if (!email) newErrors.email = 'El email es obligatorio'
-    if (!password) newErrors.password = 'La contraseña es obligatoria'
-    else if (password.length < 8) newErrors.password = 'Mínimo 8 caracteres'
-    if (password !== confirmPassword) newErrors.confirmPassword = 'Las contraseñas no coinciden'
     if (!slug.trim()) newErrors.slug = 'El slug es obligatorio'
     if (!country) newErrors.country = 'Debes seleccionar un país'
     if (!city.trim()) newErrors.city = 'La ciudad es obligatoria'
@@ -72,15 +68,41 @@ export default function RegisterPage() {
 
     setLoading(true)
     try {
-      await register({ store_name: storeName, email, password, slug, country, city })
-      showToast('success', '¡Tienda creada exitosamente!')
-      navigate('/dashboard')
+      await register({ store_name: storeName, email, slug, country, city })
+      setRegistered(true)
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error al crear la cuenta'
       showToast('error', message)
     } finally {
       setLoading(false)
     }
+  }
+
+  if (registered) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="w-full max-w-md text-center">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-emerald-100 rounded-full mb-4">
+              <CheckCircle className="w-8 h-8 text-emerald-600" />
+            </div>
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">¡Tienda creada!</h1>
+            <p className="text-gray-500 mb-6">
+              Enviamos un email a <strong className="text-gray-900">{email}</strong> para que establezcas tu contraseña.
+            </p>
+            <div className="bg-emerald-50 rounded-lg p-4 mb-6">
+              <div className="flex items-center gap-2 text-emerald-700 text-sm">
+                <Mail className="w-4 h-4 shrink-0" />
+                <span>Revisá tu bandeja de entrada (y spam) para continuar.</span>
+              </div>
+            </div>
+            <Link to="/login" className="text-emerald-600 hover:text-emerald-700 font-medium text-sm">
+              Ir a iniciar sesión
+            </Link>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -145,25 +167,11 @@ export default function RegisterPage() {
               autoComplete="email"
             />
 
-            <Input
-              label="Contraseña"
-              type="password"
-              placeholder="Mínimo 8 caracteres"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              error={errors.password}
-              autoComplete="new-password"
-            />
-
-            <Input
-              label="Confirmar contraseña"
-              type="password"
-              placeholder="Repetir contraseña"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              error={errors.confirmPassword}
-              autoComplete="new-password"
-            />
+            <div className="bg-blue-50 rounded-lg p-3">
+              <p className="text-xs text-blue-700">
+                Te enviaremos un email para que establezcas tu contraseña de acceso.
+              </p>
+            </div>
 
             <label className="flex items-start gap-2 cursor-pointer pt-2">
               <input
