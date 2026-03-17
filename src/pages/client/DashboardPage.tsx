@@ -90,10 +90,9 @@ export default function DashboardPage() {
   const [isEditing, setIsEditing] = useState(false)
   const [savingPrompt, setSavingPrompt] = useState(false)
 
-  // Límite de palabras por plan (PRO = 160, VIP+ = ilimitado)
-  const PROMPT_WORD_LIMIT = currentPlan === 'pro' ? 160 : Infinity
-  const wordCount = aiPromptDraft.trim() ? aiPromptDraft.trim().split(/\s+/).length : 0
-  const isOverLimit = wordCount > PROMPT_WORD_LIMIT
+  // PRO: solo lectura (controlado por superadmin). VIP+: editable sin límites.
+  const isProPlan = currentPlan === 'pro'
+  const canEditPrompt = !isProPlan // VIP, Ultra pueden editar
 
   useEffect(() => {
     setLoading(true)
@@ -132,10 +131,7 @@ export default function DashboardPage() {
   }
 
   const handleSavePrompt = async () => {
-    if (isOverLimit) {
-      showToast('error', `El prompt supera el límite de ${PROMPT_WORD_LIMIT} palabras para tu plan. Reducí el texto o mejorá tu plan.`)
-      return
-    }
+    if (!canEditPrompt) return
     setSavingPrompt(true)
     try {
       const updatedMetadata = { ...(tenant?.metadata || {}), ai_prompt: aiPromptDraft }
@@ -359,63 +355,84 @@ export default function DashboardPage() {
             <Sparkles className="w-5 h-5 text-indigo-500" />
             Asistente de Ventas IA
           </h2>
-          {!isEditing ? (
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={handleEditStart}
-              className="flex items-center gap-2 text-xs font-bold"
-            >
-              <Pencil className="w-3.5 h-3.5" /> Editar
-            </Button>
-          ) : (
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handleRegenerate}
-                title="Regenerar plantilla desde datos de la tienda"
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-500 hover:text-indigo-600 border border-slate-200 hover:border-indigo-200 rounded-lg transition-all"
-              >
-                <RefreshCw className="w-3 h-3" /> Regenerar
-              </button>
-              <button
-                onClick={handleEditCancel}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-500 hover:text-red-600 border border-slate-200 hover:border-red-200 rounded-lg transition-all"
-              >
-                <X className="w-3 h-3" /> Cancelar
-              </button>
+          {canEditPrompt && (
+            !isEditing ? (
               <Button
                 size="sm"
-                onClick={handleSavePrompt}
-                loading={savingPrompt}
-                disabled={isOverLimit}
-                className={`flex items-center gap-1.5 text-white text-xs font-black uppercase tracking-widest px-4 py-1.5 rounded-lg ${isOverLimit ? 'bg-slate-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700'}`}
+                variant="secondary"
+                onClick={handleEditStart}
+                className="flex items-center gap-2 text-xs font-bold"
               >
-                <Save className="w-3 h-3" /> Guardar
+                <Pencil className="w-3.5 h-3.5" /> Editar
               </Button>
-            </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleRegenerate}
+                  title="Regenerar plantilla desde datos de la tienda"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-500 hover:text-indigo-600 border border-slate-200 hover:border-indigo-200 rounded-lg transition-all"
+                >
+                  <RefreshCw className="w-3 h-3" /> Regenerar
+                </button>
+                <button
+                  onClick={handleEditCancel}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-500 hover:text-red-600 border border-slate-200 hover:border-red-200 rounded-lg transition-all"
+                >
+                  <X className="w-3 h-3" /> Cancelar
+                </button>
+                <Button
+                  size="sm"
+                  onClick={handleSavePrompt}
+                  loading={savingPrompt}
+                  className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black uppercase tracking-widest px-4 py-1.5 rounded-lg"
+                >
+                  <Save className="w-3 h-3" /> Guardar
+                </Button>
+              </div>
+            )
           )}
         </div>
 
-        {currentPlan === 'pro' && (
+        {/* PRO: Solo lectura + info de restricciones */}
+        {isProPlan && (
           <div className="flex items-start gap-3 p-4 bg-amber-50/80 border border-amber-100 rounded-xl">
             <Zap className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
             <div className="space-y-1">
-              <p className="text-[11px] font-bold text-amber-700">Limitaciones del plan PRO</p>
+              <p className="text-[11px] font-bold text-amber-700">Plan PRO — Asistente gestionado</p>
               <ul className="text-[10px] text-amber-600 space-y-0.5 font-medium">
-                <li>Máximo {PROMPT_WORD_LIMIT} palabras en las instrucciones</li>
+                <li>Máximo 160 palabras en las instrucciones</li>
                 <li>1 recomendación de producto por respuesta</li>
                 <li>Sin personalización profunda ni argumentos de venta múltiples</li>
               </ul>
               <p className="text-[10px] text-amber-500">
+                Las instrucciones son configuradas por nuestro equipo.{' '}
                 <Link to="/subscription" className="underline font-bold hover:text-amber-700">Mejorá a VIP</Link>{' '}
-                para desbloquear respuestas ilimitadas, personalidad del bot, FAQs y WhatsApp.
+                para editar libremente y sin límites.
               </p>
             </div>
           </div>
         )}
 
         <Card className="p-5">
-          {!isEditing ? (
+          {/* PRO: solo lectura */}
+          {isProPlan && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                  Instrucciones del asistente
+                </p>
+                <span className="text-[9px] bg-slate-100 text-slate-500 font-black px-2 py-0.5 rounded-full uppercase tracking-widest">
+                  Solo lectura
+                </span>
+              </div>
+              <pre className="text-sm text-slate-600 whitespace-pre-wrap font-sans leading-relaxed bg-slate-50 rounded-xl p-4 border border-slate-100 max-h-48 overflow-y-auto">
+                {aiPrompt || 'Tu asistente aún no fue configurado. Nuestro equipo lo activará pronto.'}
+              </pre>
+            </div>
+          )}
+
+          {/* VIP+: editable sin límites */}
+          {canEditPrompt && !isEditing && (
             <div className="space-y-2">
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
                 Instrucciones actuales del asistente
@@ -424,49 +441,27 @@ export default function DashboardPage() {
                 {aiPrompt || 'Sin configurar aún.'}
               </pre>
             </div>
-          ) : (
+          )}
+
+          {canEditPrompt && isEditing && (
             <div className="space-y-3">
               <div className="flex items-center gap-2">
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
                   Editando instrucciones
                 </p>
                 <span className="text-[9px] bg-indigo-100 text-indigo-600 font-black px-2 py-0.5 rounded-full uppercase tracking-widest">
-                  Plantilla auto-generada con tus datos
+                  Sin límite de palabras
                 </span>
               </div>
               <textarea
                 value={aiPromptDraft}
                 onChange={(e) => setAiPromptDraft(e.target.value)}
                 rows={10}
-                className={`w-full px-4 py-3 rounded-xl bg-slate-50 border focus:bg-white text-slate-700 text-sm font-mono leading-relaxed transition-all outline-none resize-y ${isOverLimit ? 'border-red-400 focus:border-red-500' : 'border-slate-200 focus:border-indigo-500'}`}
+                className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-500 focus:bg-white text-slate-700 text-sm font-mono leading-relaxed transition-all outline-none resize-y"
               />
-              <div className="flex items-center justify-between">
-                <p className="text-[10px] text-slate-400">
-                  Este texto define cómo responde el asistente en tu tienda online. Podés ajustarlo libremente: agregar productos destacados, restricciones, promociones, horarios especiales, etc.
-                </p>
-                {PROMPT_WORD_LIMIT !== Infinity && (
-                  <div className="flex items-center gap-2 flex-shrink-0 ml-4">
-                    <span className={`text-[11px] font-bold tabular-nums ${isOverLimit ? 'text-red-500' : wordCount > PROMPT_WORD_LIMIT * 0.85 ? 'text-amber-500' : 'text-slate-400'}`}>
-                      {wordCount}/{PROMPT_WORD_LIMIT} palabras
-                    </span>
-                    {isOverLimit && (
-                      <span className="text-[9px] bg-red-50 text-red-600 font-black px-2 py-0.5 rounded-full uppercase tracking-widest">
-                        Límite superado
-                      </span>
-                    )}
-                  </div>
-                )}
-              </div>
-              {isOverLimit && (
-                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-100 rounded-xl">
-                  <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0" />
-                  <p className="text-[11px] text-red-600 font-medium">
-                    Tu plan <span className="font-black uppercase">PRO</span> permite hasta {PROMPT_WORD_LIMIT} palabras. Reducí el texto o{' '}
-                    <Link to="/subscription" className="underline font-bold hover:text-red-700">mejorá a VIP</Link>{' '}
-                    para instrucciones ilimitadas.
-                  </p>
-                </div>
-              )}
+              <p className="text-[10px] text-slate-400">
+                Este texto define cómo responde el asistente en tu tienda online. Podés ajustarlo libremente: agregar productos destacados, restricciones, promociones, horarios especiales, etc.
+              </p>
             </div>
           )}
         </Card>
