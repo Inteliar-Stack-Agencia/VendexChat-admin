@@ -80,6 +80,7 @@ const modules = [
 
 export default function DashboardPage() {
   const { subscription, selectedStoreId } = useAuth()
+  const currentPlan = subscription?.plan_type || 'free'
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [tenant, setTenant] = useState<Tenant | null>(null)
   const [loading, setLoading] = useState(true)
@@ -152,7 +153,6 @@ export default function DashboardPage() {
   }
 
   const storefrontUrl = `${import.meta.env.VITE_STOREFRONT_URL}/${tenant?.slug}`
-  const currentPlan = subscription?.plan_type || 'free'
   const isTrial = subscription?.status === 'trial'
 
   // Calcular días restantes de prueba
