@@ -344,6 +344,9 @@ function BotConfigPageInner() {
                                     productos destacar, precios especiales, promociones, horarios, etc.
                                 </div>
                             </div>
+                            <span className="text-[9px] bg-emerald-100 text-emerald-600 font-black px-2 py-0.5 rounded-full uppercase tracking-widest ml-auto">
+                                Sin límite de palabras
+                            </span>
                         </div>
                         <textarea
                             value={aiPrompt}
@@ -352,9 +355,14 @@ function BotConfigPageInner() {
                             rows={5}
                             className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-500 focus:bg-white text-slate-700 font-medium transition-all outline-none text-sm resize-none"
                         />
-                        <p className="text-[10px] text-slate-400 font-medium">
-                            Estas instrucciones también se usan en el módulo AI Inteligencia.
-                        </p>
+                        <div className="flex items-center justify-between">
+                            <p className="text-[10px] text-slate-400 font-medium">
+                                Estas instrucciones también se usan en el módulo AI Inteligencia.
+                            </p>
+                            <span className="text-[11px] font-bold text-slate-400 tabular-nums">
+                                {aiPrompt.trim() ? aiPrompt.trim().split(/\s+/).length : 0} palabras
+                            </span>
+                        </div>
                     </Card>
                 </div>
             )}
