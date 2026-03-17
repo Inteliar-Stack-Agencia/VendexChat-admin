@@ -1,6 +1,6 @@
 import { useState, FormEvent, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Eye, EyeOff, Store } from 'lucide-react'
+import { Eye, EyeOff } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { Button, Input } from '../../components/common'
 import { showToast } from '../../components/common/Toast'
@@ -52,9 +52,7 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-emerald-600 rounded-2xl mb-4">
-            <Store className="w-8 h-8 text-white" />
-          </div>
+          <img src="/logo.png" alt="VENDExChat" className="inline-block w-16 h-16 rounded-2xl object-contain mb-4" />
           <h1 className="text-2xl font-bold text-gray-900">VENDExChat</h1>
           <p className="text-gray-500 mt-1">Panel de Administración</p>
         </div>
