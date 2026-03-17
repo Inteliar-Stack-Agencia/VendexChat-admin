@@ -79,7 +79,7 @@ const modules = [
 ]
 
 export default function DashboardPage() {
-  const { subscription, selectedStoreId } = useAuth()
+  const { subscription, selectedStoreId, isSuperadmin } = useAuth()
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [tenant, setTenant] = useState<Tenant | null>(null)
   const [loading, setLoading] = useState(true)
@@ -89,6 +89,11 @@ export default function DashboardPage() {
   const [aiPromptDraft, setAiPromptDraft] = useState('')
   const [isEditing, setIsEditing] = useState(false)
   const [savingPrompt, setSavingPrompt] = useState(false)
+
+  // Plan efectivo: para superadmins usar el plan del tenant (metadata), sino el de la suscripción
+  const currentPlan = (isSuperadmin
+    ? (tenant?.metadata?.plan_type as string | undefined)
+    : subscription?.plan_type) || 'free'
 
   // PRO: solo lectura (controlado por superadmin). VIP+: editable sin límites.
   const isProPlan = currentPlan === 'pro'
@@ -152,7 +157,6 @@ export default function DashboardPage() {
   }
 
   const storefrontUrl = `${import.meta.env.VITE_STOREFRONT_URL}/${tenant?.slug}`
-  const currentPlan = subscription?.plan_type || 'free'
   const isTrial = subscription?.status === 'trial'
 
   // Calcular días restantes de prueba
@@ -354,6 +358,11 @@ export default function DashboardPage() {
           <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
             <Sparkles className="w-5 h-5 text-indigo-500" />
             Asistente de Ventas IA
+            {isProPlan && (
+              <span className="text-[9px] bg-amber-100 text-amber-700 font-black px-2 py-0.5 rounded-full uppercase tracking-widest">
+                PRO
+              </span>
+            )}
           </h2>
           {canEditPrompt && (
             !isEditing ? (
