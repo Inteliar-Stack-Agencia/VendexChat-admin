@@ -25,8 +25,6 @@ const COUNTRIES = [
 export default function RegisterPage() {
   const [storeName, setStoreName] = useState('')
   const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
   const [slug, setSlug] = useState('')
   const [country, setCountry] = useState('Argentina')
   const [city, setCity] = useState('')
@@ -55,9 +53,6 @@ export default function RegisterPage() {
     const newErrors: Record<string, string> = {}
     if (!storeName.trim()) newErrors.storeName = 'El nombre de la tienda es obligatorio'
     if (!email) newErrors.email = 'El email es obligatorio'
-    if (!password) newErrors.password = 'La contraseña es obligatoria'
-    else if (password.length < 8) newErrors.password = 'Mínimo 8 caracteres'
-    if (password !== confirmPassword) newErrors.confirmPassword = 'Las contraseñas no coinciden'
     if (!slug.trim()) newErrors.slug = 'El slug es obligatorio'
     if (!country) newErrors.country = 'Debes seleccionar un país'
     if (!city.trim()) newErrors.city = 'La ciudad es obligatoria'
@@ -72,7 +67,7 @@ export default function RegisterPage() {
 
     setLoading(true)
     try {
-      await register({ store_name: storeName, email, password, slug, country, city })
+      await register({ store_name: storeName, email, slug, country, city })
       showToast('success', '¡Tienda creada exitosamente!')
       navigate('/dashboard')
     } catch (err) {
@@ -143,26 +138,6 @@ export default function RegisterPage() {
               onChange={(e) => setEmail(e.target.value)}
               error={errors.email}
               autoComplete="email"
-            />
-
-            <Input
-              label="Contraseña"
-              type="password"
-              placeholder="Mínimo 8 caracteres"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              error={errors.password}
-              autoComplete="new-password"
-            />
-
-            <Input
-              label="Confirmar contraseña"
-              type="password"
-              placeholder="Repetir contraseña"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              error={errors.confirmPassword}
-              autoComplete="new-password"
             />
 
             <label className="flex items-start gap-2 cursor-pointer pt-2">
