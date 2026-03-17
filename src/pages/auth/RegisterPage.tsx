@@ -1,6 +1,6 @@
 import { useState, FormEvent, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Globe, MapPin } from 'lucide-react'
+import { Globe, MapPin, Phone } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { Button, Input, Select } from '../../components/common'
 import { showToast } from '../../components/common/Toast'
@@ -28,6 +28,7 @@ export default function RegisterPage() {
   const [slug, setSlug] = useState('')
   const [country, setCountry] = useState('Argentina')
   const [city, setCity] = useState('')
+  const [phone, setPhone] = useState('')
   const [slugEdited, setSlugEdited] = useState(false)
   const [acceptTerms, setAcceptTerms] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -56,6 +57,7 @@ export default function RegisterPage() {
     if (!slug.trim()) newErrors.slug = 'El slug es obligatorio'
     if (!country) newErrors.country = 'Debes seleccionar un país'
     if (!city.trim()) newErrors.city = 'La ciudad es obligatoria'
+    if (!phone.trim()) newErrors.phone = 'El teléfono es obligatorio'
     if (!acceptTerms) newErrors.terms = 'Debes aceptar los términos y condiciones'
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
@@ -67,7 +69,7 @@ export default function RegisterPage() {
 
     setLoading(true)
     try {
-      await register({ store_name: storeName, email, slug, country, city })
+      await register({ store_name: storeName, email, slug, country, city, phone })
       showToast('success', '¡Tienda creada exitosamente!')
       navigate('/dashboard')
     } catch (err) {
@@ -129,6 +131,16 @@ export default function RegisterPage() {
                 error={errors.city}
               />
             </div>
+
+            <Input
+              label="Teléfono (WhatsApp)"
+              type="tel"
+              placeholder="Ej: +54 11 1234-5678"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              error={errors.phone}
+              autoComplete="tel"
+            />
 
             <Input
               label="Email"
