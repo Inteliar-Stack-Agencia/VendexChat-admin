@@ -46,9 +46,7 @@ export default function SASidebar({ isOpen, onClose }: SASidebarProps) {
             >
                 <div className="flex items-center justify-between h-20 px-6 border-b border-slate-100 shrink-0">
                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-100">
-                            <Shield className="w-6 h-6 text-white" />
-                        </div>
+                        <img src="/logo.png" alt="VENDExChat" className="w-10 h-10 rounded-xl object-contain shadow-lg shadow-indigo-100" />
                         <div>
                             <span className="block font-bold text-slate-900 leading-none">VENDEx</span>
                             <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest">Superadmin</span>
