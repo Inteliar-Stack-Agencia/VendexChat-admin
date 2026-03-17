@@ -90,6 +90,11 @@ export default function DashboardPage() {
   const [isEditing, setIsEditing] = useState(false)
   const [savingPrompt, setSavingPrompt] = useState(false)
 
+  // Límite de palabras por plan (PRO = 150, VIP+ = ilimitado)
+  const PROMPT_WORD_LIMIT = currentPlan === 'pro' ? 150 : Infinity
+  const wordCount = aiPromptDraft.trim() ? aiPromptDraft.trim().split(/\s+/).length : 0
+  const isOverLimit = wordCount > PROMPT_WORD_LIMIT
+
   useEffect(() => {
     setLoading(true)
     Promise.all([
@@ -127,6 +132,10 @@ export default function DashboardPage() {
   }
 
   const handleSavePrompt = async () => {
+    if (isOverLimit) {
+      showToast('error', `El prompt supera el límite de ${PROMPT_WORD_LIMIT} palabras para tu plan. Reducí el texto o mejorá tu plan.`)
+      return
+    }
     setSavingPrompt(true)
     try {
       const updatedMetadata = { ...(tenant?.metadata || {}), ai_prompt: aiPromptDraft }
@@ -378,7 +387,8 @@ export default function DashboardPage() {
                 size="sm"
                 onClick={handleSavePrompt}
                 loading={savingPrompt}
-                className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black uppercase tracking-widest px-4 py-1.5 rounded-lg"
+                disabled={isOverLimit}
+                className={`flex items-center gap-1.5 text-white text-xs font-black uppercase tracking-widest px-4 py-1.5 rounded-lg ${isOverLimit ? 'bg-slate-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700'}`}
               >
                 <Save className="w-3 h-3" /> Guardar
               </Button>
@@ -410,11 +420,35 @@ export default function DashboardPage() {
                 value={aiPromptDraft}
                 onChange={(e) => setAiPromptDraft(e.target.value)}
                 rows={10}
-                className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-500 focus:bg-white text-slate-700 text-sm font-mono leading-relaxed transition-all outline-none resize-y"
+                className={`w-full px-4 py-3 rounded-xl bg-slate-50 border focus:bg-white text-slate-700 text-sm font-mono leading-relaxed transition-all outline-none resize-y ${isOverLimit ? 'border-red-400 focus:border-red-500' : 'border-slate-200 focus:border-indigo-500'}`}
               />
-              <p className="text-[10px] text-slate-400">
-                Este texto define cómo responde el asistente en tu tienda online. Podés ajustarlo libremente: agregar productos destacados, restricciones, promociones, horarios especiales, etc.
-              </p>
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] text-slate-400">
+                  Este texto define cómo responde el asistente en tu tienda online. Podés ajustarlo libremente: agregar productos destacados, restricciones, promociones, horarios especiales, etc.
+                </p>
+                {PROMPT_WORD_LIMIT !== Infinity && (
+                  <div className="flex items-center gap-2 flex-shrink-0 ml-4">
+                    <span className={`text-[11px] font-bold tabular-nums ${isOverLimit ? 'text-red-500' : wordCount > PROMPT_WORD_LIMIT * 0.85 ? 'text-amber-500' : 'text-slate-400'}`}>
+                      {wordCount}/{PROMPT_WORD_LIMIT} palabras
+                    </span>
+                    {isOverLimit && (
+                      <span className="text-[9px] bg-red-50 text-red-600 font-black px-2 py-0.5 rounded-full uppercase tracking-widest">
+                        Límite superado
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+              {isOverLimit && (
+                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-100 rounded-xl">
+                  <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0" />
+                  <p className="text-[11px] text-red-600 font-medium">
+                    Tu plan <span className="font-black uppercase">PRO</span> permite hasta {PROMPT_WORD_LIMIT} palabras. Reducí el texto o{' '}
+                    <Link to="/subscription" className="underline font-bold hover:text-red-700">mejorá a VIP</Link>{' '}
+                    para instrucciones ilimitadas.
+                  </p>
+                </div>
+              )}
             </div>
           )}
         </Card>
