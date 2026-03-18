@@ -1,6 +1,6 @@
 import { useState, FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { Store, ArrowLeft } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
 import { Button, Input } from '../../components/common'
 import { showToast } from '../../components/common/Toast'
 import { authApi } from '../../services/api'
@@ -34,9 +34,7 @@ export default function RecoverPasswordPage() {
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-emerald-600 rounded-2xl mb-4">
-            <Store className="w-8 h-8 text-white" />
-          </div>
+          <img src="/logo.png" alt="VENDExChat" className="inline-block w-16 h-16 rounded-2xl object-contain mb-4" />
           <h1 className="text-2xl font-bold text-gray-900">Acceder a mi cuenta</h1>
           <p className="text-gray-500 mt-1">Te enviaremos un enlace de acceso por email</p>
         </div>
