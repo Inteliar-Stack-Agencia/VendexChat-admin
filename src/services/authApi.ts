@@ -142,6 +142,14 @@ export const authApi = {
         if (authError) throw authError
         if (!authData.user) throw new Error('No se pudo crear el usuario')
 
+        // Enviar magic link para que el usuario pueda acceder a su cuenta
+        await supabase.auth.signInWithOtp({
+            email: data.email,
+            options: {
+                emailRedirectTo: `${window.location.origin}/dashboard`,
+            }
+        })
+
         return {
             token: authData.session?.access_token || '',
             user: authData.user as unknown as User
