@@ -183,7 +183,7 @@ export const superadminApi = {
         const { data: finalStore } = await supabase.from('stores').select('*').eq('id', storeId).single()
 
         const trialEndDate = new Date()
-        trialEndDate.setDate(trialEndDate.getDate() + 25)
+        trialEndDate.setDate(trialEndDate.getDate() + 15)
 
         await supabase.from('subscriptions').upsert({
             store_id: storeId,
