@@ -150,8 +150,11 @@ export const authApi = {
             }
         })
 
+        // Cerrar sesión para que el usuario no entre al dashboard sin verificar email
+        await supabase.auth.signOut()
+
         return {
-            token: authData.session?.access_token || '',
+            token: '',
             user: authData.user as unknown as User
         }
     },

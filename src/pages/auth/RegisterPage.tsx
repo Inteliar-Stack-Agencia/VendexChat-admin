@@ -45,8 +45,8 @@ export default function RegisterPage() {
     }
   }, [storeName, slugEdited])
 
-  // Redirigir si ya está autenticado
-  if (user) {
+  // Redirigir si ya está autenticado (pero NO si acabamos de registrar)
+  if (user && !registered) {
     navigate('/dashboard', { replace: true })
     return null
   }
