@@ -13,7 +13,6 @@ CREATE INDEX IF NOT EXISTS idx_products_store_active ON products(store_id, is_ac
 
 -- customers: filtered by store_id on every customer query
 CREATE INDEX IF NOT EXISTS idx_customers_store_id ON customers(store_id);
-CREATE INDEX IF NOT EXISTS idx_customers_store_archived ON customers(store_id, is_archived);
 
 -- categories: filtered by store_id
 CREATE INDEX IF NOT EXISTS idx_categories_store_id ON categories(store_id);
