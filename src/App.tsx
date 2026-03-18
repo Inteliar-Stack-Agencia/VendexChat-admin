@@ -14,7 +14,6 @@ import SuperadminLayout from './components/layout/SuperadminLayout'
 import LoginPage from './pages/auth/LoginPage'
 import RegisterPage from './pages/auth/RegisterPage'
 import RecoverPasswordPage from './pages/auth/RecoverPasswordPage'
-import ResetPasswordPage from './pages/auth/ResetPasswordPage'
 import SelectStorePage from './pages/auth/SelectStorePage'
 
 // Client pages (Lazy)
@@ -101,7 +100,6 @@ export default function App() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
             <Route path="/recover-password" element={<RecoverPasswordPage />} />
-            <Route path="/reset-password" element={<ResetPasswordPage />} />
             <Route path="/select-store" element={<SelectStorePage />} />
             <Route path="/legal/:type" element={<LegalPage />} />
 
