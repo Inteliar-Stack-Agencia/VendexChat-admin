@@ -568,14 +568,14 @@ export const superadminApi = {
         if (sourceSub) {
             await supabase
                 .from('subscriptions')
-                .insert({
+                .upsert({
                     store_id: newStore.id,
                     plan_type: sourceSub.plan_type,
                     status: sourceSub.status,
                     current_period_start: sourceSub.current_period_start,
                     current_period_end: sourceSub.current_period_end,
                     billing_cycle: sourceSub.billing_cycle,
-                })
+                }, { onConflict: 'store_id' })
         }
 
         return newStore
