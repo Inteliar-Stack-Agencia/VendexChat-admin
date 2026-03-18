@@ -1,11 +1,25 @@
 import { supabase } from '../supabaseClient'
+import { withTimeout } from '../utils/timeout'
 import type { User } from '@supabase/supabase-js'
 
 // Cache volátil en memoria para evitar llamadas redundantes de getUser en la misma sesión
 let _cachedUser: User | null = null
 let _lastSyncedStoreId: string | null = null
 
+// Timeout for the entire getStoreId resolution (covers all fallback steps)
+const GET_STORE_TIMEOUT = 8000
+
 export const getStoreId = async (): Promise<string> => {
+    return withTimeout(_getStoreIdInternal(), GET_STORE_TIMEOUT, 'getStoreId')
+}
+
+// Reset cached user when auth state changes (e.g., sign-out)
+export const resetCoreCache = () => {
+    _cachedUser = null
+    _lastSyncedStoreId = null
+}
+
+async function _getStoreIdInternal(): Promise<string> {
     // 1. Prioridad Absoluta: Selección Manual o Suplantación (Local Storage es Síncrono y Rápido)
     const impersonatedId = localStorage.getItem('vendexchat_impersonated_store')
     const selectedStoreId = localStorage.getItem('vendexchat_selected_store')

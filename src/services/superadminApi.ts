@@ -495,10 +495,12 @@ export const superadminApi = {
             plan_type: sourceStore.metadata?.plan_type || 'free'
         })
 
-        await supabase
+        // Copy store settings from source. DO NOT copy owner_id — if there's a
+        // UNIQUE constraint on owner_id the entire UPDATE silently fails, leaving
+        // the cloned store empty (no logo, no description, no schedule, etc.).
+        const { error: updateError } = await supabase
             .from('stores')
             .update({
-                owner_id: sourceStore.owner_id,
                 email: data.email || sourceStore.email,
                 logo_url: sourceStore.logo_url,
                 banner_url: sourceStore.banner_url,
@@ -510,9 +512,14 @@ export const superadminApi = {
                 physical_schedule: sourceStore.physical_schedule,
                 online_schedule: sourceStore.online_schedule,
                 delivery_cost: sourceStore.delivery_cost,
-                delivery_info: sourceStore.delivery_info
+                delivery_info: sourceStore.delivery_info,
+                is_active: true
             })
             .eq('id', newStore.id)
+
+        if (updateError) {
+            console.error('[cloneTenant] Failed to copy store settings:', updateError.message)
+        }
 
         const { data: categories } = await supabase
             .from('categories')
@@ -546,7 +553,8 @@ export const superadminApi = {
                             price: p.price,
                             stock: p.stock,
                             unlimited_stock: p.unlimited_stock,
-                            image_url: p.image_url,
+                            // Strip base64 images — they cause 76MB+ responses in get_catalog
+                            image_url: p.image_url?.startsWith('data:') ? null : p.image_url,
                             is_active: p.is_active,
                             is_featured: p.is_featured,
                             sort_order: p.sort_order
