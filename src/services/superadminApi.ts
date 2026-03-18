@@ -297,6 +297,8 @@ export const superadminApi = {
         const { data: storeStats } = await supabase
             .from('orders')
             .select('total, store_id, stores(name)')
+            .gte('created_at', sevenDaysAgo.toISOString())
+            .limit(5000)
 
         const storeMap: Record<string, StoreStatEntry> = {}
         storeStats?.forEach((o) => {
