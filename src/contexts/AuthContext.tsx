@@ -3,7 +3,12 @@ import { createContext, useContext, useState, useEffect, ReactNode, useCallback 
 import { User } from '../types'
 import { authApi, billingApi } from '../services/api'
 import { supabase } from '../supabaseClient'
+import { resetCoreCache } from '../services/coreApi'
+import { withTimeout } from '../utils/timeout'
 import { Subscription } from '../types'
+
+// Safety timeout: if auth init takes longer than this, stop loading to unblock the UI
+const AUTH_INIT_TIMEOUT = 10000
 
 interface AuthContextType {
   user: User | null
@@ -51,7 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           localStorage.setItem('vendexchat_token', authToken)
 
           try {
-            const res = await authApi.me()
+            const res = await withTimeout(authApi.me(), 8000, 'authApi.me')
             if (isMounted) setUser(res.user)
           } catch (meError) {
             console.error('[AuthContext] Profile load failed during init:', meError)
@@ -73,10 +78,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     initAuth()
 
+    // Safety net: if initAuth hangs (bad network, Supabase down), force loading=false
+    const safetyTimeout = setTimeout(() => {
+      if (isMounted) {
+        console.warn('[AuthContext] Safety timeout reached — forcing loading=false')
+        setLoading(false)
+      }
+    }, AUTH_INIT_TIMEOUT)
+
     const { data: { subscription: authListener } } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log('[AuthContext] Auth Event:', event, !!session)
 
       if (event === 'SIGNED_OUT') {
+        resetCoreCache()
         if (isMounted) {
           setUser(null)
           setToken(null)
@@ -96,6 +110,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return () => {
       isMounted = false
+      clearTimeout(safetyTimeout)
       authListener.unsubscribe()
     }
   }, []) // Solo al montar
@@ -131,6 +146,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const logout = useCallback(() => {
+    resetCoreCache()
     supabase.auth.signOut().catch((err) => { console.error('[AuthContext] signOut failed:', err) })
     localStorage.removeItem('vendexchat_token')
     localStorage.removeItem('vendexchat_selected_store')
@@ -143,7 +159,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refreshSubscription = useCallback(async () => {
     if (!user || user.role === 'superadmin') return
     try {
-      const sub = await billingApi.getCurrentSubscription()
+      const sub = await withTimeout(billingApi.getCurrentSubscription(), 8000, 'getCurrentSubscription')
       setSubscription(sub)
     } catch (err) {
       console.error('Error refreshing subscription:', err)
@@ -155,7 +171,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       refreshSubscription()
 
       // También cargar conteo de tiendas para la UI
-      authApi.getMyStores().then(stores => {
+      withTimeout(authApi.getMyStores(), 8000, 'getMyStores').then(stores => {
         setStoresCount(stores.length)
       }).catch(err => console.error('Error fetching stores count:', err))
     }
