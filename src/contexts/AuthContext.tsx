@@ -125,17 +125,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const register = useCallback(async (data: { store_name: string; email: string; slug: string; country: string; city: string; phone: string }) => {
-    const response = await authApi.register(data)
-    const payload = resolveAuthPayload(response)
-    const authToken = payload.token ?? payload.access_token
-
-    if (!authToken) {
-      throw new Error('Token no recibido')
-    }
-
-    localStorage.setItem('vendexchat_token', authToken)
-    setToken(authToken)
-    setUser(payload.user)
+    await authApi.register(data)
+    // No establecer sesión - el usuario debe verificar su email primero
+    // La sesión se creará cuando haga click en el magic link
   }, [])
 
   const logout = useCallback(() => {
