@@ -174,10 +174,11 @@ export const superadminApi = {
                 name: data.name,
                 slug: data.slug,
                 country: data.country,
-                is_active: data.is_active ?? true
+                is_active: data.is_active ?? true,
+                ...(authUserId ? { owner_id: authUserId } : {})
             }).select().single()
             if (insertError) throw insertError
-            return newStore as Tenant
+            storeId = newStore.id
         }
 
         const { data: finalStore } = await supabase.from('stores').select('*').eq('id', storeId).single()
