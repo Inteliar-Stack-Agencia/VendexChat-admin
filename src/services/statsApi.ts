@@ -94,6 +94,7 @@ export const statsApi = {
             .select('created_at, total, status, order_number, customer_name, metadata')
             .eq('store_id', storeId)
             .order('created_at', { ascending: false })
+            .limit(2000)
         query = applyDateRange(query, range, dateRange)
 
         const { data, error } = await query
@@ -108,6 +109,7 @@ export const statsApi = {
             .select('created_at, total, status, order_number, customer_name, customer_whatsapp, delivery_address, metadata')
             .eq('store_id', storeId)
             .order('created_at', { ascending: false })
+            .limit(2000)
         query = applyDateRange(query, range, dateRange)
 
         const { data, error } = await query
@@ -128,6 +130,7 @@ export const statsApi = {
             .select('created_at, total, status, order_number, customer_name, customer_whatsapp, delivery_address, metadata')
             .eq('store_id', storeId)
             .order('customer_name', { ascending: true })
+            .limit(2000)
         query = applyDateRange(query, range, dateRange)
 
         const { data, error } = await query
@@ -142,6 +145,7 @@ export const statsApi = {
             .select('id, created_at, total, status, order_number, customer_name, customer_whatsapp, delivery_address, metadata')
             .eq('store_id', storeId)
             .order('created_at', { ascending: false })
+            .limit(2000)
         ordersQuery = applyDateRange(ordersQuery, range, dateRange)
 
         const { data: orders, error: ordersError } = await ordersQuery

@@ -106,19 +106,25 @@ export const ordersApi = {
             if (itemsError) throw itemsError
         }
 
-        // Update stock for each product
-        for (const item of items) {
-            const { data: product } = await supabase
-                .from('products')
-                .select('stock, unlimited_stock')
-                .eq('id', item.product_id)
-                .single()
-            if (product && !product.unlimited_stock) {
-                await supabase
-                    .from('products')
-                    .update({ stock: Math.max(0, (product.stock || 0) - item.quantity) })
-                    .eq('id', item.product_id)
-            }
+        // Update stock: batch fetch all products, then update only those with limited stock
+        const productIds = items.map(i => i.product_id)
+        const { data: products } = await supabase
+            .from('products')
+            .select('id, stock, unlimited_stock')
+            .in('id', productIds)
+
+        if (products) {
+            await Promise.all(
+                products
+                    .filter(p => !p.unlimited_stock)
+                    .map(p => {
+                        const ordered = items.filter(i => i.product_id === p.id).reduce((acc, i) => acc + i.quantity, 0)
+                        return supabase
+                            .from('products')
+                            .update({ stock: Math.max(0, (p.stock || 0) - ordered) })
+                            .eq('id', p.id)
+                    })
+            )
         }
 
         return data as Order
