@@ -1,6 +1,6 @@
 import { useState, FormEvent, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Globe, MapPin, Phone } from 'lucide-react'
+import { Globe, MapPin, Phone, Mail } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { Button, Input, Select } from '../../components/common'
 import { showToast } from '../../components/common/Toast'
@@ -32,6 +32,7 @@ export default function RegisterPage() {
   const [slugEdited, setSlugEdited] = useState(false)
   const [acceptTerms, setAcceptTerms] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [registered, setRegistered] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
 
   const { register, user } = useAuth()
@@ -70,14 +71,40 @@ export default function RegisterPage() {
     setLoading(true)
     try {
       await register({ store_name: storeName, email, slug, country, city, phone })
-      showToast('success', '¡Tienda creada exitosamente!')
-      navigate('/dashboard')
+      setRegistered(true)
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error al crear la cuenta'
       showToast('error', message)
     } finally {
       setLoading(false)
     }
+  }
+
+  if (registered) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="w-full max-w-md">
+          <div className="text-center mb-8">
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-emerald-600 rounded-2xl mb-4">
+              <Mail className="w-8 h-8 text-white" />
+            </div>
+            <h1 className="text-2xl font-bold text-gray-900">¡Tienda creada!</h1>
+            <p className="text-gray-500 mt-1">Solo falta un paso más</p>
+          </div>
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 text-center">
+            <p className="text-gray-700 mb-2">
+              Te enviamos un email a <strong>{email}</strong>
+            </p>
+            <p className="text-sm text-gray-500 mb-6">
+              Hacé click en el enlace del email para establecer tu contraseña y acceder a tu tienda.
+            </p>
+            <Link to="/login" className="text-sm text-emerald-600 hover:text-emerald-700 font-medium">
+              Volver al login
+            </Link>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
