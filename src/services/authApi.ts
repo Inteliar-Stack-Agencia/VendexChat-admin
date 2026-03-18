@@ -183,17 +183,14 @@ export const authApi = {
     signOut: () => supabase.auth.signOut(),
 
     requestPasswordReset: async (email: string) => {
-        const { error } = await supabase.auth.resetPasswordForEmail(email, {
-            redirectTo: `${window.location.origin}/reset-password`,
+        const { error } = await supabase.auth.signInWithOtp({
+            email,
+            options: {
+                emailRedirectTo: `${window.location.origin}/dashboard`,
+            }
         })
         if (error) throw error
-        return { message: 'Se ha enviado un correo para restablecer tu contraseña' }
-    },
-
-    resetPassword: async (_token: string, password: string) => {
-        const { error } = await supabase.auth.updateUser({ password })
-        if (error) throw error
-        return { message: 'Contraseña actualizada correctamente' }
+        return { message: 'Se ha enviado un enlace de acceso a tu email' }
     },
 
     changePassword: async (_currentPassword: string, newPassword: string) => {

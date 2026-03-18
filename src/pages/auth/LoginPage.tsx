@@ -111,7 +111,7 @@ export default function LoginPage() {
               </label>
 
               <Link to="/recover-password" className="text-sm text-emerald-600 hover:text-emerald-700">
-                ¿Olvidaste tu contraseña?
+                Acceder con enlace por email
               </Link>
             </div>
 
