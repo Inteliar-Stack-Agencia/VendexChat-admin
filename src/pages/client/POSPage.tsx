@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import {
     Search, X, Plus, Minus, Trash2, ShoppingCart, Receipt,
     CreditCard, Banknote, Smartphone, Printer, CheckCircle2,
-    Package, RefreshCw, User, ChevronDown,
+    Package, RefreshCw, User,
 } from 'lucide-react'
 import { productsApi } from '../../services/productsApi'
 import { categoriesApi } from '../../services/categoriesApi'
@@ -277,12 +277,11 @@ export default function POSPage() {
                 {/* Product Grid */}
                 <div className="flex-1 overflow-y-auto p-4">
                     {loading ? (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-2">
                             {Array.from({ length: 12 }).map((_, i) => (
-                                <div key={i} className="bg-white rounded-xl p-3 animate-pulse">
-                                    <div className="w-full aspect-square bg-gray-200 rounded-lg mb-2" />
-                                    <div className="h-3 bg-gray-200 rounded w-3/4 mb-1" />
-                                    <div className="h-3 bg-gray-200 rounded w-1/2" />
+                                <div key={i} className="bg-white rounded-xl px-3 py-2.5 animate-pulse">
+                                    <div className="h-3 bg-gray-200 rounded w-3/4 mb-2" />
+                                    <div className="h-4 bg-gray-200 rounded w-1/2" />
                                 </div>
                             ))}
                         </div>
@@ -292,7 +291,7 @@ export default function POSPage() {
                             <p className="text-sm font-medium">No se encontraron productos</p>
                         </div>
                     ) : (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-2">
                             {filtered.map(product => {
                                 const outOfStock = isOutOfStock(product)
                                 const inCart = cart.find(item => item.product.id === product.id)
@@ -301,48 +300,29 @@ export default function POSPage() {
                                         key={product.id}
                                         onClick={() => !outOfStock && addToCart(product)}
                                         disabled={outOfStock}
-                                        className={`relative bg-white rounded-xl p-2.5 border-2 transition-all text-left group ${
+                                        className={`relative bg-white rounded-xl px-3 py-2.5 border-2 transition-all text-left ${
                                             inCart
                                                 ? 'border-emerald-400 shadow-lg shadow-emerald-100'
                                                 : 'border-transparent hover:border-emerald-200 hover:shadow-md'
                                         } ${outOfStock ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer active:scale-95'}`}
                                     >
-                                        {/* Image */}
-                                        <div className="w-full aspect-square bg-gray-50 rounded-lg overflow-hidden mb-2 relative">
-                                            {product.image_url ? (
-                                                <img
-                                                    src={product.image_url}
-                                                    alt={product.name}
-                                                    className="w-full h-full object-cover"
-                                                    loading="lazy"
-                                                />
-                                            ) : (
-                                                <div className="w-full h-full flex items-center justify-center text-gray-300">
-                                                    <Package className="w-8 h-8" />
-                                                </div>
-                                            )}
-                                            {outOfStock && (
-                                                <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                                                    <span className="text-[10px] font-black text-white bg-red-500 px-2 py-1 rounded-full uppercase">
-                                                        Sin stock
-                                                    </span>
-                                                </div>
-                                            )}
-                                            {inCart && (
-                                                <div className="absolute top-1.5 right-1.5 w-6 h-6 bg-emerald-500 rounded-full flex items-center justify-center text-white text-[10px] font-black shadow-lg">
-                                                    {inCart.quantity}
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        {/* Info */}
-                                        <p className="text-[11px] font-bold text-gray-800 leading-tight line-clamp-2 mb-1">
+                                        {inCart && (
+                                            <div className="absolute top-1.5 right-1.5 w-5 h-5 bg-emerald-500 rounded-full flex items-center justify-center text-white text-[10px] font-black shadow-lg">
+                                                {inCart.quantity}
+                                            </div>
+                                        )}
+                                        <p className="text-xs font-bold text-gray-800 leading-tight line-clamp-2 mb-1 pr-5">
                                             {product.name}
                                         </p>
                                         <p className="text-sm font-black text-emerald-600">
                                             {formatPrice(product.price)}
                                         </p>
-                                        {!product.unlimited_stock && (
+                                        {outOfStock && (
+                                            <span className="text-[9px] font-black text-red-500 uppercase">
+                                                Sin stock
+                                            </span>
+                                        )}
+                                        {!outOfStock && !product.unlimited_stock && (
                                             <p className={`text-[9px] font-semibold mt-0.5 ${
                                                 (product.stock || 0) <= 5 ? 'text-amber-500' : 'text-gray-400'
                                             }`}>
@@ -397,17 +377,6 @@ export default function POSPage() {
                         <div className="divide-y">
                             {cart.map(item => (
                                 <div key={item.product.id} className="px-4 py-3 flex items-center gap-3">
-                                    {/* Thumbnail */}
-                                    <div className="w-12 h-12 bg-gray-50 rounded-lg overflow-hidden shrink-0">
-                                        {item.product.image_url ? (
-                                            <img src={item.product.image_url} alt="" className="w-full h-full object-cover" />
-                                        ) : (
-                                            <div className="w-full h-full flex items-center justify-center text-gray-300">
-                                                <Package className="w-5 h-5" />
-                                            </div>
-                                        )}
-                                    </div>
-
                                     {/* Info */}
                                     <div className="flex-1 min-w-0">
                                         <p className="text-xs font-bold text-gray-800 truncate">{item.product.name}</p>
