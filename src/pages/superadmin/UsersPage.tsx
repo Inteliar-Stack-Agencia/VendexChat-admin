@@ -1,6 +1,6 @@
 import { useState, useEffect, FormEvent } from 'react'
-import { Plus, Pencil, Users } from 'lucide-react'
-import { Card, Button, Input, Select, Modal, Badge, LoadingSpinner, EmptyState } from '../../components/common'
+import { Plus, Pencil, Trash2, Users } from 'lucide-react'
+import { Card, Button, Input, Select, Modal, Badge, LoadingSpinner, EmptyState, ConfirmDialog } from '../../components/common'
 import { showToast } from '../../components/common/Toast'
 import { superadminApi } from '../../services/api'
 import { SuperadminUser, Tenant } from '../../types'
@@ -13,6 +13,8 @@ export default function UsersPage() {
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<SuperadminUser | null>(null)
   const [saving, setSaving] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<SuperadminUser | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   // Form fields
   const [formEmail, setFormEmail] = useState('')
@@ -104,6 +106,22 @@ export default function UsersPage() {
     }
   }
 
+  const handleDelete = async () => {
+    if (!deleteTarget) return
+    setDeleting(true)
+    try {
+      await superadminApi.deleteUser(deleteTarget.id)
+      showToast('success', 'Usuario eliminado')
+      setDeleteTarget(null)
+      loadData()
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Error al eliminar'
+      showToast('error', msg)
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -152,9 +170,12 @@ export default function UsersPage() {
                     </td>
                     <td className="px-4 py-3 text-gray-500 hidden md:table-cell">{formatShortDate(user.created_at)}</td>
                     <td className="px-4 py-3">
-                      <div className="flex justify-end">
+                      <div className="flex justify-end gap-1">
                         <button onClick={() => openEdit(user)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500">
                           <Pencil className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => setDeleteTarget(user)} className="p-1.5 rounded-lg hover:bg-red-50 text-red-400 hover:text-red-600">
+                          <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
                     </td>
@@ -201,6 +222,16 @@ export default function UsersPage() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDialog
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDelete}
+        title="Eliminar usuario"
+        message={`¿Seguro que querés eliminar a ${deleteTarget?.email}? Esta acción eliminará el perfil y la cuenta de acceso. No se puede deshacer.`}
+        confirmText="Eliminar"
+        loading={deleting}
+      />
     </div>
   )
 }

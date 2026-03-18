@@ -228,6 +228,23 @@ export const superadminApi = {
     deleteUser: async (id: string | number) => {
         const { error } = await supabase.from('profiles').delete().eq('id', id)
         if (error) throw error
+
+        // Also remove the Supabase Auth user so they can't keep logging in
+        try {
+            const { data: { session } } = await supabase.auth.getSession()
+            if (session?.access_token) {
+                await fetch('/api/delete-auth-user', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${session.access_token}`
+                    },
+                    body: JSON.stringify({ userId: String(id) })
+                })
+            }
+        } catch (e) {
+            console.warn('No se pudo eliminar el usuario de Auth (continuando):', e)
+        }
     },
 
     listGlobalOrders: async (params?: { page?: number; limit?: number }) => {
