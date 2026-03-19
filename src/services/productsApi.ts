@@ -2,6 +2,7 @@ import { supabase } from '../supabaseClient'
 import { getStoreId } from './coreApi'
 import type { Product, ProductFormData } from '../types'
 import { normalizeProductData } from '../utils/helpers'
+import { storageApi } from './storageApi'
 
 export const productsApi = {
     list: async (params?: { page?: number; limit?: number; search?: string; category_id?: number | string }) => {
@@ -109,18 +110,10 @@ export const productsApi = {
 
     uploadProductImage: async (productId: string, file: File) => {
         const fileExt = file.name.split('.').pop()
-        const fileName = `${productId}-${Math.random()}.${fileExt}`
+        const fileName = `${productId}-${Math.random().toString(36).slice(2)}.${fileExt}`
         const filePath = `products/${fileName}`
 
-        const { error: uploadError } = await supabase.storage
-            .from('product-images')
-            .upload(filePath, file)
-
-        if (uploadError) throw uploadError
-
-        const { data: { publicUrl } } = supabase.storage
-            .from('product-images')
-            .getPublicUrl(filePath)
+        const publicUrl = await storageApi.uploadImage(file, 'product-images', filePath, 'product')
 
         await productsApi.update(productId, { image_url: publicUrl })
         return publicUrl

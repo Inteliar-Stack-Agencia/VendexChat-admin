@@ -53,7 +53,7 @@ export default function SlidersPage() {
             const tenant = await tenantApi.getMe()
             const extension = file.name.split('.').pop()
             const path = `${tenant.id}/sliders/${sliderId}_${Date.now()}.${extension}`
-            const url = await storageApi.uploadImage(file, 'stores', path)
+            const url = await storageApi.uploadImage(file, 'stores', path, 'slider')
 
             const newSliders = sliders.map(s => s.id === sliderId ? { ...s, url } : s)
             setSliders(newSliders)

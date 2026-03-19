@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Search, X, Loader2, Image as ImageIcon, AlertCircle, Camera, ExternalLink } from 'lucide-react'
 import { Button, Card } from '../common'
-import { supabase } from '../../supabaseClient'
+import { storageApi } from '../../services/storageApi'
 
 interface GoogleImageItem {
   link: string
@@ -105,25 +105,14 @@ function getGoogleSetupHints(rawMessage: string): GoogleSearchErrorDetails {
   return { setupHints }
 }
 
-async function uploadImageToSupabase(imageUrl: string): Promise<string> {
+async function uploadImageFromUrl(imageUrl: string): Promise<string> {
   const res = await fetch(imageUrl)
   if (!res.ok) throw new Error('No se pudo descargar la imagen')
   const blob = await res.blob()
-  const ext = blob.type.split('/')[1]?.split(';')[0] || 'jpg'
-  const fileName = `external-${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+  const fileName = `external-${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`
   const filePath = `products/${fileName}`
 
-  const { error } = await supabase.storage
-    .from('product-images')
-    .upload(filePath, blob, { upsert: true, cacheControl: '3600' })
-
-  if (error) throw error
-
-  const { data: { publicUrl } } = supabase.storage
-    .from('product-images')
-    .getPublicUrl(filePath)
-
-  return publicUrl
+  return storageApi.uploadBlob(blob, 'product-images', filePath, 'product')
 }
 
 export default function PexelsImageSuggestions({
@@ -170,7 +159,7 @@ export default function PexelsImageSuggestions({
     if (uploadingId !== null) return
     setUploadingId(img.id)
     try {
-      const supabaseUrl = await uploadImageToSupabase(img.url)
+      const supabaseUrl = await uploadImageFromUrl(img.url)
       onSelect(supabaseUrl)
       onClose()
     } catch {

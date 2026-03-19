@@ -432,7 +432,7 @@ export default function SettingsPage() {
     try {
       const extension = file.name.split('.').pop()
       const path = `${tenant.id}/${type}_${Date.now()}.${extension}`
-      const url = await storageApi.uploadImage(file, 'stores', path)
+      const url = await storageApi.uploadImage(file, 'stores', path, type === 'logo' ? 'logo' : 'banner')
 
       if (isLogo) {
         setLogoUrl(url)
