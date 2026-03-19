@@ -28,8 +28,8 @@ function getSearchQuery(request: Request): string {
 }
 
 async function runGoogleSearch(query: string, env: Env) {
-  const key = env.GOOGLE_API_KEY || env.VITE_GOOGLE_API_KEY
-  const cx = env.GOOGLE_CX || env.VITE_GOOGLE_CX
+  const key = (env.GOOGLE_API_KEY || env.VITE_GOOGLE_API_KEY || '').trim()
+  const cx = (env.GOOGLE_CX || env.VITE_GOOGLE_CX || '').trim()
 
   if (!key || !cx) {
     return json({
