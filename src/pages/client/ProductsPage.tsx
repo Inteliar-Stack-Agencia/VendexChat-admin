@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Plus, Search, Pencil, Package, ArrowUp, ArrowDown, Eye, EyeOff, MinusCircle, Trash2, FolderInput, CheckSquare, Square, Check, Upload, Loader2, GripVertical, Save, X as CloseIcon, Camera } from 'lucide-react'
 import { Card, LoadingSpinner, EmptyState, Pagination, Button } from '../../components/common'
 import { productsApi, categoriesApi } from '../../services/api'
@@ -41,6 +41,7 @@ interface SortableRowProps {
   onImageUpload: (id: string, e: React.ChangeEvent<HTMLInputElement>) => void
   onSearchImage: (id: string, name: string) => void
   moveArrows: React.ReactNode
+  categoryFilter: string
 }
 
 function SortableProductRow({
@@ -54,7 +55,8 @@ function SortableProductRow({
   onUpdateStatus,
   onImageUpload,
   onSearchImage,
-  moveArrows
+  moveArrows,
+  categoryFilter
 }: SortableRowProps) {
   const {
     attributes,
@@ -174,7 +176,7 @@ function SortableProductRow({
             <Camera className="w-4 h-4" />
           </button>
           <Link
-            to={`/products/edit/${product.id}`}
+            to={`/products/edit/${product.id}${categoryFilter ? `?category=${categoryFilter}` : ''}`}
             className="inline-flex items-center justify-center p-3 rounded-xl bg-slate-50 text-slate-400 hover:bg-slate-900 hover:text-white transition-all shadow-sm"
           >
             <Pencil className="w-4 h-4" />
@@ -186,6 +188,8 @@ function SortableProductRow({
 }
 
 export default function ProductsPage() {
+  const location = useLocation()
+  const navigate = useNavigate()
   const [products, setProducts] = useState<Product[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
@@ -252,14 +256,19 @@ export default function ProductsPage() {
     initializedRef.current = false
     setProducts([])
     setLoading(true)
+    const urlCategory = new URLSearchParams(location.search).get('category') ?? ''
     categoriesApi.list().then(cats => {
       setCategories(cats)
-      const firstCatId = cats[0]?.id ?? ''
+      const preferredCatId = urlCategory && cats.some(c => String(c.id) === urlCategory)
+        ? urlCategory
+        : (cats[0]?.id ? String(cats[0].id) : '')
+      // Limpiar el param de la URL sin recargar la página
+      if (urlCategory) navigate('/products', { replace: true })
       initializedRef.current = true
       skipNextFilterEffect.current = true
-      setCategoryFilter(String(firstCatId))
-      // Cargamos productos de la primera categoría directamente
-      loadProductsOnly(String(firstCatId), 1)
+      setCategoryFilter(preferredCatId)
+      // Cargamos productos de la categoría preferida directamente
+      loadProductsOnly(preferredCatId, 1)
     }).catch(err => {
       console.error('Error cargando categorías:', err)
       setLoading(false)
@@ -681,6 +690,7 @@ export default function ProductsPage() {
                         onUpdateStatus={handleUpdateStatus}
                         onImageUpload={handleDirectImageUpload}
                         onSearchImage={(id, name) => setGoogleSearchProduct({ id, name })}
+                        categoryFilter={categoryFilter}
                         moveArrows={
                           <div className="flex flex-col items-center gap-1 group-hover:opacity-100 transition-opacity">
                             <button
