@@ -1,5 +1,5 @@
 import { useState, useEffect, FormEvent } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { ArrowLeft, Upload, X, Trash2, Search } from 'lucide-react'
 import { Button, Input, Select, Card, LoadingSpinner } from '../../components/common'
 import PexelsImageSuggestions from '../../components/products/PexelsImageSuggestions'
@@ -11,6 +11,8 @@ export default function ProductFormPage() {
   const { id } = useParams<{ id: string }>()
   const isEditing = !!id
   const navigate = useNavigate()
+  const location = useLocation()
+  const returnCategory = new URLSearchParams(location.search).get('category') ?? ''
 
   const [loading, setLoading] = useState(isEditing)
   const [saving, setSaving] = useState(false)
@@ -62,7 +64,7 @@ export default function ProductFormPage() {
         })
         .catch(() => {
           showToast('error', 'Error al cargar el producto')
-          navigate('/products')
+          navigate(returnCategory ? `/products?category=${returnCategory}` : '/products')
         })
         .finally(() => setLoading(false))
     }
@@ -143,7 +145,7 @@ export default function ProductFormPage() {
         }
       }
 
-      navigate('/products')
+      navigate(returnCategory ? `/products?category=${returnCategory}` : '/products')
     } catch (err: unknown) {
       console.error('Error al guardar producto:', err)
       const msg = err instanceof Error ? err.message : 'Error al guardar'
@@ -159,7 +161,7 @@ export default function ProductFormPage() {
     try {
       await productsApi.delete(id)
       showToast('success', 'Producto eliminado')
-      navigate('/products')
+      navigate(returnCategory ? `/products?category=${returnCategory}` : '/products')
     } catch (err) {
       showToast('error', 'Error al eliminar el producto')
     }
