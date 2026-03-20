@@ -44,7 +44,12 @@ async function translateToEnglish(text: string): Promise<string> {
   return text
 }
 
-async function searchGoogle(query: string): Promise<ImageResult[]> {
+interface SearchResult {
+  images: ImageResult[]
+  source: string
+}
+
+async function searchGoogle(query: string): Promise<SearchResult> {
   const res = await fetch('/api/google-image-search', {
     method: 'POST',
     headers: {
@@ -54,7 +59,7 @@ async function searchGoogle(query: string): Promise<ImageResult[]> {
   })
 
   if (!res.ok) {
-    let msg = `Google error ${res.status}`
+    let msg = `Error ${res.status}`
     try {
       const errData = await res.json()
       if (errData?.error) msg = errData.error
@@ -65,12 +70,20 @@ async function searchGoogle(query: string): Promise<ImageResult[]> {
   }
 
   const data = await res.json()
-  return ((data.items as GoogleImageItem[]) || []).map((item, i) => ({
+  const source = data.source || 'google'
+
+  if (data.error && (!data.items || data.items.length === 0)) {
+    throw new Error(data.error)
+  }
+
+  const images = ((data.items as GoogleImageItem[]) || []).map((item, i) => ({
     id: `g-${i}-${item.link}`,
     url: item.link,
     thumb: item.image?.thumbnailLink || item.link,
     credit: item.title || 'Google Images'
   }))
+
+  return { images, source }
 }
 
 function getGoogleSetupHints(rawMessage: string): GoogleSearchErrorDetails {
@@ -127,6 +140,7 @@ export default function PexelsImageSuggestions({
   const [query, setQuery] = useState(initialQuery)
   const [error, setError] = useState<string | null>(null)
   const [errorDetails, setErrorDetails] = useState<GoogleSearchErrorDetails | null>(null)
+  const [imageSource, setImageSource] = useState<string>('google')
 
   const search = async (term: string) => {
     if (!term.trim()) return
@@ -134,19 +148,21 @@ export default function PexelsImageSuggestions({
     setError(null)
     setErrorDetails(null)
     setImages([])
+    setImageSource('google')
 
     try {
       const englishTerm = await translateToEnglish(term.trim())
-      const results = await searchGoogle(englishTerm)
+      const result = await searchGoogle(englishTerm)
 
-      if (results.length === 0) {
-        throw new Error("No se encontraron imágenes en Google.")
+      if (result.images.length === 0) {
+        throw new Error("No se encontraron imágenes.")
       }
 
-      setImages(results)
+      setImages(result.images)
+      setImageSource(result.source)
     } catch (err: any) {
-      console.error("Google search error:", err);
-      const baseMessage = err.message || 'Error al buscar imágenes. Verificá tu conexión o las claves de API.'
+      console.error("Image search error:", err);
+      const baseMessage = err.message || 'Error al buscar imágenes. Verificá tu conexión.'
       const details = getGoogleSetupHints(baseMessage)
       setError(baseMessage)
       setErrorDetails(details)
@@ -335,7 +351,7 @@ export default function PexelsImageSuggestions({
         {/* Footer */}
         <div className="p-4 bg-slate-50 text-center">
           <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest flex items-center justify-center gap-2">
-            Fotos de <span className="text-blue-600 font-black">GOOGLE IMAGES</span>
+            Fotos de <span className="text-blue-600 font-black">{imageSource === 'duckduckgo' ? 'DUCKDUCKGO' : 'GOOGLE IMAGES'}</span>
             <span className="text-slate-300">·</span>
             Guardadas en tu tienda
           </p>
