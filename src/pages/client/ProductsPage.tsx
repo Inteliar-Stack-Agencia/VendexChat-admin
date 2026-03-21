@@ -131,7 +131,7 @@ function SortableProductRow({
           </div>
           <div>
             <p className="font-black text-slate-800 tracking-tight leading-none mb-1">{product.name}</p>
-            <p className="text-[10px] text-slate-400 line-clamp-1 mb-1">{product.description}</p>
+            <p className="text-[10px] text-slate-400 line-clamp-1 mb-1">{cleanAIDescription(product.description)}</p>
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest sm:hidden">{product.category_name || 'Sin Categoría'}</p>
           </div>
         </div>
@@ -185,6 +185,15 @@ function SortableProductRow({
       </td>
     </tr>
   )
+}
+
+const AI_PLACEHOLDER_KEYWORDS = ['procesado con ia de alta precisi', 'escaneado e identificado con ia']
+
+function cleanAIDescription(desc: string | null | undefined): string {
+  if (!desc) return ''
+  const normalized = desc.trim().toLowerCase()
+  if (AI_PLACEHOLDER_KEYWORDS.some(k => normalized.includes(k))) return ''
+  return desc
 }
 
 export default function ProductsPage() {

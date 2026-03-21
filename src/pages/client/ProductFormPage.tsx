@@ -7,6 +7,18 @@ import { showToast } from '../../components/common/Toast'
 import { productsApi, categoriesApi } from '../../services/api'
 import { Category, ProductFormData } from '../../types'
 
+const AI_PLACEHOLDER_DESCRIPTIONS = [
+  'procesado con ia de alta precisión',
+  'escaneado e identificado con ia',
+]
+
+function cleanDescription(desc: string | null): string {
+  if (!desc) return ''
+  const normalized = desc.trim().toLowerCase()
+  if (AI_PLACEHOLDER_DESCRIPTIONS.some(p => normalized.includes(p))) return ''
+  return desc
+}
+
 export default function ProductFormPage() {
   const { id } = useParams<{ id: string }>()
   const isEditing = !!id
@@ -51,7 +63,7 @@ export default function ProductFormPage() {
         .then((product) => {
           setForm({
             name: product.name,
-            description: product.description || '',
+            description: cleanDescription(product.description),
             price: product.price,
             stock: product.stock,
             unlimited_stock: product.unlimited_stock,
