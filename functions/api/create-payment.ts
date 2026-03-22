@@ -1,0 +1,123 @@
+interface Env {
+  MP_ACCESS_TOKEN: string
+  VITE_ADMIN_URL?: string
+  ADMIN_URL?: string
+}
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+}
+
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  })
+
+// Same plan prices as billingApi.ts — keep in sync
+const PLANS: Record<string, { name: string; price: number; annual_price: number }> = {
+  pro:  { name: 'VENDEx Premium (Pro)',    price: 13.99,  annual_price: 139.90 },
+  vip:  { name: 'VENDEx VIP (Business)',   price: 19.99,  annual_price: 199.90 },
+}
+
+async function getExchangeRate(token: string): Promise<number> {
+  const res = await fetch(
+    'https://api.mercadopago.com/currency_conversions/search?from=USD&to=ARS',
+    { headers: { Authorization: `Bearer ${token}` } }
+  )
+  if (!res.ok) throw new Error(`MP exchange rate API error: ${res.status}`)
+  const data = await res.json() as { ratio?: number }
+  if (!data.ratio) throw new Error('Tipo de cambio no disponible')
+  return data.ratio
+}
+
+export const onRequestOptions: PagesFunction = async () =>
+  new Response(null, { headers: corsHeaders })
+
+export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+  if (!env.MP_ACCESS_TOKEN) return json({ error: 'MP_ACCESS_TOKEN no configurado' }, 500)
+
+  let body: { plan_id?: string; billing_cycle?: string; store_id?: string; user_email?: string }
+  try {
+    body = await request.json()
+  } catch {
+    return json({ error: 'Body inválido' }, 400)
+  }
+
+  const { plan_id, billing_cycle, store_id, user_email } = body
+  if (!plan_id || !billing_cycle || !store_id) {
+    return json({ error: 'plan_id, billing_cycle y store_id son requeridos' }, 400)
+  }
+
+  const plan = PLANS[plan_id]
+  if (!plan) return json({ error: `Plan inválido: ${plan_id}` }, 400)
+
+  const priceUsd = billing_cycle === 'annual' ? plan.annual_price : plan.price
+
+  let exchangeRate: number
+  try {
+    exchangeRate = await getExchangeRate(env.MP_ACCESS_TOKEN)
+  } catch (err) {
+    return json({ error: `No se pudo obtener el tipo de cambio: ${(err as Error).message}` }, 502)
+  }
+
+  const priceArs = Math.round(priceUsd * exchangeRate)
+
+  const adminUrl = env.ADMIN_URL || env.VITE_ADMIN_URL || 'https://admin.vendexchat.app'
+  const notificationUrl = `${adminUrl}/api/mp-webhook`
+
+  const preference = {
+    items: [
+      {
+        id: `${plan_id}_${billing_cycle}`,
+        title: `${plan.name} - ${billing_cycle === 'annual' ? 'Anual' : 'Mensual'}`,
+        description: `Suscripción VENDEx ${plan.name}`,
+        quantity: 1,
+        currency_id: 'ARS',
+        unit_price: priceArs,
+      },
+    ],
+    payer: user_email ? { email: user_email } : undefined,
+    external_reference: `${store_id}|${plan_id}|${billing_cycle}`,
+    back_urls: {
+      success: `${adminUrl}/subscription/success`,
+      failure: `${adminUrl}/subscription/failure`,
+      pending: `${adminUrl}/subscription/pending`,
+    },
+    auto_return: 'approved',
+    notification_url: notificationUrl,
+    statement_descriptor: 'VENDExCHAT',
+    expires: false,
+  }
+
+  try {
+    const mpRes = await fetch('https://api.mercadopago.com/checkout/preferences', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${env.MP_ACCESS_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(preference),
+    })
+
+    if (!mpRes.ok) {
+      const errText = await mpRes.text()
+      return json({ error: `MP Preferences error: ${errText}` }, 502)
+    }
+
+    const mpData = await mpRes.json() as { id: string; init_point: string; sandbox_init_point: string }
+
+    return json({
+      init_point: mpData.init_point,
+      sandbox_init_point: mpData.sandbox_init_point,
+      preference_id: mpData.id,
+      price_usd: priceUsd,
+      price_ars: priceArs,
+      exchange_rate: exchangeRate,
+    })
+  } catch (err) {
+    return json({ error: (err as Error).message }, 500)
+  }
+}
