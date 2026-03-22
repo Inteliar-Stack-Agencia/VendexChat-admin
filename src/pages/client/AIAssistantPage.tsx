@@ -34,6 +34,7 @@ import FeatureGuard from '../../components/FeatureGuard'
 import { useAuth } from '../../contexts/AuthContext'
 import { callAI } from '../../services/aiService'
 import { supabase } from '../../supabaseClient'
+import { getStoreId } from '../../services/coreApi'
 
 interface Message {
     id: string
@@ -125,7 +126,10 @@ export default function AIAssistantPage() {
         }
         setTgConnecting(true)
         try {
-            const { data: { session } } = await supabase.auth.getSession()
+            const [{ data: { session } }, storeId] = await Promise.all([
+                supabase.auth.getSession(),
+                getStoreId(),
+            ])
             const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 
             const res = await fetch(`${supabaseUrl}/functions/v1/telegram-bot`, {
@@ -137,7 +141,7 @@ export default function AIAssistantPage() {
                 body: JSON.stringify({
                     action: 'setup-webhook',
                     botToken: tgToken.trim(),
-                    storeId: selectedStoreId,
+                    storeId,
                 }),
             })
 
