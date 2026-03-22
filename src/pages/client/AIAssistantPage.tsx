@@ -42,6 +42,21 @@ interface Message {
     content: string
 }
 
+interface AIAction {
+    type: 'update_order_status' | 'update_product_stock' | 'update_product_price' | 'update_product_active'
+    // order
+    order_id?: string
+    order_number?: string
+    new_status?: string
+    // product
+    product_id?: string
+    product_name?: string
+    new_stock?: number
+    new_price?: number
+    is_active?: boolean
+    reason?: string
+}
+
 interface StoreSnapshot {
     generatedAt: string
     stats: {
@@ -69,6 +84,13 @@ const QUICK_CHIPS = [
     'Dame un plan de acción para esta semana',
 ]
 
+const MANAGEMENT_CHIPS = [
+    'Completá todos los pedidos pendientes',
+    'Desactivá los productos sin stock',
+    'Subí un 10% el precio de los productos top',
+    'Mostrá todos los pedidos de hoy',
+]
+
 const DAYS_ES = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
 
 export default function AIAssistantPage() {
@@ -87,6 +109,8 @@ export default function AIAssistantPage() {
     const [isLoadingSnapshot, setIsLoadingSnapshot] = useState(true)
     const [chatOpen, setChatOpen] = useState(true)
     const chatContainerRef = useRef<HTMLDivElement>(null)
+    const [pendingActions, setPendingActions] = useState<AIAction[]>([])
+    const [executingActions, setExecutingActions] = useState(false)
 
     // Telegram config
     const [tgToken, setTgToken] = useState('')
@@ -293,6 +317,7 @@ export default function AIAssistantPage() {
                 },
                 recentOrders: recentOrdersRes.data.slice(0, 50).map(o => ({
                     id: o.id.slice(0, 8),
+                    fullId: o.id,
                     num: o.order_number,
                     cliente: o.customer_name,
                     empresa: (o as any).metadata?.company_name || null,
@@ -304,8 +329,9 @@ export default function AIAssistantPage() {
                 })),
                 topCustomers,
                 topProducts,
-                lowStockProducts: lowStockProducts.map(p => ({ nombre: p.name, stock: p.stock, precio: p.price })),
+                lowStockProducts: lowStockProducts.map(p => ({ id: p.id, nombre: p.name, stock: p.stock, precio: p.price })),
                 allProducts: productsRes.data.map(p => ({
+                    id: p.id,
                     nombre: p.name,
                     precio: p.price,
                     stock: p.unlimited_stock ? '∞' : p.stock,
@@ -395,10 +421,10 @@ ${snap.topCustomers.map((c, i) => `${i + 1}. ${c.name} | ${c.orders} pedidos | $
 ${snap.topProducts.map((p, i) => `${i + 1}. ${p.name} | ${p.qty} uds | ${formatPrice(p.revenue)}`).join('\n')}
 
 ═══ CATÁLOGO (${snap.allProducts.length} productos) ═══
-${snap.allProducts.map(p => `- ${p.nombre} | ${formatPrice(p.precio)} | Stock: ${p.stock} | ${p.activo ? 'Activo' : 'Oculto'}`).join('\n')}
+${snap.allProducts.map(p => `- [ID:${p.id}] ${p.nombre} | ${formatPrice(p.precio)} | Stock: ${p.stock} | ${p.activo ? 'Activo' : 'Oculto'}`).join('\n')}
 
 ═══ STOCK BAJO (≤5) ═══
-${snap.lowStockProducts.length > 0 ? snap.lowStockProducts.map(p => `⚠️ ${p.nombre} | Stock: ${p.stock}`).join('\n') : '(Ninguno)'}
+${snap.lowStockProducts.length > 0 ? snap.lowStockProducts.map(p => `⚠️ [ID:${p.id}] ${p.nombre} | Stock: ${p.stock}`).join('\n') : '(Ninguno)'}
 
 ═══ TUS CAPACIDADES ═══
 1. PREDICCIÓN DE DEMANDA: Basándote en patrones de días/horarios y tendencias, predecí qué productos van a tener más demanda
@@ -408,6 +434,29 @@ ${snap.lowStockProducts.length > 0 ? snap.lowStockProducts.map(p => `⚠️ ${p.
 5. SEGMENTACIÓN: Analizá comportamiento de clientes y recomendá estrategias
 6. FACTORES EXTERNOS: Considerá día de la semana, momento del mes (quincena/fin de mes), estacionalidad, y contexto general del mercado argentino
 7. PLANES DE ACCIÓN: Generá planes concretos con pasos específicos
+8. GESTIÓN DIRECTA: Podés ejecutar cambios reales sobre pedidos y productos
+
+═══ GESTIÓN DIRECTA — FORMATO DE ACCIONES ═══
+Cuando el usuario te pida EJECUTAR cambios (no solo analizar), incluí al final de tu respuesta los comandos de acción. Usá este formato EXACTO, uno por línea:
+
+Para cambiar estado de un pedido (estados válidos: pending, confirmed, completed, cancelled):
+[[ACTION:{"type":"update_order_status","order_id":"ID_COMPLETO_DEL_PEDIDO","order_number":"NUM","new_status":"completed","reason":"descripción"}]]
+
+Para actualizar stock de un producto:
+[[ACTION:{"type":"update_product_stock","product_id":"ID_DEL_PRODUCTO","product_name":"NOMBRE","new_stock":10}]]
+
+Para cambiar precio de un producto:
+[[ACTION:{"type":"update_product_price","product_id":"ID_DEL_PRODUCTO","product_name":"NOMBRE","new_price":999.99}]]
+
+Para activar/desactivar un producto:
+[[ACTION:{"type":"update_product_active","product_id":"ID_DEL_PRODUCTO","product_name":"NOMBRE","is_active":true}]]
+
+REGLAS IMPORTANTES:
+- Usá los IDs exactos que aparecen en [ID:...] del catálogo o los fullId de pedidos recientes
+- Solo incluí acciones cuando el usuario EXPLÍCITAMENTE pida realizar cambios
+- Para análisis o recomendaciones NO incluyas acciones
+- El usuario verá una confirmación antes de que se ejecute cualquier acción
+- Podés incluir múltiples acciones en una misma respuesta
 
 ═══ INSTRUCCIONES ═══
 - Respondé en español argentino, directo y accionable
@@ -416,6 +465,61 @@ ${snap.lowStockProducts.length > 0 ? snap.lowStockProducts.map(p => `⚠️ ${p.
 - Sé proactivo: si ves algo importante, mencionálo
 - Usá emojis para hacer los reportes más visuales
 - Cuando hagas predicciones, aclará que están basadas en los patrones detectados`
+    }
+
+    // ─── Parsear acciones del texto de la IA ─────────────────────────────────
+    const parseActions = (text: string): { cleanText: string; actions: AIAction[] } => {
+        const actionRegex = /\[\[ACTION:(.*?)\]\]/g
+        const actions: AIAction[] = []
+        let match
+        while ((match = actionRegex.exec(text)) !== null) {
+            try {
+                actions.push(JSON.parse(match[1]) as AIAction)
+            } catch { /* ignore malformed */ }
+        }
+        const cleanText = text.replace(/\[\[ACTION:.*?\]\]/g, '').replace(/\n{3,}/g, '\n\n').trim()
+        return { cleanText, actions }
+    }
+
+    // ─── Ejecutar acciones confirmadas ───────────────────────────────────────
+    const executeActions = async () => {
+        setExecutingActions(true)
+        let successCount = 0
+        let errorCount = 0
+        for (const action of pendingActions) {
+            try {
+                if (action.type === 'update_order_status' && action.order_id && action.new_status) {
+                    await ordersApi.updateStatus(action.order_id, action.new_status as any)
+                    successCount++
+                } else if (action.type === 'update_product_stock' && action.product_id && action.new_stock !== undefined) {
+                    await productsApi.update(action.product_id, { stock: action.new_stock })
+                    successCount++
+                } else if (action.type === 'update_product_price' && action.product_id && action.new_price !== undefined) {
+                    await productsApi.update(action.product_id, { price: action.new_price })
+                    successCount++
+                } else if (action.type === 'update_product_active' && action.product_id && action.is_active !== undefined) {
+                    await productsApi.update(action.product_id, { is_active: action.is_active })
+                    successCount++
+                }
+            } catch (err) {
+                console.error('Error ejecutando acción:', action, err)
+                errorCount++
+            }
+        }
+        setPendingActions([])
+        setExecutingActions(false)
+        if (successCount > 0) {
+            showToast('success', `${successCount} acción${successCount > 1 ? 'es' : ''} ejecutada${successCount > 1 ? 's' : ''} correctamente`)
+            setMessages(prev => [...prev, {
+                id: Date.now().toString(),
+                role: 'assistant',
+                content: `✅ Ejecuté ${successCount} acción${successCount > 1 ? 'es' : ''} correctamente.${errorCount > 0 ? ` ⚠️ ${errorCount} fallaron.` : ''} Actualizando datos...`
+            }])
+            loadStoreSnapshot()
+        }
+        if (errorCount > 0 && successCount === 0) {
+            showToast('error', 'Error al ejecutar las acciones')
+        }
     }
 
     // ─── Enviar mensaje ───────────────────────────────────────────────────────
@@ -427,6 +531,7 @@ ${snap.lowStockProducts.length > 0 ? snap.lowStockProducts.map(p => `⚠️ ${p.
         setMessages(prev => [...prev, userMsg])
         setInput('')
         setIsTyping(true)
+        setPendingActions([])
 
         try {
             if (!snapshot) {
@@ -443,7 +548,9 @@ ${snap.lowStockProducts.length > 0 ? snap.lowStockProducts.map(p => `⚠️ ${p.
                 { role: 'user', content: query }
             ], plan)
 
-            setMessages(prev => [...prev, { id: Date.now().toString(), role: 'assistant', content: aiText }])
+            const { cleanText, actions } = parseActions(aiText)
+            setMessages(prev => [...prev, { id: Date.now().toString(), role: 'assistant', content: cleanText }])
+            if (actions.length > 0) setPendingActions(actions)
         } catch (err) {
             console.error('AI Error:', err)
             showToast('error', 'Error al consultar la IA')
@@ -496,14 +603,27 @@ ${snap.lowStockProducts.length > 0 ? snap.lowStockProducts.map(p => `⚠️ ${p.
                     {chatOpen && (
                         <div className="border-t border-purple-200/30">
                             {/* Quick chips */}
-                            <div className="flex items-center gap-2 px-6 py-3 flex-wrap bg-purple-50/50">
-                                <span className="text-[10px] font-black text-purple-400 uppercase tracking-widest">Probá:</span>
+                            <div className="flex items-center gap-2 px-6 py-3 flex-wrap bg-purple-50/50 border-b border-purple-100/50">
+                                <span className="text-[10px] font-black text-purple-400 uppercase tracking-widest">Analizar:</span>
                                 {QUICK_CHIPS.map(chip => (
                                     <button
                                         key={chip}
                                         onClick={() => handleSend(chip)}
                                         disabled={isTyping || isLoadingSnapshot}
                                         className="text-xs font-semibold px-3 py-1.5 bg-white border border-purple-200 rounded-full text-purple-700 hover:border-purple-400 hover:bg-purple-50 transition-all disabled:opacity-40 shadow-sm whitespace-nowrap"
+                                    >
+                                        {chip}
+                                    </button>
+                                ))}
+                            </div>
+                            <div className="flex items-center gap-2 px-6 py-2.5 flex-wrap bg-amber-50/50">
+                                <span className="text-[10px] font-black text-amber-500 uppercase tracking-widest">Gestionar:</span>
+                                {MANAGEMENT_CHIPS.map(chip => (
+                                    <button
+                                        key={chip}
+                                        onClick={() => handleSend(chip)}
+                                        disabled={isTyping || isLoadingSnapshot}
+                                        className="text-xs font-semibold px-3 py-1.5 bg-white border border-amber-200 rounded-full text-amber-700 hover:border-amber-400 hover:bg-amber-50 transition-all disabled:opacity-40 shadow-sm whitespace-nowrap"
                                     >
                                         {chip}
                                     </button>
@@ -534,6 +654,54 @@ ${snap.lowStockProducts.length > 0 ? snap.lowStockProducts.map(p => `⚠️ ${p.
                                     </div>
                                 )}
                             </div>
+
+                            {/* Pending Actions Confirmation */}
+                            {pendingActions.length > 0 && (
+                                <div className="mx-4 mb-2 mt-1 border border-amber-200 bg-amber-50 rounded-2xl overflow-hidden">
+                                    <div className="flex items-center gap-2 px-4 py-2.5 bg-amber-100 border-b border-amber-200">
+                                        <AlertCircle className="w-4 h-4 text-amber-600" />
+                                        <span className="text-xs font-black text-amber-700 uppercase tracking-widest">
+                                            {pendingActions.length} acción{pendingActions.length > 1 ? 'es' : ''} pendiente{pendingActions.length > 1 ? 's' : ''} de confirmar
+                                        </span>
+                                    </div>
+                                    <div className="px-4 py-2 space-y-1.5">
+                                        {pendingActions.map((action, i) => (
+                                            <div key={i} className="flex items-center gap-2 text-xs text-amber-800">
+                                                <Zap className="w-3 h-3 text-amber-500 shrink-0" />
+                                                {action.type === 'update_order_status' && (
+                                                    <span>Pedido <strong>#{action.order_number}</strong> → <strong>{action.new_status}</strong>{action.reason ? ` (${action.reason})` : ''}</span>
+                                                )}
+                                                {action.type === 'update_product_stock' && (
+                                                    <span>Stock de <strong>{action.product_name}</strong> → <strong>{action.new_stock} uds</strong></span>
+                                                )}
+                                                {action.type === 'update_product_price' && (
+                                                    <span>Precio de <strong>{action.product_name}</strong> → <strong>{formatPrice(action.new_price ?? 0)}</strong></span>
+                                                )}
+                                                {action.type === 'update_product_active' && (
+                                                    <span><strong>{action.product_name}</strong> → <strong>{action.is_active ? 'Activar' : 'Desactivar'}</strong></span>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <div className="flex gap-2 px-4 py-2.5 border-t border-amber-200">
+                                        <button
+                                            onClick={executeActions}
+                                            disabled={executingActions}
+                                            className="flex items-center gap-1.5 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white text-xs font-black rounded-xl transition-all disabled:opacity-60"
+                                        >
+                                            {executingActions ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                                            Confirmar y ejecutar
+                                        </button>
+                                        <button
+                                            onClick={() => setPendingActions([])}
+                                            disabled={executingActions}
+                                            className="px-4 py-2 bg-white hover:bg-gray-50 text-gray-600 text-xs font-semibold border border-gray-200 rounded-xl transition-all"
+                                        >
+                                            Cancelar
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
 
                             {/* Input */}
                             <div className="p-4 bg-purple-50/30 border-t border-purple-100">
@@ -624,6 +792,18 @@ ${snap.lowStockProducts.length > 0 ? snap.lowStockProducts.map(p => `⚠️ ${p.
                                             {label}
                                         </div>
                                     ))}
+                                    <div className="pt-1 border-t border-purple-100 mt-1 space-y-1">
+                                        {[
+                                            'Cambiar estado de pedidos',
+                                            'Actualizar stock y precios',
+                                            'Activar / desactivar productos',
+                                        ].map((label, i) => (
+                                            <div key={i} className="flex items-center gap-2 text-[11px] text-amber-600 font-medium">
+                                                <Check className="w-3 h-3 text-amber-400" />
+                                                {label}
+                                            </div>
+                                        ))}
+                                    </div>
                                     <p className="text-[9px] text-purple-400 pt-1">
                                         Actualizado: {new Date(snapshot.generatedAt).toLocaleTimeString('es-AR')}
                                     </p>
