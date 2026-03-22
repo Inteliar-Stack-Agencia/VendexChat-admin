@@ -249,9 +249,31 @@ serve(async (req) => {
 
         // ─── Handle webhook setup request from frontend ──────────────
         if (body.action === "setup-webhook") {
-            const { botToken, storeId } = body
-            if (!botToken || !storeId) {
-                return new Response(JSON.stringify({ error: "Missing botToken or storeId" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } })
+            const { botToken } = body
+            if (!botToken) {
+                return new Response(JSON.stringify({ error: "Missing botToken" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } })
+            }
+
+            // Resolve storeId: use body value or look up from the authenticated user's profile
+            let storeId = body.storeId
+            if (!storeId) {
+                const authHeader = req.headers.get("Authorization") || ""
+                const jwt = authHeader.replace("Bearer ", "")
+                if (jwt) {
+                    const { data: { user } } = await supabase.auth.getUser(jwt)
+                    if (user) {
+                        const { data: profile } = await supabase
+                            .from("profiles")
+                            .select("store_id")
+                            .eq("id", user.id)
+                            .single()
+                        storeId = profile?.store_id || null
+                    }
+                }
+            }
+
+            if (!storeId) {
+                return new Response(JSON.stringify({ error: "No se pudo identificar la tienda" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } })
             }
 
             const webhookUrl = `${SUPABASE_URL}/functions/v1/telegram-bot`
