@@ -333,6 +333,8 @@ export default function AIAssistantPage() {
                 allProducts: productsRes.data.map(p => ({
                     id: p.id,
                     nombre: p.name,
+                    categoria: (p as any).category_name || 'Sin categoría',
+                    descripcion: (p as any).description || '',
                     precio: p.price,
                     stock: p.unlimited_stock ? '∞' : p.stock,
                     activo: p.is_active
@@ -420,8 +422,8 @@ ${snap.topCustomers.map((c, i) => `${i + 1}. ${c.name} | ${c.orders} pedidos | $
 ═══ TOP 10 PRODUCTOS ═══
 ${snap.topProducts.map((p, i) => `${i + 1}. ${p.name} | ${p.qty} uds | ${formatPrice(p.revenue)}`).join('\n')}
 
-═══ CATÁLOGO (${snap.allProducts.length} productos) ═══
-${snap.allProducts.map(p => `- [ID:${p.id}] ${p.nombre} | ${formatPrice(p.precio)} | Stock: ${p.stock} | ${p.activo ? 'Activo' : 'Oculto'}`).join('\n')}
+═══ CATÁLOGO COMPLETO (${snap.allProducts.length} productos) ═══
+${snap.allProducts.map(p => `- [ID:${p.id}] [Cat:${p.categoria}] ${p.nombre}${p.descripcion ? ` — ${p.descripcion.slice(0, 80)}` : ''} | ${formatPrice(p.precio)} | Stock: ${p.stock} | ${p.activo ? 'Activo' : 'Oculto'}`).join('\n')}
 
 ═══ STOCK BAJO (≤5) ═══
 ${snap.lowStockProducts.length > 0 ? snap.lowStockProducts.map(p => `⚠️ [ID:${p.id}] ${p.nombre} | Stock: ${p.stock}`).join('\n') : '(Ninguno)'}
