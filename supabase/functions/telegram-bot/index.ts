@@ -234,14 +234,14 @@ async function callGroq(messages: { role: string; content: string }[]): Promise<
     return data.choices?.[0]?.message?.content ?? ""
 }
 
+const corsHeaders = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+}
+
 serve(async (req) => {
     if (req.method === "OPTIONS") {
-        return new Response("ok", {
-            headers: {
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-            },
-        })
+        return new Response("ok", { headers: corsHeaders })
     }
 
     try {
@@ -251,7 +251,7 @@ serve(async (req) => {
         if (body.action === "setup-webhook") {
             const { botToken, storeId } = body
             if (!botToken || !storeId) {
-                return new Response(JSON.stringify({ error: "Missing botToken or storeId" }), { status: 400 })
+                return new Response(JSON.stringify({ error: "Missing botToken or storeId" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } })
             }
 
             const webhookUrl = `${SUPABASE_URL}/functions/v1/telegram-bot`
@@ -263,7 +263,7 @@ serve(async (req) => {
             const result = await res.json()
 
             if (!result.ok) {
-                return new Response(JSON.stringify({ error: result.description }), { status: 400 })
+                return new Response(JSON.stringify({ error: result.description }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } })
             }
 
             // Get bot info
@@ -274,7 +274,7 @@ serve(async (req) => {
                 ok: true,
                 botUsername: meData.result?.username || null,
             }), {
-                headers: { "Content-Type": "application/json" },
+                headers: { ...corsHeaders, "Content-Type": "application/json" },
             })
         }
 
@@ -285,7 +285,7 @@ serve(async (req) => {
                 await fetch(`https://api.telegram.org/bot${botToken}/deleteWebhook`)
             }
             return new Response(JSON.stringify({ ok: true }), {
-                headers: { "Content-Type": "application/json" },
+                headers: { ...corsHeaders, "Content-Type": "application/json" },
             })
         }
 
@@ -387,6 +387,6 @@ serve(async (req) => {
         return new Response("ok", { status: 200 })
     } catch (err) {
         console.error("Telegram bot error:", err)
-        return new Response(JSON.stringify({ error: (err as Error).message }), { status: 500 })
+        return new Response(JSON.stringify({ error: (err as Error).message }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } })
     }
 })
