@@ -8,8 +8,9 @@ const GROQ_MODEL = "llama-3.3-70b-versatile"
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
-// In-memory conversation history per chat (cleared on function restart)
+// In-memory conversation history + pending actions per chat
 const chatHistories: Record<string, { role: string; content: string }[]> = {}
+const pendingActions: Record<string, AIAction[]> = {}
 
 const DAYS_ES = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"]
 
@@ -17,31 +18,34 @@ function formatPrice(n: number): string {
     return `$${Number(n || 0).toLocaleString("es-AR", { minimumFractionDigits: 0 })}`
 }
 
+interface AIAction {
+    type: "update_order_status" | "update_product_stock" | "update_product_price" | "update_product_active"
+    order_id?: string
+    order_number?: string
+    new_status?: string
+    product_id?: string
+    product_name?: string
+    new_stock?: number
+    new_price?: number
+    is_active?: boolean
+    reason?: string
+}
+
 async function sendTelegramMessage(botToken: string, chatId: number, text: string) {
-    // Telegram has a 4096 char limit per message
     const chunks: string[] = []
     let remaining = text
     while (remaining.length > 0) {
-        if (remaining.length <= 4000) {
-            chunks.push(remaining)
-            break
-        }
-        // Split at last newline before 4000 chars
+        if (remaining.length <= 4000) { chunks.push(remaining); break }
         const cut = remaining.lastIndexOf("\n", 4000)
         const splitAt = cut > 2000 ? cut : 4000
         chunks.push(remaining.slice(0, splitAt))
         remaining = remaining.slice(splitAt)
     }
-
     for (const chunk of chunks) {
         await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                chat_id: chatId,
-                text: chunk,
-                parse_mode: "Markdown",
-            }),
+            body: JSON.stringify({ chat_id: chatId, text: chunk, parse_mode: "Markdown" }),
         })
     }
 }
@@ -51,10 +55,9 @@ async function loadStoreSnapshot(storeId: string) {
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString()
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString()
 
-    // Fetch orders for 30d
     const { data: orders30d } = await supabase
         .from("orders")
-        .select("id, order_number, total, status, created_at, customer_name, customer_whatsapp")
+        .select("id, order_number, total, status, created_at, customer_name, customer_whatsapp, delivery_type, metadata")
         .eq("store_id", storeId)
         .gte("created_at", thirtyDaysAgo)
         .order("created_at", { ascending: false })
@@ -62,22 +65,32 @@ async function loadStoreSnapshot(storeId: string) {
 
     const allOrders = orders30d || []
     const orders7d = allOrders.filter(o => o.created_at >= sevenDaysAgo)
+    const today = now.toISOString().slice(0, 10)
+    const todayOrders = allOrders.filter(o => o.created_at?.slice(0, 10) === today)
 
     const totalSales30d = allOrders.reduce((s, o) => s + (Number(o.total) || 0), 0)
     const totalSales7d = orders7d.reduce((s, o) => s + (Number(o.total) || 0), 0)
 
-    // Products
+    // Products with category
     const { data: products } = await supabase
         .from("products")
-        .select("id, name, price, stock, unlimited_stock, is_active")
+        .select("id, name, description, price, stock, unlimited_stock, is_active, categories(name)")
         .eq("store_id", storeId)
-        .limit(200)
+        .limit(300)
 
-    // Customers count
+    // Customers
     const { count: customerCount } = await supabase
         .from("customers")
         .select("id", { count: "exact", head: true })
         .eq("store_id", storeId)
+
+    // Top customers in 7d
+    const { data: recentCustomers } = await supabase
+        .from("customers")
+        .select("id, name, whatsapp, total_spent, orders_count, last_order_at")
+        .eq("store_id", storeId)
+        .order("total_spent", { ascending: false })
+        .limit(10)
 
     // Order items for top products
     const orderIds = allOrders.map(o => o.id)
@@ -87,7 +100,6 @@ async function loadStoreSnapshot(storeId: string) {
             .from("order_items")
             .select("quantity, price, products(name)")
             .in("order_id", orderIds.slice(0, 100))
-
         if (items) {
             const prodMap: Record<string, { name: string; qty: number; revenue: number }> = {}
             items.forEach((item: any) => {
@@ -99,19 +111,6 @@ async function loadStoreSnapshot(storeId: string) {
             topProducts = Object.values(prodMap).sort((a, b) => b.qty - a.qty).slice(0, 10)
         }
     }
-
-    // Top customers
-    const custMap: Record<string, { name: string; total: number; orders: number }> = {}
-    allOrders.forEach(o => {
-        const key = o.customer_whatsapp || o.customer_name || "desconocido"
-        if (!custMap[key]) custMap[key] = { name: o.customer_name, total: 0, orders: 0 }
-        custMap[key].total += Number(o.total) || 0
-        custMap[key].orders++
-    })
-    const topCustomers = Object.values(custMap).sort((a, b) => b.total - a.total).slice(0, 10)
-
-    // Low stock
-    const lowStock = (products || []).filter(p => !p.unlimited_stock && (p.stock ?? 0) <= 5)
 
     // Patterns
     const ordersByDay: Record<string, number> = {}
@@ -126,9 +125,13 @@ async function loadStoreSnapshot(storeId: string) {
 
     const bestDays = Object.entries(ordersByDay).sort((a, b) => b[1] - a[1]).slice(0, 3)
     const bestHours = Object.entries(ordersByHour).sort((a, b) => b[1] - a[1]).slice(0, 5)
+    const lowStock = (products || []).filter(p => !p.unlimited_stock && (p.stock ?? 0) <= 5)
 
-    const today = now.toISOString().slice(0, 10)
-    const todayOrders = allOrders.filter(o => o.created_at?.slice(0, 10) === today)
+    // Sales by status
+    const pending = allOrders.filter(o => o.status === "pending")
+    const confirmed = allOrders.filter(o => o.status === "confirmed")
+    const completed = allOrders.filter(o => o.status === "completed")
+    const cancelled = allOrders.filter(o => o.status === "cancelled")
 
     return {
         today,
@@ -139,29 +142,38 @@ async function loadStoreSnapshot(storeId: string) {
         totalOrders7d: orders7d.length,
         avgTicket: allOrders.length > 0 ? totalSales30d / allOrders.length : 0,
         todayOrdersCount: todayOrders.length,
+        todaySales: todayOrders.reduce((s, o) => s + (Number(o.total) || 0), 0),
         customerCount: customerCount || 0,
         productCount: (products || []).length,
-        topCustomers,
+        topCustomers: (recentCustomers || []).map(c => ({ name: c.name, whatsapp: c.whatsapp, total: c.total_spent, orders: c.orders_count })),
         topProducts,
-        lowStock: lowStock.map(p => ({ nombre: p.name, stock: p.stock })),
-        recentOrders: allOrders.slice(0, 30).map(o => {
-            const d = new Date(o.created_at)
-            return {
-                num: o.order_number,
-                cliente: o.customer_name,
-                total: o.total,
-                estado: o.status,
-                fecha: o.created_at?.slice(0, 10),
-                hora: o.created_at?.slice(11, 16),
-                dia: DAYS_ES[d.getDay()],
-            }
-        }),
+        lowStock: lowStock.map(p => ({ id: p.id, nombre: p.name, stock: p.stock })),
+        recentOrders: allOrders.slice(0, 30).map(o => ({
+            id: o.id,
+            num: o.order_number,
+            cliente: o.customer_name,
+            total: o.total,
+            estado: o.status,
+            fecha: o.created_at?.slice(0, 10),
+            hora: o.created_at?.slice(11, 16),
+            dia: DAYS_ES[new Date(o.created_at).getDay()],
+            delivery: o.delivery_type,
+        })),
         allProducts: (products || []).map(p => ({
+            id: p.id,
             nombre: p.name,
+            categoria: (p as any).categories?.name || "Sin categoría",
+            descripcion: (p as any).description ? (p as any).description.slice(0, 60) : "",
             precio: p.price,
             stock: p.unlimited_stock ? "∞" : p.stock,
             activo: p.is_active,
         })),
+        ordersByStatus: {
+            pending: pending.length,
+            confirmed: confirmed.length,
+            completed: completed.length,
+            cancelled: cancelled.length,
+        },
         bestDays,
         bestHours,
     }
@@ -174,65 +186,158 @@ CONTEXTO ACTUAL (${new Date().toLocaleString("es-AR")}):
 Hoy es ${snap.dayOfWeek} ${snap.today}.
 
 ═══ MÉTRICAS CLAVE ═══
-- Ventas 30d: ${formatPrice(snap.totalSales30d)} (${snap.totalOrders30d} pedidos)
+- Ventas hoy: ${formatPrice(snap.todaySales)} (${snap.todayOrdersCount} pedidos)
 - Ventas 7d: ${formatPrice(snap.totalSales7d)} (${snap.totalOrders7d} pedidos)
+- Ventas 30d: ${formatPrice(snap.totalSales30d)} (${snap.totalOrders30d} pedidos)
 - Ticket promedio: ${formatPrice(snap.avgTicket)}
 - Clientes totales: ${snap.customerCount}
-- Pedidos hoy: ${snap.todayOrdersCount}
+- Productos en catálogo: ${snap.productCount}
+
+═══ PEDIDOS POR ESTADO (últimos 30d) ═══
+- Pendientes: ${snap.ordersByStatus.pending}
+- Confirmados: ${snap.ordersByStatus.confirmed}
+- Completados: ${snap.ordersByStatus.completed}
+- Cancelados: ${snap.ordersByStatus.cancelled}
 
 ═══ PATRONES ═══
 Días con más ventas: ${snap.bestDays.map(([d, n]: [string, number]) => `${d} (${n})`).join(", ") || "Sin datos"}
 Horarios pico: ${snap.bestHours.map(([h, n]: [string, number]) => `${h}:00hs (${n})`).join(", ") || "Sin datos"}
 
 ═══ PEDIDOS RECIENTES (${snap.recentOrders.length}) ═══
-${snap.recentOrders.slice(0, 20).map((o: any) => `- ${o.dia} ${o.fecha} ${o.hora} | #${o.num} | ${o.cliente} | ${formatPrice(o.total)} | ${o.estado}`).join("\n")}
+${snap.recentOrders.slice(0, 20).map((o: any) => `- [ID:${o.id}] ${o.dia} ${o.fecha} ${o.hora} | #${o.num} | ${o.cliente} | ${formatPrice(o.total)} | ${o.estado} | ${o.delivery}`).join("\n")}
 
 ═══ TOP CLIENTES ═══
-${snap.topCustomers.map((c: any, i: number) => `${i + 1}. ${c.name} | ${c.orders} pedidos | ${formatPrice(c.total)}`).join("\n")}
+${snap.topCustomers.map((c: any, i: number) => `${i + 1}. ${c.name}${c.whatsapp ? ` (${c.whatsapp})` : ""} | ${c.orders} pedidos | ${formatPrice(c.total)}`).join("\n")}
 
 ═══ TOP PRODUCTOS ═══
 ${snap.topProducts.map((p: any, i: number) => `${i + 1}. ${p.name} | ${p.qty} uds | ${formatPrice(p.revenue)}`).join("\n")}
 
-═══ CATÁLOGO (${snap.allProducts.length} productos) ═══
-${snap.allProducts.slice(0, 30).map((p: any) => `- ${p.nombre} | ${formatPrice(p.precio)} | Stock: ${p.stock}`).join("\n")}
+═══ CATÁLOGO COMPLETO (${snap.allProducts.length} productos) ═══
+${snap.allProducts.map((p: any) => `- [ID:${p.id}] [${p.categoria}] ${p.nombre}${p.descripcion ? ` — ${p.descripcion}` : ""} | ${formatPrice(p.precio)} | Stock: ${p.stock} | ${p.activo ? "✅" : "⏸️"}`).join("\n")}
 
-${snap.lowStock.length > 0 ? `═══ STOCK BAJO ═══\n${snap.lowStock.map((p: any) => `⚠️ ${p.nombre} | Stock: ${p.stock}`).join("\n")}` : ""}
+${snap.lowStock.length > 0 ? `═══ STOCK BAJO (≤5) ═══\n${snap.lowStock.map((p: any) => `⚠️ [ID:${p.id}] ${p.nombre} | Stock: ${p.stock}`).join("\n")}` : ""}
+
+═══ CAPACIDADES ═══
+Podés analizar: ventas, pedidos, clientes, stock, precios, categorías, logística, tendencias, predicciones, horarios óptimos, rentabilidad.
+Podés gestionar: cambiar estado de pedidos, actualizar stock, cambiar precios, activar/pausar productos.
+
+═══ ACCIONES DE GESTIÓN ═══
+Cuando el usuario pida EJECUTAR cambios, incluí al final de tu respuesta los comandos así (el usuario deberá confirmar con SI):
+
+Para cambiar estado de pedido (estados: pending, confirmed, completed, cancelled):
+[[ACTION:{"type":"update_order_status","order_id":"ID_COMPLETO","order_number":"NUM","new_status":"completed","reason":"motivo"}]]
+
+Para actualizar stock:
+[[ACTION:{"type":"update_product_stock","product_id":"ID","product_name":"NOMBRE","new_stock":10}]]
+
+Para cambiar precio:
+[[ACTION:{"type":"update_product_price","product_id":"ID","product_name":"NOMBRE","new_price":1500}]]
+
+Para activar/pausar producto:
+[[ACTION:{"type":"update_product_active","product_id":"ID","product_name":"NOMBRE","is_active":false}]]
+
+REGLAS: Usá los IDs exactos del catálogo. Solo incluí acciones cuando el usuario pida ejecutar cambios. Para análisis no incluyas acciones.
 
 ═══ INSTRUCCIONES ═══
-- Respondé en español argentino, directo y accionable
-- Usá datos reales para fundamentar cada insight
-- Sé conciso (es Telegram, no un reporte largo)
+- Respondé en español argentino, conciso (es Telegram)
 - Usá emojis para hacer visual
-- Cuando hagas predicciones, aclará que están basadas en patrones
+- Usá datos reales para fundamentar
+- Cuando hagas predicciones, aclará que son basadas en patrones`
+}
 
-COMANDOS ESPECIALES que el usuario puede enviar:
-/resumen - Resumen ejecutivo del día
-/stock - Productos con stock bajo
-/top - Top productos y clientes
-/ventas - Reporte de ventas
-Si el usuario envía alguno de estos, respondé directamente con la info.`
+function parseActions(text: string): { cleanText: string; actions: AIAction[] } {
+    const actionRegex = /\[\[ACTION:(.*?)\]\]/g
+    const actions: AIAction[] = []
+    let match
+    while ((match = actionRegex.exec(text)) !== null) {
+        try { actions.push(JSON.parse(match[1]) as AIAction) } catch { /* ignore */ }
+    }
+    const cleanText = text.replace(/\[\[ACTION:.*?\]\]/g, "").replace(/\n{3,}/g, "\n\n").trim()
+    return { cleanText, actions }
+}
+
+function describeAction(a: AIAction): string {
+    if (a.type === "update_order_status") return `Pedido #${a.order_number} → *${a.new_status}*${a.reason ? ` (${a.reason})` : ""}`
+    if (a.type === "update_product_stock") return `Stock de *${a.product_name}* → *${a.new_stock} uds*`
+    if (a.type === "update_product_price") return `Precio de *${a.product_name}* → *${formatPrice(a.new_price ?? 0)}*`
+    if (a.type === "update_product_active") return `*${a.product_name}* → ${a.is_active ? "✅ Activar" : "⏸️ Pausar"}`
+    return "Acción desconocida"
+}
+
+async function executeActions(actions: AIAction[]): Promise<{ ok: number; fail: number }> {
+    let ok = 0, fail = 0
+    for (const action of actions) {
+        try {
+            if (action.type === "update_order_status" && action.order_id && action.new_status) {
+                await supabase.from("orders").update({ status: action.new_status }).eq("id", action.order_id)
+                ok++
+            } else if (action.type === "update_product_stock" && action.product_id && action.new_stock !== undefined) {
+                await supabase.from("products").update({ stock: action.new_stock }).eq("id", action.product_id)
+                ok++
+            } else if (action.type === "update_product_price" && action.product_id && action.new_price !== undefined) {
+                await supabase.from("products").update({ price: action.new_price }).eq("id", action.product_id)
+                ok++
+            } else if (action.type === "update_product_active" && action.product_id && action.is_active !== undefined) {
+                await supabase.from("products").update({ is_active: action.is_active }).eq("id", action.product_id)
+                ok++
+            }
+        } catch (err) {
+            console.error("Error ejecutando acción:", action, err)
+            fail++
+        }
+    }
+    return { ok, fail }
 }
 
 async function callGroq(messages: { role: string; content: string }[]): Promise<string> {
     const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${GROQ_API_KEY}`,
-        },
-        body: JSON.stringify({
-            model: GROQ_MODEL,
-            messages,
-            temperature: 0.3,
-        }),
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${GROQ_API_KEY}` },
+        body: JSON.stringify({ model: GROQ_MODEL, messages, temperature: 0.3 }),
     })
-    if (!response.ok) {
-        const err = await response.text()
-        throw new Error(`Groq error: ${err}`)
-    }
+    if (!response.ok) throw new Error(`Groq error: ${await response.text()}`)
     const data = await response.json()
     return data.choices?.[0]?.message?.content ?? ""
 }
+
+const HELP_TEXT = `🧠 *Inteligencia IA — Comandos disponibles*
+
+*📊 Análisis*
+/resumen — Resumen ejecutivo del día
+/hoy — Pedidos y ventas de hoy
+/ventas — Reporte de ventas 7d y 30d
+/tendencia — Tendencia y predicción de demanda
+/horarios — Mejor horario para publicar
+
+*📦 Productos*
+/stock — Productos con stock bajo
+/catalogo — Catálogo completo
+/top — Top productos más vendidos
+/inactivos — Productos pausados
+/categoria [nombre] — Productos de una categoría
+
+*🛒 Pedidos*
+/pedidos — Pedidos de hoy
+/pendientes — Pedidos pendientes
+/buscar [#numero] — Buscar un pedido
+
+*👥 Clientes*
+/clientes — Top 10 mejores clientes
+/cliente [nombre] — Info de un cliente
+
+*⚡ Gestión (requiere confirmación)*
+/pausar [producto] — Pausar un producto
+/activar [producto] — Activar un producto
+/precio [producto] [nuevo precio] — Cambiar precio
+/stockset [producto] [cantidad] — Actualizar stock
+/completar [#numero pedido] — Marcar pedido como completado
+/cancelar [#numero pedido] — Cancelar un pedido
+
+*🛠️ Otros*
+/ayuda — Este menú
+/limpiar — Borrar historial de chat
+
+O simplemente escribime lo que necesitás en lenguaje natural 💬`
 
 const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
@@ -240,21 +345,16 @@ const corsHeaders = {
 }
 
 serve(async (req) => {
-    if (req.method === "OPTIONS") {
-        return new Response("ok", { headers: corsHeaders })
-    }
+    if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders })
 
     try {
         const body = await req.json()
 
-        // ─── Handle webhook setup request from frontend ──────────────
+        // ─── Webhook setup ───────────────────────────────────────────
         if (body.action === "setup-webhook") {
             const { botToken } = body
-            if (!botToken) {
-                return new Response(JSON.stringify({ error: "Missing botToken" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } })
-            }
+            if (!botToken) return new Response(JSON.stringify({ error: "Missing botToken" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } })
 
-            // Resolve storeId: use body value or look up from the authenticated user's profile
             let storeId = body.storeId
             if (!storeId) {
                 const authHeader = req.headers.get("Authorization") || ""
@@ -262,149 +362,196 @@ serve(async (req) => {
                 if (jwt) {
                     const { data: { user } } = await supabase.auth.getUser(jwt)
                     if (user) {
-                        const { data: profile } = await supabase
-                            .from("profiles")
-                            .select("store_id")
-                            .eq("id", user.id)
-                            .single()
+                        const { data: profile } = await supabase.from("profiles").select("store_id").eq("id", user.id).single()
                         storeId = profile?.store_id || null
                     }
                 }
             }
-
-            if (!storeId) {
-                return new Response(JSON.stringify({ error: "No se pudo identificar la tienda" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } })
-            }
+            if (!storeId) return new Response(JSON.stringify({ error: "No se pudo identificar la tienda" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } })
 
             const webhookUrl = `${SUPABASE_URL}/functions/v1/telegram-bot`
             const res = await fetch(`https://api.telegram.org/bot${botToken}/setWebhook`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
+                method: "POST", headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ url: webhookUrl }),
             })
             const result = await res.json()
+            if (!result.ok) return new Response(JSON.stringify({ error: result.description }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } })
 
-            if (!result.ok) {
-                return new Response(JSON.stringify({ error: result.description }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } })
-            }
-
-            // Get bot info
             const meRes = await fetch(`https://api.telegram.org/bot${botToken}/getMe`)
             const meData = await meRes.json()
-
-            return new Response(JSON.stringify({
-                ok: true,
-                botUsername: meData.result?.username || null,
-            }), {
-                headers: { ...corsHeaders, "Content-Type": "application/json" },
-            })
+            return new Response(JSON.stringify({ ok: true, botUsername: meData.result?.username || null }), { headers: { ...corsHeaders, "Content-Type": "application/json" } })
         }
 
-        // ─── Handle webhook removal ─────────────────────────────────
+        // ─── Webhook removal ─────────────────────────────────────────
         if (body.action === "remove-webhook") {
             const { botToken } = body
-            if (botToken) {
-                await fetch(`https://api.telegram.org/bot${botToken}/deleteWebhook`)
-            }
-            return new Response(JSON.stringify({ ok: true }), {
-                headers: { ...corsHeaders, "Content-Type": "application/json" },
-            })
+            if (botToken) await fetch(`https://api.telegram.org/bot${botToken}/deleteWebhook`)
+            return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } })
         }
 
-        // ─── Handle Telegram webhook message ────────────────────────
+        // ─── Telegram webhook message ────────────────────────────────
         const message = body.message
-        if (!message?.text || !message?.chat?.id) {
-            return new Response("ok", { status: 200 })
-        }
+        if (!message?.text || !message?.chat?.id) return new Response("ok", { status: 200 })
 
         const chatId = message.chat.id
         const userText = message.text.trim()
 
-        // Find which store this bot belongs to by looking up the token
-        // The webhook URL doesn't contain store info, so we search by telegram_chat_id
-        // or by scanning stores with telegram config
-        const { data: stores } = await supabase
-            .from("stores")
-            .select("id, metadata")
-            .not("metadata", "is", null)
-
+        // Find store by token
+        const { data: stores } = await supabase.from("stores").select("id, metadata").not("metadata", "is", null)
         let storeId: string | null = null
         let botToken: string | null = null
-        let allowedChatIds: number[] = []
 
         for (const store of (stores || [])) {
             const tgConfig = (store.metadata as any)?.telegram_bot_config
             if (tgConfig?.enabled && tgConfig?.bot_token) {
-                // Check if this chat is allowed for this store
                 const allowed = tgConfig.allowed_chat_ids || []
                 if (allowed.length === 0 || allowed.includes(chatId)) {
-                    // Verify bot token matches by checking bot info
                     storeId = store.id
                     botToken = tgConfig.bot_token
-                    allowedChatIds = allowed
                     break
                 }
             }
         }
 
-        if (!storeId || !botToken) {
-            // Can't identify store - ignore silently
-            return new Response("ok", { status: 200 })
-        }
+        if (!storeId || !botToken) return new Response("ok", { status: 200 })
 
-        // Handle /start command
+        const historyKey = `${storeId}_${chatId}`
+
+        // ─── /start ──────────────────────────────────────────────────
         if (userText === "/start") {
-            await sendTelegramMessage(botToken, chatId, "🧠 *Inteligencia IA* conectada.\n\nPodés preguntarme lo que quieras sobre tu tienda. Comandos rápidos:\n/resumen - Resumen del día\n/stock - Stock bajo\n/top - Top productos y clientes\n/ventas - Reporte de ventas\n/limpiar - Borrar historial de chat")
+            await sendTelegramMessage(botToken, chatId, "🧠 *Inteligencia IA* conectada.\n\nPodés preguntarme cualquier cosa sobre tu tienda o usar los comandos.\n\nEscribí /ayuda para ver todo lo que puedo hacer.")
             return new Response("ok", { status: 200 })
         }
 
-        // Handle /limpiar
+        // ─── /ayuda ──────────────────────────────────────────────────
+        if (userText === "/ayuda" || userText === "/help") {
+            await sendTelegramMessage(botToken, chatId, HELP_TEXT)
+            return new Response("ok", { status: 200 })
+        }
+
+        // ─── /limpiar ────────────────────────────────────────────────
         if (userText === "/limpiar") {
-            delete chatHistories[`${storeId}_${chatId}`]
-            await sendTelegramMessage(botToken, chatId, "🗑 Historial de chat limpiado.")
+            delete chatHistories[historyKey]
+            delete pendingActions[historyKey]
+            await sendTelegramMessage(botToken, chatId, "🗑 Historial y acciones pendientes limpiados.")
             return new Response("ok", { status: 200 })
         }
 
-        // Send typing indicator
+        // ─── Confirmación de acciones pendientes (SI/NO) ─────────────
+        const normalized = userText.toLowerCase().trim()
+        if (pendingActions[historyKey]?.length > 0) {
+            if (normalized === "si" || normalized === "sí" || normalized === "s") {
+                const actions = pendingActions[historyKey]
+                delete pendingActions[historyKey]
+                await sendTelegramMessage(botToken, chatId, "⏳ Ejecutando...")
+                const { ok, fail } = await executeActions(actions)
+                const msg = ok > 0
+                    ? `✅ ${ok} acción${ok > 1 ? "es" : ""} ejecutada${ok > 1 ? "s" : ""} correctamente.${fail > 0 ? ` ⚠️ ${fail} fallaron.` : ""}`
+                    : `❌ No se pudo ejecutar ninguna acción.`
+                await sendTelegramMessage(botToken, chatId, msg)
+                return new Response("ok", { status: 200 })
+            }
+            if (normalized === "no" || normalized === "n") {
+                delete pendingActions[historyKey]
+                await sendTelegramMessage(botToken, chatId, "❌ Acciones canceladas.")
+                return new Response("ok", { status: 200 })
+            }
+        }
+
+        // ─── Typing indicator ────────────────────────────────────────
         await fetch(`https://api.telegram.org/bot${botToken}/sendChatAction`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
+            method: "POST", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ chat_id: chatId, action: "typing" }),
         })
 
-        // Load store snapshot
+        // ─── Load snapshot ───────────────────────────────────────────
         const snap = await loadStoreSnapshot(storeId)
 
-        // Build conversation
-        const historyKey = `${storeId}_${chatId}`
-        if (!chatHistories[historyKey]) chatHistories[historyKey] = []
-
-        // Map shortcut commands to real questions
+        // ─── Slash command shortcuts ─────────────────────────────────
+        const lower = userText.toLowerCase()
         const commandMap: Record<string, string> = {
-            "/resumen": "Dame un resumen ejecutivo de cómo va el negocio hoy",
-            "/stock": "¿Qué productos tienen stock bajo?",
-            "/top": "¿Cuáles son los top productos y top clientes?",
-            "/ventas": "Dame un reporte de ventas de la última semana con tendencia",
+            "/resumen": "Dame un resumen ejecutivo completo de cómo va el negocio hoy: ventas, pedidos, tendencia y alertas importantes",
+            "/hoy": "¿Cuántos pedidos y ventas hubo hoy? Listá todos los pedidos de hoy con su estado",
+            "/ventas": "Dame un reporte de ventas de la última semana y del mes, con tendencia y comparación",
+            "/tendencia": "¿Cómo viene la tendencia de ventas? ¿Sube o baja? Dame una predicción para los próximos días",
+            "/horarios": "¿Cuál es el mejor horario y día para publicar en redes sociales según los patrones de compra?",
+            "/stock": "¿Qué productos tienen stock bajo (5 o menos)? Listálos todos con su stock actual",
+            "/catalogo": "Mostrame el catálogo completo de productos con precios, stock y estado",
+            "/top": "¿Cuáles son los top 10 productos más vendidos y los top 10 clientes del mes?",
+            "/inactivos": "Listá todos los productos que están pausados o inactivos",
+            "/pedidos": "Listá todos los pedidos de hoy con cliente, total y estado",
+            "/pendientes": "¿Cuántos pedidos hay pendientes y confirmados? Listálos todos",
+            "/clientes": "Mostrame el top 10 de mejores clientes con su gasto total y cantidad de pedidos",
         }
-        const query = commandMap[userText] || userText
 
+        // Dynamic commands with arguments
+        let query = commandMap[userText] || null
+
+        if (!query && lower.startsWith("/categoria ")) {
+            const cat = userText.slice(11).trim()
+            query = `Listame todos los productos de la categoría "${cat}" con precio, stock y estado`
+        }
+        if (!query && lower.startsWith("/buscar ")) {
+            const term = userText.slice(8).trim()
+            query = `Buscá el pedido ${term} y mostrame todos sus detalles: cliente, total, estado, productos, fecha`
+        }
+        if (!query && lower.startsWith("/cliente ")) {
+            const name = userText.slice(9).trim()
+            query = `Dame toda la información disponible del cliente "${name}": historial de pedidos, gasto total, frecuencia`
+        }
+        if (!query && lower.startsWith("/pausar ")) {
+            const prod = userText.slice(8).trim()
+            query = `Pausá (desactivá) el producto "${prod}". Encontrá su ID en el catálogo y ejecutá la acción correspondiente`
+        }
+        if (!query && lower.startsWith("/activar ")) {
+            const prod = userText.slice(9).trim()
+            query = `Activá el producto "${prod}". Encontrá su ID en el catálogo y ejecutá la acción correspondiente`
+        }
+        if (!query && lower.startsWith("/precio ")) {
+            const parts = userText.slice(8).trim().split(" ")
+            const newPrice = parts.pop()
+            const prod = parts.join(" ")
+            query = `Cambiá el precio del producto "${prod}" a ${newPrice}. Encontrá su ID en el catálogo y ejecutá la acción correspondiente`
+        }
+        if (!query && lower.startsWith("/stockset ")) {
+            const parts = userText.slice(10).trim().split(" ")
+            const newStock = parts.pop()
+            const prod = parts.join(" ")
+            query = `Actualizá el stock del producto "${prod}" a ${newStock} unidades. Encontrá su ID y ejecutá la acción`
+        }
+        if (!query && lower.startsWith("/completar ")) {
+            const num = userText.slice(11).trim()
+            query = `Marcá como completado el pedido ${num}. Buscá su ID en los pedidos recientes y ejecutá la acción`
+        }
+        if (!query && lower.startsWith("/cancelar ")) {
+            const num = userText.slice(10).trim()
+            query = `Cancelá el pedido ${num}. Buscá su ID en los pedidos recientes y ejecutá la acción`
+        }
+
+        if (!query) query = userText
+
+        // ─── Build and send to Groq ──────────────────────────────────
+        if (!chatHistories[historyKey]) chatHistories[historyKey] = []
         chatHistories[historyKey].push({ role: "user", content: query })
-
-        // Keep only last 10 messages
-        if (chatHistories[historyKey].length > 10) {
-            chatHistories[historyKey] = chatHistories[historyKey].slice(-10)
-        }
+        if (chatHistories[historyKey].length > 12) chatHistories[historyKey] = chatHistories[historyKey].slice(-12)
 
         const systemPrompt = buildSystemPrompt(snap)
-        const aiMessages = [
-            { role: "system", content: systemPrompt },
-            ...chatHistories[historyKey],
-        ]
+        const aiMessages = [{ role: "system", content: systemPrompt }, ...chatHistories[historyKey]]
 
         const aiResponse = await callGroq(aiMessages)
-        chatHistories[historyKey].push({ role: "assistant", content: aiResponse })
+        const { cleanText, actions } = parseActions(aiResponse)
 
-        await sendTelegramMessage(botToken, chatId, aiResponse)
+        chatHistories[historyKey].push({ role: "assistant", content: cleanText })
+
+        // ─── Send response ───────────────────────────────────────────
+        await sendTelegramMessage(botToken, chatId, cleanText)
+
+        // ─── If there are actions, ask for confirmation ──────────────
+        if (actions.length > 0) {
+            pendingActions[historyKey] = actions
+            const confirmMsg = `\n⚡ *${actions.length} acción${actions.length > 1 ? "es" : ""} pendiente${actions.length > 1 ? "s" : ""}:*\n${actions.map((a, i) => `${i + 1}. ${describeAction(a)}`).join("\n")}\n\n¿Confirmar? Respondé *SI* o *NO*`
+            await sendTelegramMessage(botToken, chatId, confirmMsg)
+        }
 
         return new Response("ok", { status: 200 })
     } catch (err) {
