@@ -134,7 +134,6 @@ export default function DashboardPage() {
   }
 
   const handleSavePrompt = async () => {
-    if (!canEditPrompt) return
     setSavingPrompt(true)
     try {
       const updatedMetadata = { ...(tenant?.metadata || {}), ai_prompt: aiPromptDraft }
