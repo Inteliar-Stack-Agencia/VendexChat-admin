@@ -707,7 +707,7 @@ ${snap.lowStockProducts.length > 0 ? snap.lowStockProducts.map(p => `⚠️ ${p.
                                         placeholder="Dejá vacío para permitir cualquier chat"
                                         className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300 outline-none"
                                     />
-                                    <p className="text-[10px] text-gray-400 mt-1">Tip: enviá /start al bot y el chat ID aparece en los logs</p>
+                                    <p className="text-[10px] text-gray-400 mt-1">Tu ID: escribile a @userinfobot en Telegram. Separar múltiples con coma.</p>
                                 </div>
 
                                 <Button
@@ -760,25 +760,61 @@ ${snap.lowStockProducts.length > 0 ? snap.lowStockProducts.map(p => `⚠️ ${p.
                                     </div>
                                 </div>
 
-                                <div>
-                                    <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1.5">
-                                        Chat IDs permitidos <span className="text-gray-400 normal-case">(opcional)</span>
-                                    </label>
-                                    <div className="flex gap-2">
-                                        <input
-                                            type="text"
-                                            value={tgAllowedChatIds}
-                                            onChange={(e) => setTgAllowedChatIds(e.target.value)}
-                                            placeholder="Dejá vacío para permitir cualquier chat"
-                                            className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300 outline-none"
-                                        />
-                                        <Button
-                                            onClick={handleTgSaveSettings}
-                                            disabled={tgSaving}
-                                            className="px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-bold"
-                                        >
-                                            {tgSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Guardar'}
-                                        </Button>
+                                <div className="space-y-3">
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1.5">
+                                            Chat IDs permitidos <span className="text-gray-400 normal-case font-normal">(opcional)</span>
+                                        </label>
+                                        <div className="flex gap-2">
+                                            <input
+                                                type="text"
+                                                value={tgAllowedChatIds}
+                                                onChange={(e) => setTgAllowedChatIds(e.target.value)}
+                                                placeholder="Ej: 123456789, 987654321"
+                                                className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300 outline-none"
+                                            />
+                                            <Button
+                                                onClick={handleTgSaveSettings}
+                                                disabled={tgSaving}
+                                                className="px-4 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold"
+                                            >
+                                                {tgSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Guardar'}
+                                            </Button>
+                                        </div>
+                                    </div>
+
+                                    {/* Info box */}
+                                    <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 space-y-2">
+                                        <p className="text-[10px] font-bold text-blue-700 uppercase tracking-widest">¿Para qué sirve?</p>
+                                        <p className="text-[11px] text-blue-600 leading-relaxed">
+                                            El bot de Telegram es accesible para cualquier persona que lo encuentre. Agregar Chat IDs restringe el acceso solo a las personas que vos autoricés.
+                                        </p>
+                                        <ul className="text-[11px] text-blue-600 space-y-1">
+                                            <li>• <strong>Vacío</strong> → cualquiera puede hablar con el bot y ver datos de tu tienda</li>
+                                            <li>• <strong>Con IDs</strong> → solo esas personas pueden usarlo, el resto es ignorado</li>
+                                        </ul>
+                                        <p className="text-[11px] text-blue-500 mt-1">
+                                            Para obtener tu ID: escribile a <strong>@userinfobot</strong> en Telegram. Separar múltiples IDs con coma.
+                                        </p>
+                                    </div>
+
+                                    {/* Roles - próximamente */}
+                                    <div className="bg-gray-50 border border-dashed border-gray-200 rounded-xl p-3 space-y-2">
+                                        <div className="flex items-center gap-2">
+                                            <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Roles por usuario</p>
+                                            <span className="text-[9px] bg-amber-100 text-amber-600 font-bold px-2 py-0.5 rounded-full uppercase tracking-widest">Próximamente</span>
+                                        </div>
+                                        <p className="text-[11px] text-gray-400 leading-relaxed">
+                                            En el futuro podrás asignar permisos distintos a cada Chat ID:
+                                        </p>
+                                        <ul className="text-[11px] text-gray-400 space-y-1">
+                                            <li>• <strong className="text-gray-500">Admin</strong> → acceso total (ventas, clientes, stock, reportes)</li>
+                                            <li>• <strong className="text-gray-500">Vendedor</strong> → solo ventas y pedidos</li>
+                                            <li>• <strong className="text-gray-500">Depósito</strong> → solo stock y productos</li>
+                                        </ul>
+                                        <p className="text-[10px] text-gray-400 italic">
+                                            También se podrían agregar comandos personalizados por rol, alertas automáticas de stock y notificaciones de nuevos pedidos.
+                                        </p>
                                     </div>
                                 </div>
 
