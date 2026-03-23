@@ -20,7 +20,7 @@ export default function SlidersPage() {
         try {
             const tenant = await tenantApi.getMe()
             setSliders(tenant.sliders || [])
-        } catch (err) {
+        } catch {
             showToast('error', 'Error al cargar los sliders')
         } finally {
             setLoading(false)
@@ -40,7 +40,7 @@ export default function SlidersPage() {
         try {
             await tenantApi.updateMe({ sliders })
             showToast('success', 'Sliders actualizados correctamente')
-        } catch (err) {
+        } catch {
             showToast('error', 'Error al guardar los sliders')
         } finally {
             setSaving(false)

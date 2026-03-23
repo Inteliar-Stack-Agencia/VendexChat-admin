@@ -28,6 +28,7 @@ export const productsApi = {
         return {
             data: (data || []).map(p => ({
                 ...p,
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 category_name: (p as any).categories?.name
             })) as unknown as Product[],
             total: count || 0,
@@ -76,6 +77,7 @@ export const productsApi = {
 
         return {
             ...newProd,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             category_name: (newProd as any).categories?.name
         } as Product
     },
@@ -99,6 +101,7 @@ export const productsApi = {
         if (error) throw error
         return {
             ...updatedProd,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             category_name: (updatedProd as any).categories?.name
         } as Product
     },

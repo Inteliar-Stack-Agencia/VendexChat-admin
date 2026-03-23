@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { Plus, Search, Pencil, Package, ArrowUp, ArrowDown, Eye, EyeOff, MinusCircle, Trash2, FolderInput, CheckSquare, Square, Check, Upload, Loader2, GripVertical, Save, X as CloseIcon, Camera } from 'lucide-react'
-import { Card, LoadingSpinner, EmptyState, Pagination, Button } from '../../components/common'
+import { Plus, Search, Pencil, Package, ArrowUp, ArrowDown, Eye, EyeOff, MinusCircle, Check, Upload, Loader2, GripVertical, Save, X as CloseIcon, Camera } from 'lucide-react'
+import { Card, EmptyState, Pagination } from '../../components/common'
 import { productsApi, categoriesApi } from '../../services/api'
 import { Product, Category } from '../../types'
 import { formatPrice } from '../../utils/helpers'
@@ -46,6 +46,7 @@ interface SortableRowProps {
 
 function SortableProductRow({
   product,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   idx,
   isSelected,
   isSorting,
@@ -258,7 +259,7 @@ export default function ProductsPage() {
     } finally {
       setLoading(false)
     }
-  }, [page, debouncedSearch, categoryFilter, selectedStoreId])
+  }, [page, debouncedSearch, categoryFilter])
 
   // Carga inicial: categorías primero (rápido), luego productos de la primera categoría
   useEffect(() => {
@@ -282,6 +283,7 @@ export default function ProductsPage() {
       console.error('Error cargando categorías:', err)
       setLoading(false)
     })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedStoreId])
 
   // Recarga cuando cambia categoría, página o búsqueda (después de la carga inicial)
@@ -293,11 +295,11 @@ export default function ProductsPage() {
       return
     }
     loadProductsOnly()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [categoryFilter, page, debouncedSearch])
 
   // Alias para botones
   const loadProducts = loadProductsOnly
-  const loadAllData = loadProductsOnly
 
   const handleUpdateStatus = async (product: Product, newStatus: 'visible' | 'no-stock' | 'hidden') => {
     setUpdatingId(product.id)
@@ -350,7 +352,7 @@ export default function ProductsPage() {
       )
       showToast('success', 'Nuevo orden guardado')
       setIsSortingMode(false)
-    } catch (err) {
+    } catch {
       showToast('error', 'Error al guardar el nuevo orden')
     } finally {
       setIsSavingOrder(false)
@@ -381,7 +383,7 @@ export default function ProductsPage() {
         productsApi.update(target.id, { sort_order: target.sort_order })
       ])
       showToast('success', 'Orden actualizado')
-    } catch (err) {
+    } catch {
       showToast('error', 'Error al guardar el orden')
       loadProducts() // Revertir
     }
@@ -407,7 +409,7 @@ export default function ProductsPage() {
       setProducts(prev => prev.filter(p => !selectedIds.includes(p.id)))
       setSelectedIds([])
       showToast('success', `${selectedIds.length} productos eliminados`)
-    } catch (err) {
+    } catch {
       showToast('error', 'Error al eliminar productos')
       loadProducts()
     }
@@ -424,7 +426,7 @@ export default function ProductsPage() {
       ))
       setSelectedIds([])
       showToast('success', `${selectedIds.length} productos movidos`)
-    } catch (err) {
+    } catch {
       showToast('error', 'Error al mover productos')
       loadProducts()
     }

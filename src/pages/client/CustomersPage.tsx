@@ -40,6 +40,7 @@ export default function CustomersPage() {
 
     useEffect(() => {
         loadCustomers()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedStoreId, debouncedSearch, page, showArchived])
 
     const loadCustomers = () => {
@@ -61,7 +62,7 @@ export default function CustomersPage() {
             showToast('success', 'Notas actualizadas')
             setIsEditingNotes(false)
             loadCustomers()
-        } catch (err) {
+        } catch {
             showToast('error', 'No se pudieron guardar las notas')
         } finally {
             setSaving(false)
@@ -75,7 +76,7 @@ export default function CustomersPage() {
         try {
             const orders = await customersApi.getOrdersByWhatsapp(customer.whatsapp)
             setCustomerOrders(orders)
-        } catch (err) {
+        } catch {
             showToast('error', 'No se pudieron cargar los pedidos')
         } finally {
             setLoadingOrders(false)
@@ -193,6 +194,7 @@ export default function CustomersPage() {
     const filteredCustomers = useMemo(() => {
         if (activeSegment === 'all') return customers
         return customers.filter(customer => getCustomerSegment(customer).key === activeSegment)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [customers, activeSegment])
 
     const segmentCounts = useMemo(() => ({
@@ -202,6 +204,7 @@ export default function CustomersPage() {
         new: customers.filter(c => getCustomerSegment(c).key === 'new').length,
         atRisk: customers.filter(c => getCustomerSegment(c).key === 'atRisk').length,
         inactive: customers.filter(c => getCustomerSegment(c).key === 'inactive').length,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }), [customers])
 
     // Métricas calculadas en el cliente

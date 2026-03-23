@@ -19,7 +19,7 @@ export default function PopupsPage() {
             const tenant = await tenantApi.getMe()
             const normalized = (tenant.popups || []).map(p => ({ ...p, active: p.active !== false }))
             setPopups(normalized)
-        } catch (err) {
+        } catch {
             showToast('error', 'Error al cargar los popups')
         } finally {
             setLoading(false)
@@ -42,7 +42,7 @@ export default function PopupsPage() {
             const normalized = (tenant.popups || []).map(p => ({ ...p, active: p.active !== false }))
             setPopups(normalized)
             showToast('success', 'Mensajes emergentes actualizados')
-        } catch (err) {
+        } catch {
             showToast('error', 'Error al guardar los popups')
         } finally {
             setSaving(false)

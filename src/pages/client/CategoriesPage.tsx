@@ -1,6 +1,6 @@
 import { useState, useEffect, FormEvent } from 'react'
 import { Plus, Pencil, Trash2, FolderOpen, ArrowUp, ArrowDown } from 'lucide-react'
-import { Card, Button, Input, Modal, LoadingSpinner, EmptyState, ConfirmDialog } from '../../components/common'
+import { Card, Button, Input, Modal, EmptyState, ConfirmDialog } from '../../components/common'
 import { showToast } from '../../components/common/Toast'
 import { categoriesApi } from '../../services/api'
 import { Category } from '../../types'
@@ -24,8 +24,8 @@ export default function CategoriesPage() {
     try {
       const data = await categoriesApi.list()
       setCategories(Array.isArray(data) ? data : [])
-    } catch (err) {
-      console.error('Error cargando categorías:', err)
+    } catch (e) {
+      console.error('Error cargando categorías:', e)
     } finally {
       setLoading(false)
     }
@@ -115,7 +115,7 @@ export default function CategoriesPage() {
         categoriesApi.update(target.id, { sort_order: target.sort_order })
       ])
       showToast('success', 'Orden actualizado')
-    } catch (err) {
+    } catch {
       showToast('error', 'Error al guardar el orden')
       loadCategories() // Revertir
     }

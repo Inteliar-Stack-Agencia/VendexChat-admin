@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { superadminApi } from '../services/api'
 
 export function useSuperadminOverview() {
-    const [data, setData] = useState<any>(null)
+    const [data, setData] = useState<unknown>(null)
     const [loading, setLoading] = useState(true)
 
     const loadOverview = useCallback(async () => {

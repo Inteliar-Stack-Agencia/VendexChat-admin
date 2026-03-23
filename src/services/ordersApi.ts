@@ -9,10 +9,14 @@ export const ordersApi = {
         let query = supabase.from('orders').select('*', { count: 'exact' }).eq('store_id', storeId)
         if (params?.status && params.status !== 'all') query = query.eq('status', params.status)
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         if ((params as any)?.date_from) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             query = query.gte('created_at', (params as any).date_from + 'T00:00:00')
         }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         if ((params as any)?.date_to) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             query = query.lte('created_at', (params as any).date_to + 'T23:59:59')
         }
 

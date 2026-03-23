@@ -42,7 +42,7 @@ export default function SAPermissionsPage() {
             await superadminApi.updateUser(id, { role: 'merchant' }) // Lo bajamos de rango
             toast.success('Acceso revocado con éxito.')
             loadUsers()
-        } catch (err) {
+        } catch {
             toast.error('Error al revocar acceso.')
         } finally {
             setLoading(false)

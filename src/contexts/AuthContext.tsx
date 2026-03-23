@@ -64,8 +64,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (isMounted) {
               setUser({
                 ...session.user,
-                role: (session.user.user_metadata as any)?.role || 'client'
-              } as any)
+                role: (session.user.user_metadata as Record<string, unknown>)?.role as string || 'client'
+              } as unknown as User)
             }
           }
         }

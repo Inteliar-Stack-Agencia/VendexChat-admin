@@ -4,11 +4,6 @@ interface Env {
   SUPABASE_SERVICE_KEY: string
 }
 
-const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  })
 
 async function getPayment(paymentId: string, token: string) {
   const res = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {

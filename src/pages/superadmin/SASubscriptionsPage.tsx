@@ -4,6 +4,7 @@ import { superadminApi } from '../../services/api'
 import { LoadingSpinner } from '../../components/common'
 
 export default function SASubscriptionsPage() {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const [subscriptions, setSubscriptions] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
 

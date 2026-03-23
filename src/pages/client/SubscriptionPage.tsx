@@ -31,7 +31,7 @@ const VIP_DIFFERENTIATORS = [
 ]
 
 export default function SubscriptionPage() {
-    const { refreshSubscription, user } = useAuth()
+    const { user } = useAuth()
     const [plans, setPlans] = useState<SubscriptionPlan[]>([])
     const [currentSub, setCurrentSub] = useState<Subscription | null>(null)
     const [loading, setLoading] = useState(true)

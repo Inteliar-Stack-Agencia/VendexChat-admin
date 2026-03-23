@@ -4,8 +4,6 @@ import {
     TrendingUp,
     ArrowUpRight,
     Clock,
-    CheckCircle,
-    AlertCircle,
     User,
     BarChart3,
     Filter,
@@ -39,7 +37,7 @@ export default function SALiquidationsPage() {
             try {
                 // Combinamos con data de overview para los totales reales
                 const overview = await superadminApi.overview()
-                const subs = await superadminApi.listSubscriptions()
+                await superadminApi.listSubscriptions()
                 const orders = await superadminApi.listGlobalOrders({ limit: 5 })
 
                 setData({

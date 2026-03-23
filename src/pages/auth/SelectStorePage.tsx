@@ -39,6 +39,8 @@ export default function SelectStorePage() {
         }
 
         loadStores()
+    // handleSelect is defined after this effect and would cause circular dep if included
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user, authLoading, navigate, selectStore])
 
     const handleSelect = async (storeId: string) => {

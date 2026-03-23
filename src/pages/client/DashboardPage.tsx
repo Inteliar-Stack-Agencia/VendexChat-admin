@@ -7,39 +7,25 @@ import {
   Plus,
   Clock,
   AlertTriangle,
-  ChevronRight,
   ClipboardList,
-  ExternalLink,
   Zap,
-  Shield,
-  LayoutGrid,
   Image as ImageIcon,
-  MessageSquare,
   Clock as ClockIcon,
   CreditCard,
-  TrendingUp,
   Truck,
   QrCode,
-  Tags,
-  PlusCircle,
   Percent,
   Bell,
   HelpCircle,
   Globe,
-  Wand2,
   Calendar,
   Sparkles,
-  Pencil,
-  Save,
-  X,
-  RefreshCw
 } from 'lucide-react'
-import { Card, LoadingSpinner, Badge, Button } from '../../components/common'
-import { showToast } from '../../components/common/Toast'
+import { Card, Badge, Button } from '../../components/common'
 import OnboardingChecklist from '../../components/dashboard/OnboardingChecklist'
 import { dashboardApi, tenantApi } from '../../services/api'
 import { DashboardStats, Tenant } from '../../types'
-import { formatPrice, formatDate, orderStatusConfig } from '../../utils/helpers'
+import { formatPrice, orderStatusConfig } from '../../utils/helpers'
 import { useAuth } from '../../contexts/AuthContext'
 import FeatureGuard from '../../components/FeatureGuard'
 
@@ -86,18 +72,14 @@ export default function DashboardPage() {
 
   // Asistente de ventas
   const [aiPrompt, setAiPrompt] = useState('')
-  const [aiPromptDraft, setAiPromptDraft] = useState('')
-  const [isEditing, setIsEditing] = useState(false)
-  const [savingPrompt, setSavingPrompt] = useState(false)
 
   // Plan efectivo: para superadmins usar el plan del tenant (metadata), sino el de la suscripción
   const currentPlan = (isSuperadmin
     ? (tenant?.metadata?.plan_type as string | undefined)
     : subscription?.plan_type) || 'free'
 
-  const isProPlan = currentPlan === 'pro'
-
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true)
     Promise.all([
       dashboardApi.getStats(),
@@ -109,7 +91,6 @@ export default function DashboardPage() {
         const saved = (tenantData.metadata?.ai_prompt as string | undefined) || tenantData.ai_prompt || ''
         const prompt: string = saved || generatePromptTemplate(tenantData)
         setAiPrompt(prompt)
-        setAiPromptDraft(prompt)
       })
       .catch((err) => {
         console.error('[DashboardPage] Error cargando datos:', err)
@@ -118,42 +99,6 @@ export default function DashboardPage() {
       .finally(() => setLoading(false))
   }, [selectedStoreId])
 
-  const handleEditStart = () => {
-    setAiPromptDraft(aiPrompt)
-    setIsEditing(true)
-  }
-
-  const handleEditCancel = () => {
-    setAiPromptDraft(aiPrompt)
-    setIsEditing(false)
-  }
-
-  const handleRegenerate = () => {
-    if (!tenant) return
-    setAiPromptDraft(generatePromptTemplate(tenant))
-  }
-
-  const handleSavePrompt = async () => {
-    setSavingPrompt(true)
-    try {
-      const updatedMetadata = { ...(tenant?.metadata || {}), ai_prompt: aiPromptDraft }
-      const updated = await tenantApi.updateMe({ metadata: updatedMetadata })
-      setAiPrompt(aiPromptDraft)
-      if (updated && tenant) {
-        setTenant({ ...tenant, metadata: updatedMetadata })
-      }
-      setIsEditing(false)
-      showToast('success', 'Asistente actualizado')
-    } catch (err) {
-      console.error('[handleSavePrompt] Error al guardar:', err)
-      const msg = err instanceof Error ? err.message : 'Error al guardar'
-      showToast('error', msg)
-    } finally {
-      setSavingPrompt(false)
-    }
-  }
-
-  const storefrontUrl = `${import.meta.env.VITE_STOREFRONT_URL}/${tenant?.slug}`
   const isTrial = subscription?.status === 'trial'
 
   // Calcular días restantes de prueba

@@ -33,8 +33,7 @@ export const onRequestOptions: PagesFunction = async () =>
   new Response(null, { headers: corsHeaders })
 
 async function verifySupabaseJWT(
-  token: string,
-  env: Env
+  token: string
 ): Promise<{ sub: string; role: string } | null> {
   // Decode JWT payload without full verification (Supabase anon key is public)
   // This ensures the token is structurally valid and not expired
@@ -66,7 +65,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     if (!authHeader?.startsWith('Bearer ')) {
       return json({ error: 'Missing authorization' }, 401)
     }
-    const user = await verifySupabaseJWT(authHeader.slice(7), env)
+    const user = await verifySupabaseJWT(authHeader.slice(7))
     if (!user) {
       return json({ error: 'Invalid or expired token' }, 401)
     }

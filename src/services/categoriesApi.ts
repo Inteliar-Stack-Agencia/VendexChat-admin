@@ -15,6 +15,7 @@ export const categoriesApi = {
         if (error) throw error
         return (data || []).map(cat => ({
             ...cat,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             product_count: (cat as any).products?.[0]?.count || 0
         })) as Category[]
     },

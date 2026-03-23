@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import {
-    Bot, Save, Plus, Trash2, MessageSquare, Send, Power,
+    Bot, Save, Plus, Trash2, MessageSquare, Send,
     ToggleLeft, ToggleRight, Loader2, Smartphone, Wifi, WifiOff,
-    Clock, ShoppingBag, Zap, Brain, ChevronDown, ChevronUp,
+    Clock, ShoppingBag, Zap, Brain,
 } from 'lucide-react'
 import FeatureGuard from '../../components/FeatureGuard'
 import { Card, Button, LoadingSpinner, showToast } from '../../components/common'
@@ -120,6 +120,7 @@ function WhatsAppBotInner() {
             setCatalogText(catText)
 
             // Load saved config
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const saved = (tenant as any).metadata?.wa_bot_config
             if (saved) {
                 setConfig({ ...DEFAULT_CONFIG, ...saved })
@@ -135,6 +136,7 @@ function WhatsAppBotInner() {
         setSaving(true)
         try {
             const tenant = await tenantApi.getMe()
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const metadata = { ...(tenant as any).metadata, wa_bot_config: config }
             await tenantApi.updateMe({ metadata } as Partial<Tenant>)
             showToast('success', 'Configuración del Bot WhatsApp guardada')

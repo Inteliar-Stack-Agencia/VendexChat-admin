@@ -48,6 +48,7 @@ export default function EmpresaPage() {
 
     useEffect(() => {
         loadOrders()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [range, fromDate, toDate])
 
     const loadOrders = async () => {

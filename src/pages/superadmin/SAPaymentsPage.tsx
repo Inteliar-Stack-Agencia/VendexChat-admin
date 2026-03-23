@@ -1,18 +1,12 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import {
-    CreditCard,
-    Search,
-    Filter,
     ArrowUpRight,
-    CheckCircle,
-    XCircle,
-    Clock,
-    ExternalLink
 } from 'lucide-react'
 import { superadminApi } from '../../services/api'
 
 export default function SAPaymentsPage() {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const [orders, setOrders] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
 

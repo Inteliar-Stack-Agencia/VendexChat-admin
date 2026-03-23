@@ -1,4 +1,4 @@
-import { Trash2, FolderInput, X, Loader2 } from 'lucide-react'
+import { Trash2, FolderInput, X } from 'lucide-react'
 import Button from '../common/Button'
 import { Category } from '../../types'
 import { useState } from 'react'

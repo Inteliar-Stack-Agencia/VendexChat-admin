@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
     Users, Search, MessageSquare, ClipboardList, ShoppingBag,
     TrendingUp, UserCheck, DollarSign, Bot, Sparkles, Copy, CheckCircle2,
-    Send, Loader2, RefreshCw, Settings, ChevronDown, ChevronUp, Trash2, Archive, ArchiveRestore
+    Send, Loader2, ChevronDown, ChevronUp, Trash2, Archive, ArchiveRestore
 } from 'lucide-react'
 import FeatureGuard from '../../components/FeatureGuard'
 import { Card, LoadingSpinner, EmptyState, Modal, Button, showToast } from '../../components/common'
@@ -150,6 +150,7 @@ function CrmIaPageInner() {
 
     useEffect(() => {
         loadCustomers()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedStoreId, showArchived])
 
     useEffect(() => {
@@ -200,7 +201,7 @@ function CrmIaPageInner() {
             const days = c.last_order_at
                 ? Math.floor((Date.now() - new Date(c.last_order_at).getTime()) / 86400000)
                 : null
-            const tags = getCustomerTags(c, customers).map(t => t.label.replace(/[⭐🔄⚠️😴🆕]\s?/, '')).join(', ')
+            const tags = getCustomerTags(c, customers).map(t => t.label.replace(/\p{Emoji}\s?/u, '')).join(', ')
             const cAvg = c.total_orders > 0 ? Number(c.total_spent) / c.total_orders : 0
             return `- ${c.name} | WA: ${c.whatsapp} | Pedidos: ${c.total_orders} | Total: ${formatPrice(Number(c.total_spent))} | Ticket: ${formatPrice(cAvg)} | Días s/comprar: ${days ?? 'sin pedidos'} | Tags: ${tags || 'ninguno'}${c.notes ? ` | Notas: ${c.notes}` : ''}`
         }).join('\n')

@@ -3,7 +3,7 @@ import { Clock, Save, Plus, Trash2, Store, Globe } from 'lucide-react'
 import { Card, Button, LoadingSpinner } from '../../components/common'
 import { showToast } from '../../components/common/Toast'
 import { tenantApi } from '../../services/api'
-import { Tenant, ScheduleDay } from '../../types'
+import { ScheduleDay } from '../../types'
 
 const DAYS = [
     { id: 'mon', label: 'Lunes' },
