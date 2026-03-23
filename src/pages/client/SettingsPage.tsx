@@ -485,8 +485,7 @@ export default function SettingsPage() {
 
       {/* Tabs */}
       <div className="flex gap-2 overflow-x-auto border-b border-slate-100 px-1 pb-px scrollbar-hide">
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        {TABS.filter(tab => !(tab as any).hidden).map((tab) => (
+        {TABS.filter(tab => !(tab as Record<string, unknown>).hidden).map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}

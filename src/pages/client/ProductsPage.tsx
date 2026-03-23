@@ -259,8 +259,6 @@ export default function ProductsPage() {
     } finally {
       setLoading(false)
     }
-  // selectedStoreId triggers reload via the initial useEffect, not directly here
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, debouncedSearch, categoryFilter])
 
   // Carga inicial: categorías primero (rápido), luego productos de la primera categoría

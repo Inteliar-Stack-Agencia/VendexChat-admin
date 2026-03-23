@@ -41,6 +41,7 @@ export default function StatsPage() {
 
     useEffect(() => {
         loadOverview()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [range, selectedStoreId, fromDate, toDate])
 
     const getDateRange = () =>

@@ -10,7 +10,6 @@ import {
   ClipboardList,
   Zap,
   Image as ImageIcon,
-  MessageSquare,
   Clock as ClockIcon,
   CreditCard,
   Truck,
@@ -19,12 +18,10 @@ import {
   Bell,
   HelpCircle,
   Globe,
-  Wand2,
   Calendar,
   Sparkles,
 } from 'lucide-react'
 import { Card, Badge, Button } from '../../components/common'
-import { showToast } from '../../components/common/Toast'
 import OnboardingChecklist from '../../components/dashboard/OnboardingChecklist'
 import { dashboardApi, tenantApi } from '../../services/api'
 import { DashboardStats, Tenant } from '../../types'
@@ -82,6 +79,7 @@ export default function DashboardPage() {
     : subscription?.plan_type) || 'free'
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true)
     Promise.all([
       dashboardApi.getStats(),

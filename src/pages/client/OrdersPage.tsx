@@ -14,7 +14,7 @@ type PendingAction = {
 } | null
 
 export default function OrdersPage() {
-  const { selectedStoreId } = useAuth()
+  useAuth()
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState('all')
@@ -66,7 +66,7 @@ export default function OrdersPage() {
     } finally {
       setLoading(false)
     }
-  }, [page, statusFilter, dateFilter]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [page, statusFilter, dateFilter])
 
   useEffect(() => {
     loadOrders()

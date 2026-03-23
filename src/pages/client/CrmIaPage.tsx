@@ -201,7 +201,7 @@ function CrmIaPageInner() {
             const days = c.last_order_at
                 ? Math.floor((Date.now() - new Date(c.last_order_at).getTime()) / 86400000)
                 : null
-            const tags = getCustomerTags(c, customers).map(t => t.label.replace(/[⭐🔄⚠️😴🆕]\s?/u, '')).join(', ')
+            const tags = getCustomerTags(c, customers).map(t => t.label.replace(/\p{Emoji}\s?/u, '')).join(', ')
             const cAvg = c.total_orders > 0 ? Number(c.total_spent) / c.total_orders : 0
             return `- ${c.name} | WA: ${c.whatsapp} | Pedidos: ${c.total_orders} | Total: ${formatPrice(Number(c.total_spent))} | Ticket: ${formatPrice(cAvg)} | Días s/comprar: ${days ?? 'sin pedidos'} | Tags: ${tags || 'ninguno'}${c.notes ? ` | Notas: ${c.notes}` : ''}`
         }).join('\n')

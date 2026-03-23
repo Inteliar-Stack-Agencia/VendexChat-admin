@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import {
-    BarChart3, TrendingUp, TrendingDown, DollarSign, ShoppingCart, Users, Package,
+    BarChart3, Users, Package,
     Brain, Send, Loader2, Trash2, ChevronUp, ChevronDown, ArrowUpRight, ArrowDownRight,
     Target, Flame, AlertTriangle, Sparkles,
 } from 'lucide-react'
@@ -36,7 +36,7 @@ interface StatsData {
     topCustomers: { name: string; orders: number; total: number }[]
     ordersByDay: { day: string; count: number; total: number }[]
     ordersByHour: { hour: string; count: number }[]
-    recentOrders: any[]
+    recentOrders: Record<string, unknown>[]
 }
 
 const DAYS_ES = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
@@ -50,7 +50,7 @@ const QUICK_CHIPS = [
 ]
 
 export default function StatsIAPage() {
-    const { subscription, selectedStoreId } = useAuth()
+    const { subscription } = useAuth()
     const plan = subscription?.plan_type ?? 'free'
 
     const [loading, setLoading] = useState(true)
@@ -88,6 +88,7 @@ export default function StatsIAPage() {
 
             // Top customers
             const custMap: Record<string, { name: string; total: number; orders: number }> = {}
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             topCustRaw.forEach((o: any) => {
                 const key = o.customer_whatsapp || o.customer_name || 'desconocido'
                 if (!custMap[key]) custMap[key] = { name: o.customer_name, total: 0, orders: 0 }
@@ -98,6 +99,7 @@ export default function StatsIAPage() {
 
             // Top products
             const prodMap: Record<string, { name: string; qty: number; revenue: number }> = {}
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             topProdRaw.forEach((item: any) => {
                 const name = item.products?.name || 'Sin nombre'
                 if (!prodMap[name]) prodMap[name] = { name, qty: 0, revenue: 0 }
@@ -172,7 +174,7 @@ export default function StatsIAPage() {
         } finally {
             setLoading(false)
         }
-    }, [selectedStoreId])
+    }, [])
 
     useEffect(() => { loadStats() }, [loadStats])
 
