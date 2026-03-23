@@ -1,7 +1,7 @@
 interface Env {
   MP_ACCESS_TOKEN: string
   SUPABASE_URL: string
-  SUPABASE_SERVICE_ROLE_KEY: string
+  SUPABASE_SERVICE_KEY: string
   VITE_ADMIN_URL?: string
   ADMIN_URL?: string
 }
@@ -55,7 +55,7 @@ export const onRequestOptions: PagesFunction = async () =>
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   if (!env.MP_ACCESS_TOKEN) return json({ error: 'MP_ACCESS_TOKEN no configurado' }, 500)
-  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) return json({ error: 'Supabase env vars no configurados' }, 500)
+  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_KEY) return json({ error: 'Supabase env vars no configurados' }, 500)
 
   let body: { plan_id?: string; billing_cycle?: string; store_id?: string; user_email?: string }
   try {
@@ -71,7 +71,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
   let plan: PlanRow | null
   try {
-    plan = await getPlanFromSupabase(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, plan_id)
+    plan = await getPlanFromSupabase(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY, plan_id)
   } catch (err) {
     return json({ error: `No se pudo leer el plan: ${(err as Error).message}` }, 502)
   }
