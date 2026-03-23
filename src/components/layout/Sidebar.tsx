@@ -19,6 +19,7 @@ import {
   Cpu,
   Crown,
   Receipt,
+  MessageSquareWarning,
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -171,6 +172,11 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                 <NavLink to="/whatsapp-bot" className={linkClass} onClick={onClose}>
                   <Bot className="w-5 h-5" />
                   Bot WhatsApp
+                  <span className="ml-auto text-[8px] bg-purple-100 text-purple-600 px-1.5 py-0.5 rounded font-black uppercase">ULTRA</span>
+                </NavLink>
+                <NavLink to="/bot-feedback" className={linkClass} onClick={onClose}>
+                  <MessageSquareWarning className="w-5 h-5" />
+                  Feedback IA
                   <span className="ml-auto text-[8px] bg-purple-100 text-purple-600 px-1.5 py-0.5 rounded font-black uppercase">ULTRA</span>
                 </NavLink>
               </div>
