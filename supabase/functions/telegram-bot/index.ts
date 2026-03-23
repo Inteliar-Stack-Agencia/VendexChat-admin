@@ -141,6 +141,28 @@ async function loadStoreSnapshot(storeId: string) {
     const completed = allOrders.filter(o => o.status === "completed")
     const cancelled = allOrders.filter(o => o.status === "cancelled")
 
+    // Store config
+    const { data: store } = await supabase
+        .from("stores")
+        .select("accept_orders, min_order, delivery_cost, delivery_info, coupons_enabled, low_stock_threshold, physical_schedule, online_schedule, metadata")
+        .eq("id", storeId)
+        .single()
+
+    // Active coupons
+    const { data: coupons } = await supabase
+        .from("coupons")
+        .select("code, type, value, end_date, usage_limit, usage_count, min_purchase_amount, is_active")
+        .eq("store_id", storeId)
+        .eq("is_active", true)
+        .limit(20)
+
+    // Active gateways
+    const { data: gateways } = await supabase
+        .from("gateways")
+        .select("provider, is_active, is_master")
+        .eq("store_id", storeId)
+        .eq("is_active", true)
+
     return {
         today,
         dayOfWeek: DAYS_ES[now.getDay()],
@@ -177,6 +199,29 @@ async function loadStoreSnapshot(storeId: string) {
             activo: p.is_active,
         })),
         categories: Object.values(categoriesMap),
+        storeConfig: {
+            acceptOrders: store?.accept_orders ?? true,
+            minOrder: store?.min_order ?? 0,
+            deliveryCost: store?.delivery_cost ?? 0,
+            deliveryInfo: store?.delivery_info ?? "",
+            couponsEnabled: store?.coupons_enabled ?? false,
+            lowStockThreshold: store?.low_stock_threshold ?? 5,
+            deliveryMode: (store?.metadata as any)?.delivery_mode ?? "delivery",
+            estimatedTime: (store?.metadata as any)?.estimated_time ?? "",
+            deliveryZones: (store?.metadata as any)?.delivery_zones ?? [],
+            paymentMethods: (store?.metadata as any)?.payment_methods ?? {},
+            physicalSchedule: store?.physical_schedule ?? null,
+            onlineSchedule: store?.online_schedule ?? null,
+        },
+        coupons: (coupons || []).map((c: any) => ({
+            code: c.code,
+            tipo: c.type,
+            valor: c.value,
+            vence: c.end_date?.slice(0, 10) ?? "sin vencimiento",
+            usos: `${c.usage_count}/${c.usage_limit ?? "∞"}`,
+            minCompra: c.min_purchase_amount ?? 0,
+        })),
+        gateways: (gateways || []).map((g: any) => g.provider),
         ordersByStatus: {
             pending: pending.length,
             confirmed: confirmed.length,
@@ -250,22 +295,64 @@ Para activar/pausar producto:
 
 REGLAS: Usá los IDs exactos del catálogo. Solo incluí acciones cuando el usuario pida ejecutar cambios. Para análisis no incluyas acciones.
 
+═══ CONFIGURACIÓN DE LA TIENDA ═══
+- Acepta pedidos: ${snap.storeConfig.acceptOrders ? "✅ Sí" : "❌ No"}
+- Pedido mínimo: ${formatPrice(snap.storeConfig.minOrder)}
+- Costo delivery base: ${formatPrice(snap.storeConfig.deliveryCost)}
+- Info delivery: ${snap.storeConfig.deliveryInfo || "No especificada"}
+- Modo entrega: ${snap.storeConfig.deliveryMode}
+- Tiempo estimado: ${snap.storeConfig.estimatedTime || "No especificado"}
+- Cupones habilitados: ${snap.storeConfig.couponsEnabled ? "✅ Sí" : "❌ No"}
+- Umbral stock bajo: ${snap.storeConfig.lowStockThreshold} uds
+${snap.storeConfig.deliveryZones.length > 0 ? `- Zonas delivery: ${snap.storeConfig.deliveryZones.filter((z: any) => z.is_active).map((z: any) => `${z.name} (${formatPrice(z.cost)})`).join(", ")}` : ""}
+${snap.gateways.length > 0 ? `- Pasarelas de pago: ${snap.gateways.join(", ")}` : ""}
+${Object.keys(snap.storeConfig.paymentMethods).filter(k => snap.storeConfig.paymentMethods[k]).length > 0 ? `- Métodos de pago: ${Object.keys(snap.storeConfig.paymentMethods).filter(k => snap.storeConfig.paymentMethods[k]).join(", ")}` : ""}
+
+${snap.storeConfig.onlineSchedule ? `═══ HORARIO TIENDA ONLINE ═══
+${Object.entries(snap.storeConfig.onlineSchedule).map(([day, s]: [string, any]) =>
+    s.open ? `${day}: ${s.intervals?.map((i: any) => `${i.start}-${i.end}`).join(", ")}` : `${day}: Cerrado`
+).join("\n")}` : ""}
+
+${snap.coupons.length > 0 ? `═══ CUPONES ACTIVOS (${snap.coupons.length}) ═══
+${snap.coupons.map((c: any) => `- ${c.code} | Tipo ${c.tipo} | Valor: ${c.valor} | Vence: ${c.vence} | Usos: ${c.usos}${c.minCompra > 0 ? ` | Mínimo: ${formatPrice(c.minCompra)}` : ""}`).join("\n")}` : ""}
+
 ═══ INSTRUCCIONES ═══
 - Respondé en español argentino, conciso (es Telegram)
 - Usá emojis para hacer visual
 - Usá datos reales para fundamentar
-- Cuando hagas predicciones, aclará que son basadas en patrones`
+- Cuando hagas predicciones, aclará que son basadas en patrones
+- Si el usuario pregunta algo para lo que NO tenés datos suficientes en este contexto, respondé lo mejor que puedas Y al final incluí: [[UNKNOWN:pregunta del usuario]]`
 }
 
-function parseActions(text: string): { cleanText: string; actions: AIAction[] } {
+function parseActions(text: string): { cleanText: string; actions: AIAction[]; unknownQuestions: string[] } {
     const actionRegex = /\[\[ACTION:(.*?)\]\]/g
+    const unknownRegex = /\[\[UNKNOWN:(.*?)\]\]/g
     const actions: AIAction[] = []
+    const unknownQuestions: string[] = []
     let match
     while ((match = actionRegex.exec(text)) !== null) {
         try { actions.push(JSON.parse(match[1]) as AIAction) } catch { /* ignore */ }
     }
-    const cleanText = text.replace(/\[\[ACTION:.*?\]\]/g, "").replace(/\n{3,}/g, "\n\n").trim()
-    return { cleanText, actions }
+    while ((match = unknownRegex.exec(text)) !== null) {
+        if (match[1]?.trim()) unknownQuestions.push(match[1].trim())
+    }
+    const cleanText = text
+        .replace(/\[\[ACTION:.*?\]\]/g, "")
+        .replace(/\[\[UNKNOWN:.*?\]\]/g, "")
+        .replace(/\n{3,}/g, "\n\n").trim()
+    return { cleanText, actions, unknownQuestions }
+}
+
+async function saveFeedback(storeId: string, chatId: number, username: string | undefined, questions: string[], botContext: string) {
+    for (const question of questions) {
+        await supabase.from("bot_feedback").insert({
+            store_id: storeId,
+            chat_id: chatId,
+            username: username ?? null,
+            question,
+            bot_context: botContext.slice(0, 500),
+        })
+    }
 }
 
 function describeAction(a: AIAction): string {
@@ -551,9 +638,15 @@ serve(async (req) => {
         const aiMessages = [{ role: "system", content: systemPrompt }, ...chatHistories[historyKey]]
 
         const aiResponse = await callGroq(aiMessages)
-        const { cleanText, actions } = parseActions(aiResponse)
+        const { cleanText, actions, unknownQuestions } = parseActions(aiResponse)
 
         chatHistories[historyKey].push({ role: "assistant", content: cleanText })
+
+        // Save unanswered questions for store training
+        if (unknownQuestions.length > 0) {
+            const username = message.from?.username || message.from?.first_name
+            await saveFeedback(storeId, chatId, username, unknownQuestions, cleanText)
+        }
 
         // ─── Send response ───────────────────────────────────────────
         await sendTelegramMessage(botToken, chatId, cleanText)
