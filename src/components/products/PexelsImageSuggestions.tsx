@@ -160,9 +160,9 @@ export default function PexelsImageSuggestions({
 
       setImages(result.images)
       setImageSource(result.source)
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Image search error:", err);
-      const baseMessage = err.message || 'Error al buscar imágenes. Verificá tu conexión.'
+      const baseMessage = err instanceof Error ? err.message : 'Error al buscar imágenes. Verificá tu conexión.'
       const details = getGoogleSetupHints(baseMessage)
       setError(baseMessage)
       setErrorDetails(details)
@@ -192,7 +192,6 @@ export default function PexelsImageSuggestions({
       setQuery(initialQuery)
       search(initialQuery)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, initialQuery])
 
   if (!isOpen) return null

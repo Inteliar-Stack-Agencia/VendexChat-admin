@@ -1,6 +1,5 @@
 import { Navigate, useLocation, Link } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
-import { LoadingSpinner } from '../common'
 
 interface ProtectedRouteProps {
   children: React.ReactNode
@@ -8,7 +7,7 @@ interface ProtectedRouteProps {
 }
 
 export default function ProtectedRoute({ children, requiredRole = 'client' }: ProtectedRouteProps) {
-  const { user, isAuthenticated, loading, isSuperadmin } = useAuth()
+  const { isAuthenticated, loading, isSuperadmin } = useAuth()
   const location = useLocation()
 
   if (loading) {

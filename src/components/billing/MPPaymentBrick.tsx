@@ -32,7 +32,7 @@ export default function MPPaymentBrick({ plan, billingCycle, storeId, onSuccess,
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const onSubmit = async ({ selectedPaymentMethod, formData }: any) => {
+    const onSubmit = async ({ formData }: any) => {
         return new Promise((resolve, reject) => {
             fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/mercadopago-webhook`, {
                 method: 'POST',

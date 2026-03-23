@@ -34,7 +34,7 @@ export const onRequestOptions: PagesFunction = async () =>
 
 async function verifySupabaseJWT(
   token: string,
-  env: Env
+  _env: Env
 ): Promise<{ sub: string; role: string } | null> {
   // Decode JWT payload without full verification (Supabase anon key is public)
   // This ensures the token is structurally valid and not expired

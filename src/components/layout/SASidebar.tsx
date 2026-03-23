@@ -4,7 +4,6 @@ import {
     LayoutDashboard,
     Store,
     Users,
-    Shield,
     CreditCard,
     Settings,
     LogOut,
