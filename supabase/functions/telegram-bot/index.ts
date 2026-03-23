@@ -71,10 +71,18 @@ async function loadStoreSnapshot(storeId: string) {
     const totalSales30d = allOrders.reduce((s, o) => s + (Number(o.total) || 0), 0)
     const totalSales7d = orders7d.reduce((s, o) => s + (Number(o.total) || 0), 0)
 
-    // Products with category
+    // Categories map
+    const { data: categoriesData } = await supabase
+        .from("categories")
+        .select("id, name")
+        .eq("store_id", storeId)
+    const categoriesMap: Record<string, string> = {}
+    ;(categoriesData || []).forEach((c: any) => { categoriesMap[c.id] = c.name })
+
+    // Products with category_id
     const { data: products } = await supabase
         .from("products")
-        .select("id, name, description, price, stock, unlimited_stock, is_active, categories(name)")
+        .select("id, name, description, price, stock, unlimited_stock, is_active, category_id")
         .eq("store_id", storeId)
         .limit(300)
 
@@ -162,12 +170,13 @@ async function loadStoreSnapshot(storeId: string) {
         allProducts: (products || []).map(p => ({
             id: p.id,
             nombre: p.name,
-            categoria: (p as any).categories?.name || "Sin categoría",
+            categoria: categoriesMap[(p as any).category_id] || "Sin categoría",
             descripcion: (p as any).description ? (p as any).description.slice(0, 60) : "",
             precio: p.price,
             stock: p.unlimited_stock ? "∞" : p.stock,
             activo: p.is_active,
         })),
+        categories: Object.values(categoriesMap),
         ordersByStatus: {
             pending: pending.length,
             confirmed: confirmed.length,
@@ -211,6 +220,9 @@ ${snap.topCustomers.map((c: any, i: number) => `${i + 1}. ${c.name}${c.whatsapp 
 
 ═══ TOP PRODUCTOS ═══
 ${snap.topProducts.map((p: any, i: number) => `${i + 1}. ${p.name} | ${p.qty} uds | ${formatPrice(p.revenue)}`).join("\n")}
+
+═══ CATEGORÍAS (${snap.categories.length}) ═══
+${snap.categories.join(", ")}
 
 ═══ CATÁLOGO COMPLETO (${snap.allProducts.length} productos) ═══
 ${snap.allProducts.map((p: any) => `- [ID:${p.id}] [${p.categoria}] ${p.nombre}${p.descripcion ? ` — ${p.descripcion}` : ""} | ${formatPrice(p.precio)} | Stock: ${p.stock} | ${p.activo ? "✅" : "⏸️"}`).join("\n")}
