@@ -30,6 +30,9 @@ const CouponsPage = lazy(() => import('./pages/client/CouponsPage'))
 const CouponFormPage = lazy(() => import('./pages/client/CouponFormPage'))
 const SchedulePage = lazy(() => import('./pages/client/SchedulePage'))
 const SubscriptionPage = lazy(() => import('./pages/client/SubscriptionPage'))
+const SubscriptionSuccess = lazy(() => import('./pages/client/SubscriptionSuccess'))
+const SubscriptionFailure = lazy(() => import('./pages/client/SubscriptionFailure'))
+const SubscriptionPending = lazy(() => import('./pages/client/SubscriptionPending'))
 const SettingsPage = lazy(() => import('./pages/client/SettingsPage'))
 const BotConfigPage = lazy(() => import('./pages/client/BotConfigPage'))
 const LogisticsPage = lazy(() => import('./pages/client/LogisticsPage'))
@@ -127,6 +130,9 @@ export default function App() {
               <Route path="/coupons/edit/:id" element={<CouponFormPage />} />
               <Route path="/horarios" element={<SchedulePage />} />
               <Route path="/subscription" element={<SubscriptionPage />} />
+              <Route path="/subscription/success" element={<SubscriptionSuccess />} />
+              <Route path="/subscription/failure" element={<SubscriptionFailure />} />
+              <Route path="/subscription/pending" element={<SubscriptionPending />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/bot" element={<BotConfigPage />} />
               <Route path="/logistics" element={<LogisticsPage />} />
