@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Outlet } from 'react-router-dom'
+import { Outlet, Link } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import Header from './Header'
 import { tenantApi, superadminApi } from '../../services/api'
@@ -83,6 +83,18 @@ export default function AppLayout() {
               )}
             </div>
           </main>
+
+          <footer className="border-t border-slate-200 px-6 py-3 flex items-center justify-center gap-6">
+            <Link to="/terms" target="_blank" className="text-xs text-slate-400 hover:text-slate-600 transition-colors">
+              Términos y Condiciones
+            </Link>
+            <span className="text-slate-300 text-xs">·</span>
+            <Link to="/privacy" target="_blank" className="text-xs text-slate-400 hover:text-slate-600 transition-colors">
+              Política de Privacidad
+            </Link>
+            <span className="text-slate-300 text-xs">·</span>
+            <span className="text-xs text-slate-300">© 2026 Inteliar Stack</span>
+          </footer>
         </div>
       </div>
     </div>

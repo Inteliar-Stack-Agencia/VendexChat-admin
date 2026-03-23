@@ -48,6 +48,8 @@ const WhatsAppBotPage = lazy(() => import('./pages/client/WhatsAppBotPage'))
 const BulkPriceEditorPage = lazy(() => import('./pages/client/BulkPriceEditorPage'))
 const POSPage = lazy(() => import('./pages/client/POSPage'))
 const LegalPage = lazy(() => import('./pages/legal/LegalPage'))
+const TermsPage = lazy(() => import('./pages/legal/TermsPage'))
+const PrivacyPage = lazy(() => import('./pages/legal/PrivacyPage'))
 
 // Empresa portal
 const EmpresaPage = lazy(() => import('./pages/empresa/EmpresaPage'))
@@ -108,6 +110,8 @@ export default function App() {
             <Route path="/set-password" element={<SetPasswordPage />} />
             <Route path="/select-store" element={<SelectStorePage />} />
             <Route path="/legal/:type" element={<LegalPage />} />
+            <Route path="/terms" element={<TermsPage />} />
+            <Route path="/privacy" element={<PrivacyPage />} />
 
             {/* Rutas protegidas del cliente */}
             <Route

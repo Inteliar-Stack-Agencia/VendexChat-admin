@@ -188,8 +188,12 @@ export default function RegisterPage() {
               />
               <span className="text-sm text-gray-600">
                 Acepto los{' '}
-                <Link to="/legal/terms" className="text-emerald-600 hover:underline">
-                  términos y condiciones
+                <Link to="/terms" target="_blank" className="text-emerald-600 hover:underline">
+                  Términos y Condiciones
+                </Link>
+                {' '}y la{' '}
+                <Link to="/privacy" target="_blank" className="text-emerald-600 hover:underline">
+                  Política de Privacidad
                 </Link>
               </span>
             </label>
