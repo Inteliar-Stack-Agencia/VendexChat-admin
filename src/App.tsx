@@ -67,6 +67,7 @@ const SAPermissionsPage = lazy(() => import('./pages/superadmin/SAPermissionsPag
 const SAStatsPage = lazy(() => import('./pages/superadmin/SAStatsPage'))
 const SALiquidationsPage = lazy(() => import('./pages/superadmin/SALiquidationsPage'))
 const SASettingsPage = lazy(() => import('./pages/superadmin/SASettingsPage'))
+const SAPlansPage = lazy(() => import('./pages/superadmin/SAPlansPage'))
 
 function RoleRedirect() {
   const { user, loading, isSuperadmin, isEmpresa, selectedStoreId } = useAuth()
@@ -169,6 +170,7 @@ export default function App() {
               <Route path="/sa/stats" element={<SAStatsPage />} />
               <Route path="/sa/liquidations" element={<SALiquidationsPage />} />
               <Route path="/sa/settings" element={<SASettingsPage />} />
+              <Route path="/sa/plans" element={<SAPlansPage />} />
 
               {/* Alias para el dashboard de entrada */}
               <Route path="/sa" element={<Navigate to="/sa/overview" replace />} />
