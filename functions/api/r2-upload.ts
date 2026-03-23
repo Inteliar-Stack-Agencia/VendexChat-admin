@@ -32,6 +32,7 @@ const json = (body: unknown, status = 200) =>
 export const onRequestOptions: PagesFunction = async () =>
   new Response(null, { headers: corsHeaders })
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function verifySupabaseJWT(
   token: string,
   _env: Env

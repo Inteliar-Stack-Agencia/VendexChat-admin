@@ -2,6 +2,7 @@ import { supabase } from '../supabaseClient'
 import { getStoreId } from './coreApi'
 
 export const billingApi = {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     getPlans: async (): Promise<any[]> => {
         return [
             { id: 'free', name: 'Free', description: 'Empezá gratis y digitalizá tu negocio en minutos.', price: 0, annual_price: 0, features: ['2 Categorías', '10 Productos por cat.', 'Menú Digital QR', 'Pedidos por WhatsApp'] },
@@ -30,7 +31,8 @@ export const billingApi = {
                 status: 'active',
                 billing_cycle: 'monthly',
                 current_period_end: null
-            } as any
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any
         }
 
         return data

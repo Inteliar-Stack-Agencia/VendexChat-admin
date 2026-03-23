@@ -3,7 +3,6 @@
  * This reduces file sizes by 30-70% compared to raw PNG/JPEG uploads.
  */
 
-const MAX_DIMENSION = 1200
 const THUMBNAIL_MAX = 800
 const QUALITY = 0.82
 

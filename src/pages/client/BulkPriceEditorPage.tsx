@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import {
     ArrowLeft,
-    DollarSign,
     Save,
     Percent,
     RotateCcw,
@@ -16,7 +15,7 @@ import {
     Square,
     MinusSquare
 } from 'lucide-react'
-import { Card, LoadingSpinner, Button } from '../../components/common'
+import { Card, LoadingSpinner } from '../../components/common'
 import { productsApi, categoriesApi } from '../../services/api'
 import { Product, Category } from '../../types'
 import { formatPrice } from '../../utils/helpers'

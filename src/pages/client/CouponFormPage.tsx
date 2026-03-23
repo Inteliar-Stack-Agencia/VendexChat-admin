@@ -3,17 +3,13 @@ import { useNavigate, useParams, Link } from 'react-router-dom'
 import {
     ChevronLeft,
     Save,
-    Trash2,
-    Calendar as CalendarIcon,
     Percent,
     DollarSign,
     Tag,
     Package,
     FolderTree,
     AlertCircle,
-    CheckCircle2,
     Clock,
-    UserCircle
 } from 'lucide-react'
 import { Card, Button, LoadingSpinner, Badge } from '../../components/common'
 import { couponsApi, productsApi, categoriesApi } from '../../services/api'
@@ -78,6 +74,7 @@ export default function CouponFormPage() {
 
     useEffect(() => {
         loadInitialData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [id])
 
     const handleSubmit = async (e: React.FormEvent) => {

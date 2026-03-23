@@ -211,7 +211,7 @@ export default function AIImporterPage() {
             } else {
                 showToast('error', 'No se detectaron productos válidos.')
             }
-        } catch (err) {
+        } catch {
             showToast('error', 'Error al leer el archivo CSV.')
         } finally {
             setIsProcessing(false)
@@ -261,7 +261,7 @@ export default function AIImporterPage() {
             let extractedRaw = [];
             try {
                 extractedRaw = JSON.parse(cleanJson);
-            } catch (e) {
+            } catch {
                 console.error("Failed to parse AI JSON:", cleanJson);
                 throw new Error('Formato JSON inválido de la IA');
             }
@@ -364,7 +364,7 @@ export default function AIImporterPage() {
             setStep(1)
             setResults([])
             setRawText('')
-        } catch (err) {
+        } catch {
             showToast('error', 'Error al guardar los productos.')
         } finally {
             setIsSaving(false)

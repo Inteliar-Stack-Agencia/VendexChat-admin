@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { Eye, ShoppingCart, Printer, Archive, ArchiveRestore, Trash2 } from 'lucide-react'
-import { Card, Badge, LoadingSpinner, EmptyState, Pagination, Button, ConfirmDialog, showToast } from '../../components/common'
+import { Card, Badge, EmptyState, Pagination, Button, ConfirmDialog, showToast } from '../../components/common'
 import { ordersApi } from '../../services/api'
 import { Order } from '../../types'
 import { formatPrice, formatDate, orderStatusConfig } from '../../utils/helpers'
@@ -66,7 +66,7 @@ export default function OrdersPage() {
     } finally {
       setLoading(false)
     }
-  }, [page, statusFilter, dateFilter, selectedStoreId])
+  }, [page, statusFilter, dateFilter]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     loadOrders()

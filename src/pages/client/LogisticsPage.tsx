@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react'
 import {
     Truck, MapPin, Plus, Trash2, Save, Package,
-    CheckCircle, Clock, User, Phone, ChevronRight,
+    CheckCircle, Clock, User, Phone,
     ToggleLeft, ToggleRight, Loader2, AlertCircle
 } from 'lucide-react'
 import FeatureGuard from '../../components/FeatureGuard'
-import { Card, Button, LoadingSpinner, Modal, showToast } from '../../components/common'
+import { Card, Button, Modal, showToast } from '../../components/common'
 import { tenantApi, ordersApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import { formatPrice, formatShortDate } from '../../utils/helpers'

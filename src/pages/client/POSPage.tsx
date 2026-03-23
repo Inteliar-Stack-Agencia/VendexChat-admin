@@ -41,6 +41,7 @@ export default function POSPage() {
 
     // Ticket
     const [showTicket, setShowTicket] = useState(false)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const [lastOrder, setLastOrder] = useState<any>(null)
     const ticketRef = useRef<HTMLDivElement>(null)
 
@@ -168,9 +169,9 @@ export default function POSPage() {
 
             // Reload products to update stock
             loadData()
-        } catch (err: any) {
+        } catch (err) {
             console.error('POS sale error:', err)
-            showToast('error', err.message || 'Error al registrar venta')
+            showToast('error', err instanceof Error ? err.message : 'Error al registrar venta')
         } finally {
             setProcessing(false)
         }
@@ -521,6 +522,7 @@ export default function POSPage() {
 
                             {/* Items */}
                             <div className="space-y-1.5">
+                                {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                                 {lastOrder.items.map((item: any, i: number) => (
                                     <div key={i} className="flex justify-between text-xs">
                                         <div className="flex-1 min-w-0">

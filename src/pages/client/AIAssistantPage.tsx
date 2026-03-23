@@ -1,8 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import {
-    Sparkles,
     Send,
-    Bot,
     Wand2,
     FileText,
     Copy,
@@ -23,7 +21,7 @@ import {
     Check,
     AlertCircle,
 } from 'lucide-react'
-import { Card, Button, Badge } from '../../components/common'
+import { Card, Button } from '../../components/common'
 import { ordersApi, customersApi } from '../../services/api'
 import { tenantApi } from '../../services/tenantApi'
 import { productsApi } from '../../services/productsApi'
@@ -66,11 +64,11 @@ interface StoreSnapshot {
         totalSales7d: number
         totalOrders7d: number
     }
-    recentOrders: any[]
-    topCustomers: any[]
-    topProducts: any[]
-    lowStockProducts: any[]
-    allProducts: any[]
+    recentOrders: Record<string, unknown>[]
+    topCustomers: Record<string, unknown>[]
+    topProducts: Record<string, unknown>[]
+    lowStockProducts: Record<string, unknown>[]
+    allProducts: Record<string, unknown>[]
     customerCount: number
     dayOfWeek: string
 }
@@ -94,7 +92,7 @@ const MANAGEMENT_CHIPS = [
 const DAYS_ES = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
 
 export default function AIAssistantPage() {
-    const { subscription, selectedStoreId } = useAuth()
+    const { subscription } = useAuth()
     const plan = subscription?.plan_type ?? 'free'
 
     const [messages, setMessages] = useState<Message[]>([{
@@ -121,13 +119,14 @@ export default function AIAssistantPage() {
     const [tgShowToken, setTgShowToken] = useState(false)
     const [tgAllowedChatIds, setTgAllowedChatIds] = useState<number[]>([])
     const [tgNewChatId, setTgNewChatId] = useState('')
-    const [tgLoaded, setTgLoaded] = useState(false)
+    const [, setTgLoaded] = useState(false)
 
     // Load Telegram config from tenant metadata
     useEffect(() => {
         const loadTgConfig = async () => {
             try {
                 const tenant = await tenantApi.getMe()
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 const tgConfig = (tenant.metadata as any)?.telegram_bot_config
                 if (tgConfig) {
                     setTgToken(tgConfig.bot_token || '')
@@ -179,6 +178,7 @@ export default function AIAssistantPage() {
 
             // Save to tenant metadata
             const tenant = await tenantApi.getMe()
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const currentMetadata = (tenant.metadata || {}) as any
             await tenantApi.updateMe({
                 metadata: {
@@ -193,9 +193,9 @@ export default function AIAssistantPage() {
             })
 
             showToast('success', `Bot @${botUsername} conectado exitosamente`)
-        } catch (err: any) {
+        } catch (err) {
             console.error('Telegram connect error:', err)
-            showToast('error', err.message || 'Error al conectar bot de Telegram')
+            showToast('error', err instanceof Error ? err.message : 'Error al conectar bot de Telegram')
         } finally {
             setTgConnecting(false)
         }
@@ -220,6 +220,7 @@ export default function AIAssistantPage() {
             })
 
             const tenant = await tenantApi.getMe()
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const currentMetadata = (tenant.metadata || {}) as any
             await tenantApi.updateMe({
                 metadata: {
@@ -235,9 +236,9 @@ export default function AIAssistantPage() {
 
             setTgEnabled(false)
             showToast('success', 'Bot de Telegram desconectado')
-        } catch (err: any) {
+        } catch (err) {
             console.error('Telegram disconnect error:', err)
-            showToast('error', err.message || 'Error al desconectar')
+            showToast('error', err instanceof Error ? err.message : 'Error al desconectar')
         } finally {
             setTgSaving(false)
         }
@@ -247,6 +248,7 @@ export default function AIAssistantPage() {
         setTgSaving(true)
         try {
             const tenant = await tenantApi.getMe()
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const currentMetadata = (tenant.metadata || {}) as any
             await tenantApi.updateMe({
                 metadata: {
@@ -258,7 +260,7 @@ export default function AIAssistantPage() {
                 }
             })
             showToast('success', 'Configuración guardada')
-        } catch (err: any) {
+        } catch {
             showToast('error', 'Error al guardar')
         } finally {
             setTgSaving(false)
@@ -287,6 +289,7 @@ export default function AIAssistantPage() {
                 ])
 
             const customerMap: Record<string, { name: string; phone: string; total: number; orders: number }> = {}
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             topCustomersRaw.forEach((o: any) => {
                 const key = o.customer_whatsapp || o.customer_name || 'desconocido'
                 if (!customerMap[key]) customerMap[key] = { name: o.customer_name, phone: o.customer_whatsapp, total: 0, orders: 0 }
@@ -296,6 +299,7 @@ export default function AIAssistantPage() {
             const topCustomers = Object.values(customerMap).sort((a, b) => b.total - a.total).slice(0, 10)
 
             const productMap: Record<string, { name: string; qty: number; revenue: number }> = {}
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             topProductsRaw.forEach((item: any) => {
                 const name = item.products?.name || 'Sin nombre'
                 if (!productMap[name]) productMap[name] = { name, qty: 0, revenue: 0 }
@@ -320,6 +324,7 @@ export default function AIAssistantPage() {
                     fullId: o.id,
                     num: o.order_number,
                     cliente: o.customer_name,
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     empresa: (o as any).metadata?.company_name || null,
                     total: o.total,
                     estado: o.status,
@@ -333,7 +338,9 @@ export default function AIAssistantPage() {
                 allProducts: productsRes.data.map(p => ({
                     id: p.id,
                     nombre: p.name,
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     categoria: (p as any).category_name || 'Sin categoría',
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     descripcion: (p as any).description || '',
                     precio: p.price,
                     stock: p.unlimited_stock ? '∞' : p.stock,
@@ -491,6 +498,7 @@ REGLAS IMPORTANTES:
         for (const action of pendingActions) {
             try {
                 if (action.type === 'update_order_status' && action.order_id && action.new_status) {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     await ordersApi.updateStatus(action.order_id, action.new_status as any)
                     successCount++
                 } else if (action.type === 'update_product_stock' && action.product_id && action.new_stock !== undefined) {

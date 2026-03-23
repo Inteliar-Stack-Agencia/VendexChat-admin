@@ -28,6 +28,7 @@ export const tenantApi = {
         return data
     },
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     connectGateway: async (provider: string, config: any) => {
         const { data: profile } = await supabase.from('profiles').select('store_id').single();
         if (!profile?.store_id) throw new Error('No store associated with this user');

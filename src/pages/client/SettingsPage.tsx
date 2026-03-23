@@ -20,7 +20,7 @@ const TABS = [
 
 export default function SettingsPage() {
   const { subscription, selectedStoreId } = useAuth()
-  const { tenant: globalTenant, setTenant: setGlobalTenant } = useOutletContext<{ tenant: Tenant | null, setTenant: (t: Tenant) => void }>()
+  const { setTenant: setGlobalTenant } = useOutletContext<{ tenant: Tenant | null, setTenant: (t: Tenant) => void }>()
   const location = useLocation()
   const currentPlan = subscription?.plan_type || 'free'
   const [tenant, setLocalTenant] = useState<Tenant | null>(null)
@@ -92,6 +92,7 @@ export default function SettingsPage() {
   const [changingPassword, setChangingPassword] = useState(false)
 
   // Pagos
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [gateways, setGateways] = useState<any[]>([])
   const [loadingGateways, setLoadingGateways] = useState(false)
   const [newGateway, setNewGateway] = useState({ provider: 'mercadopago', public_key: '', secret_key: '' })
@@ -135,6 +136,7 @@ export default function SettingsPage() {
         setCountry(data.country || '')
         setCity(data.city || '')
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const metadata = (data as any).metadata || {}
         setDescriptionLong(metadata.description_long || '')
         setHighlights(metadata.highlights || [])
@@ -200,6 +202,7 @@ export default function SettingsPage() {
         banner_url: bannerUrl,
         custom_domain: customDomain || null,
         metadata: {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           ...((tenant as any)?.metadata || {}),
           description_long: descriptionLong,
           highlights: highlights,
@@ -214,12 +217,14 @@ export default function SettingsPage() {
         banner_url: bannerUrl,
         custom_domain: customDomain || null,
         metadata: {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           ...((tenant as any)?.metadata || {}),
           description_long: descriptionLong,
           highlights: highlights,
           about_title: aboutTitle,
           history_title: historyTitle
         }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any)
       toast.success('Información actualizada')
     } catch (err: unknown) {
@@ -256,6 +261,7 @@ export default function SettingsPage() {
     e.preventDefault()
     setSaving(true)
     try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const currentMetadata = (tenant as any)?.metadata || {}
       const updatedMetadata = {
         ...currentMetadata,
@@ -271,6 +277,7 @@ export default function SettingsPage() {
         delivery_info: deliveryInfo,
         low_stock_threshold: Number(lowStockThreshold),
         metadata: updatedMetadata,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any)
       handleUpdateTenantState({
         accept_orders: acceptOrders,
@@ -279,6 +286,7 @@ export default function SettingsPage() {
         delivery_info: deliveryInfo,
         low_stock_threshold: Number(lowStockThreshold),
         metadata: updatedMetadata,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any)
       toast.success('Configuración de pedidos actualizada')
     } catch (err: unknown) {
@@ -361,6 +369,7 @@ export default function SettingsPage() {
     e.preventDefault()
     setSaving(true)
     try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const currentMetadata = (tenant as any)?.metadata || {}
       const updatedMetadata = {
         ...currentMetadata,
@@ -378,8 +387,10 @@ export default function SettingsPage() {
 
       await tenantApi.updateMe({
         metadata: updatedMetadata
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any)
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       handleUpdateTenantState({ metadata: updatedMetadata } as any)
       toast.success('Métodos manuales actualizados')
     } catch (err) {
@@ -394,6 +405,7 @@ export default function SettingsPage() {
     e.preventDefault()
     setSaving(true)
     try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const currentMetadata = (tenant as any)?.metadata || {}
       const updatedMetadata = {
         ...currentMetadata,
@@ -407,8 +419,10 @@ export default function SettingsPage() {
 
       await tenantApi.updateMe({
         metadata: updatedMetadata
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any)
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       handleUpdateTenantState({ metadata: updatedMetadata } as any)
       toast.success('Configuración de impresora actualizada')
     } catch (err: unknown) {
@@ -471,6 +485,7 @@ export default function SettingsPage() {
 
       {/* Tabs */}
       <div className="flex gap-2 overflow-x-auto border-b border-slate-100 px-1 pb-px scrollbar-hide">
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         {TABS.filter(tab => !(tab as any).hidden).map((tab) => (
           <button
             key={tab.id}

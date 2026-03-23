@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { Store, Users, DollarSign, TrendingUp, AlertCircle } from 'lucide-react'
+import { Store, DollarSign, TrendingUp, AlertCircle } from 'lucide-react'
 import { useSuperadminOverview } from '../../hooks/useSuperadminOverview'
 import StatCard from './components/StatCard'
 

@@ -6,7 +6,6 @@ import {
     Search,
     Trash2,
     Calendar,
-    Users,
     ToggleLeft,
     ToggleRight,
     AlertCircle,
@@ -41,8 +40,7 @@ export default function CouponsPage() {
             ])
             setCoupons(couponsList)
             setTenant(tenantData)
-        } catch (err) {
-            console.error('Error cargando cupones:', err)
+        } catch {
             showToast('error', 'No se pudieron cargar los cupones')
         } finally {
             setLoading(false)
@@ -61,7 +59,7 @@ export default function CouponsPage() {
             await couponsApi.toggleGlobal(newValue)
             setTenant({ ...tenant, coupons_enabled: newValue })
             showToast('success', newValue ? 'Cupones habilitados globalmente' : 'Cupones deshabilitados')
-        } catch (err) {
+        } catch {
             showToast('error', 'Error al cambiar estado global')
         } finally {
             setIsUpdating(false)
@@ -74,7 +72,7 @@ export default function CouponsPage() {
             await couponsApi.delete(id)
             setCoupons(prev => prev.filter(c => c.id !== id))
             showToast('success', 'Cupón eliminado')
-        } catch (err) {
+        } catch {
             showToast('error', 'Error al eliminar cupón')
         }
     }

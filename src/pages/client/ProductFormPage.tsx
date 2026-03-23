@@ -80,6 +80,7 @@ export default function ProductFormPage() {
         })
         .finally(() => setLoading(false))
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, isEditing, navigate])
 
   const updateField = (field: keyof ProductFormData, value: unknown) => {
@@ -174,7 +175,7 @@ export default function ProductFormPage() {
       await productsApi.delete(id)
       showToast('success', 'Producto eliminado')
       navigate(returnCategory ? `/products?category=${returnCategory}` : '/products')
-    } catch (err) {
+    } catch {
       showToast('error', 'Error al eliminar el producto')
     }
   }

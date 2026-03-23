@@ -181,7 +181,7 @@ export default function HelpPage() {
                             ].map((guide, i) => (
                                 <div
                                     key={i}
-                                    onClick={() => setSelectedGuide(guide.id as any)}
+                                    onClick={() => setSelectedGuide(guide.id as keyof typeof GUIDES_CONTENT)}
                                     className="flex items-center gap-2 p-3 bg-slate-50 rounded-xl border border-slate-100 group hover:border-indigo-200 transition-colors cursor-pointer"
                                 >
                                     <span className="text-lg">{guide.icon}</span>
