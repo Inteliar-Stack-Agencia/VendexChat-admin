@@ -1,15 +1,42 @@
 import { supabase } from '../supabaseClient'
 import { getStoreId } from './coreApi'
 
+export interface Plan {
+    id: string
+    name: string
+    price_usd: number
+    annual_price_usd: number
+    features: string[]
+    is_active: boolean
+    sort_order: number
+    updated_at: string
+}
+
+// Static metadata that doesn't change with pricing
+const PLAN_META: Record<string, { description: string; is_popular?: boolean }> = {
+    free:  { description: 'Empezá gratis y digitalizá tu negocio en minutos.' },
+    pro:   { description: 'Todo lo que necesitás para crecer y vender más. Incluye Asistente de Ventas IA.', is_popular: true },
+    vip:   { description: 'Automatizá tu operación con IA, logística y soporte dedicado.' },
+    ultra: { description: 'Solución empresarial a medida con infraestructura propia.' },
+}
+
 export const billingApi = {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    getPlans: async (): Promise<any[]> => {
-        return [
-            { id: 'free', name: 'Free', description: 'Empezá gratis y digitalizá tu negocio en minutos.', price: 0, annual_price: 0, features: ['2 Categorías', '10 Productos por cat.', 'Menú Digital QR', 'Pedidos por WhatsApp'] },
-            { id: 'pro', name: 'Premium (Pro)', description: 'Todo lo que necesitás para crecer y vender más. Incluye Asistente de Ventas IA.', price: 13.99, annual_price: 139.9, features: ['Categorías Ilimitadas', 'Productos Ilimitados', 'Dominios Personalizados', 'Estadísticas de Venta', 'Importador de Productos con IA'], is_popular: true },
-            { id: 'vip', name: 'VIP (Business)', description: 'Automatizá tu operación con IA, logística y soporte dedicado.', price: 19.99, annual_price: 199.9, features: ['Todo lo del plan Pro', 'VENDEx Bot con IA', 'Logística Integrada', 'CRM con IA & Analítica', 'Soporte Prioritario'] },
-            { id: 'ultra', name: 'ULTRA', description: 'Solución empresarial a medida con infraestructura propia.', price: 0, annual_price: 0, features: ['Desarrollo a Medida', 'Web & Hosting Propio', 'Bots & Automatizaciones', 'Consultoría Estratégica', 'Soporte 24/7 VIP'] },
-        ]
+    getPlans: async () => {
+        const { data, error } = await supabase
+            .from('plans')
+            .select('*')
+            .eq('is_active', true)
+            .order('sort_order')
+
+        if (error) throw error
+
+        return (data as Plan[]).map(plan => ({
+            ...plan,
+            // Map DB columns to the shape the UI expects
+            price: plan.price_usd,
+            annual_price: plan.annual_price_usd,
+            ...(PLAN_META[plan.id] ?? {}),
+        }))
     },
 
     getCurrentSubscription: async () => {

@@ -10,7 +10,8 @@ import {
     X,
     PieChart,
     Lock,
-    TrendingUp
+    TrendingUp,
+    PackagePlus
 } from 'lucide-react'
 
 interface SASidebarProps {
@@ -80,6 +81,10 @@ export default function SASidebar({ isOpen, onClose }: SASidebarProps) {
                         <NavLink to="/sa/payments" className={linkClass} onClick={onClose}>
                             <CreditCard className="w-5 h-5" />
                             Pagos Recibidos
+                        </NavLink>
+                        <NavLink to="/sa/plans" className={linkClass} onClick={onClose}>
+                            <PackagePlus className="w-5 h-5" />
+                            Planes y Precios
                         </NavLink>
                     </div>
 

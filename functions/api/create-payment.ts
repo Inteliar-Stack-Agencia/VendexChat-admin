@@ -1,5 +1,7 @@
 interface Env {
   MP_ACCESS_TOKEN: string
+  SUPABASE_URL: string
+  SUPABASE_SERVICE_KEY: string
   VITE_ADMIN_URL?: string
   ADMIN_URL?: string
 }
@@ -16,10 +18,25 @@ const json = (body: unknown, status = 200) =>
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   })
 
-// Same plan prices as billingApi.ts — keep in sync
-const PLANS: Record<string, { name: string; price: number; annual_price: number }> = {
-  pro:  { name: 'VENDEx Premium (Pro)',    price: 13.99,  annual_price: 139.90 },
-  vip:  { name: 'VENDEx VIP (Business)',   price: 19.99,  annual_price: 199.90 },
+interface PlanRow {
+  id: string
+  name: string
+  price_usd: number
+  annual_price_usd: number
+}
+
+async function getPlanFromSupabase(supabaseUrl: string, serviceRoleKey: string, planId: string): Promise<PlanRow | null> {
+  const url = `${supabaseUrl}/rest/v1/plans?id=eq.${encodeURIComponent(planId)}&select=id,name,price_usd,annual_price_usd&limit=1`
+  const res = await fetch(url, {
+    headers: {
+      apikey: serviceRoleKey,
+      Authorization: `Bearer ${serviceRoleKey}`,
+      Accept: 'application/json',
+    },
+  })
+  if (!res.ok) throw new Error(`Supabase plans query failed: ${res.status}`)
+  const rows = await res.json() as PlanRow[]
+  return rows[0] ?? null
 }
 
 async function getExchangeRate(token: string): Promise<number> {
@@ -38,6 +55,7 @@ export const onRequestOptions: PagesFunction = async () =>
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   if (!env.MP_ACCESS_TOKEN) return json({ error: 'MP_ACCESS_TOKEN no configurado' }, 500)
+  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_KEY) return json({ error: 'Supabase env vars no configurados' }, 500)
 
   let body: { plan_id?: string; billing_cycle?: string; store_id?: string; user_email?: string }
   try {
@@ -51,10 +69,19 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     return json({ error: 'plan_id, billing_cycle y store_id son requeridos' }, 400)
   }
 
-  const plan = PLANS[plan_id]
-  if (!plan) return json({ error: `Plan inválido: ${plan_id}` }, 400)
+  let plan: PlanRow | null
+  try {
+    plan = await getPlanFromSupabase(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY, plan_id)
+  } catch (err) {
+    return json({ error: `No se pudo leer el plan: ${(err as Error).message}` }, 502)
+  }
 
-  const priceUsd = billing_cycle === 'annual' ? plan.annual_price : plan.price
+  if (!plan) return json({ error: `Plan inválido: ${plan_id}` }, 400)
+  if (plan.price_usd === 0 && plan.annual_price_usd === 0) {
+    return json({ error: `El plan ${plan_id} no tiene precio definido` }, 400)
+  }
+
+  const priceUsd = billing_cycle === 'annual' ? plan.annual_price_usd : plan.price_usd
 
   let exchangeRate: number
   try {
