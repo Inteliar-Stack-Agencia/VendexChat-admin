@@ -31,7 +31,14 @@ interface AIAction {
     reason?: string
 }
 
-async function sendTelegramMessage(botToken: string, chatId: number, text: string) {
+const PRODUCTS_PER_PAGE = 5
+
+interface InlineKeyboardButton {
+    text: string
+    callback_data: string
+}
+
+async function sendTelegramMessage(botToken: string, chatId: number, text: string, replyMarkup?: { inline_keyboard: InlineKeyboardButton[][] }) {
     const chunks: string[] = []
     let remaining = text
     while (remaining.length > 0) {
@@ -41,12 +48,186 @@ async function sendTelegramMessage(botToken: string, chatId: number, text: strin
         chunks.push(remaining.slice(0, splitAt))
         remaining = remaining.slice(splitAt)
     }
-    for (const chunk of chunks) {
+    for (let i = 0; i < chunks.length; i++) {
+        const payload: Record<string, unknown> = { chat_id: chatId, text: chunks[i], parse_mode: "Markdown" }
+        // Only attach keyboard to the last chunk
+        if (replyMarkup && i === chunks.length - 1) payload.reply_markup = replyMarkup
         await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ chat_id: chatId, text: chunk, parse_mode: "Markdown" }),
+            body: JSON.stringify(payload),
         })
+    }
+}
+
+async function sendTelegramPhoto(botToken: string, chatId: number, photoUrl: string, caption: string, replyMarkup?: { inline_keyboard: InlineKeyboardButton[][] }) {
+    const payload: Record<string, unknown> = { chat_id: chatId, photo: photoUrl, caption, parse_mode: "Markdown" }
+    if (replyMarkup) payload.reply_markup = replyMarkup
+    const res = await fetch(`https://api.telegram.org/bot${botToken}/sendPhoto`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+    })
+    return res.ok
+}
+
+async function answerCallbackQuery(botToken: string, callbackQueryId: string, text?: string) {
+    await fetch(`https://api.telegram.org/bot${botToken}/answerCallbackQuery`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ callback_query_id: callbackQueryId, text }),
+    })
+}
+
+async function loadCatalogData(storeId: string) {
+    const { data: categories } = await supabase
+        .from("categories")
+        .select("id, name")
+        .eq("store_id", storeId)
+        .order("name")
+
+    const { data: products } = await supabase
+        .from("products")
+        .select("id, name, description, price, stock, unlimited_stock, is_active, category_id, image_url")
+        .eq("store_id", storeId)
+        .eq("is_active", true)
+        .order("sort_order", { ascending: true })
+        .limit(300)
+
+    return { categories: categories || [], products: products || [] }
+}
+
+function buildCategoryKeyboard(categories: { id: string; name: string }[], productCounts: Record<string, number>): { inline_keyboard: InlineKeyboardButton[][] } {
+    const rows: InlineKeyboardButton[][] = []
+    // Show categories with product counts, 2 per row
+    for (let i = 0; i < categories.length; i += 2) {
+        const row: InlineKeyboardButton[] = []
+        row.push({ text: `📂 ${categories[i].name} (${productCounts[categories[i].id] || 0})`, callback_data: `cat:${categories[i].id}:0` })
+        if (categories[i + 1]) {
+            row.push({ text: `📂 ${categories[i + 1].name} (${productCounts[categories[i + 1].id] || 0})`, callback_data: `cat:${categories[i + 1].id}:0` })
+        }
+        rows.push(row)
+    }
+    // "All products" button
+    const totalProducts = Object.values(productCounts).reduce((s, n) => s + n, 0)
+    rows.push([{ text: `🛍 Ver todo (${totalProducts})`, callback_data: "cat:all:0" }])
+    return { inline_keyboard: rows }
+}
+
+function buildProductListMessage(
+    products: any[],
+    page: number,
+    categoryName: string,
+    categoryId: string,
+): { text: string; keyboard: { inline_keyboard: InlineKeyboardButton[][] } } {
+    const start = page * PRODUCTS_PER_PAGE
+    const pageProducts = products.slice(start, start + PRODUCTS_PER_PAGE)
+    const totalPages = Math.ceil(products.length / PRODUCTS_PER_PAGE)
+
+    let text = `📦 *${categoryName}* (${products.length} producto${products.length !== 1 ? "s" : ""})\n`
+    text += `Página ${page + 1}/${totalPages}\n\n`
+
+    pageProducts.forEach((p: any, i: number) => {
+        const stockText = p.unlimited_stock ? "∞" : `${p.stock ?? 0}`
+        text += `${start + i + 1}. *${p.name}*\n`
+        text += `   💰 ${formatPrice(p.price)} | 📦 Stock: ${stockText}\n`
+        if (p.description) text += `   _${p.description.slice(0, 80)}_\n`
+        text += "\n"
+    })
+
+    // Product detail buttons
+    const productButtons: InlineKeyboardButton[][] = pageProducts.map((p: any) => ([
+        { text: `🔍 ${p.name.slice(0, 30)}`, callback_data: `prod:${p.id}` }
+    ]))
+
+    // Navigation buttons
+    const navRow: InlineKeyboardButton[] = []
+    if (page > 0) navRow.push({ text: "⬅️ Anterior", callback_data: `cat:${categoryId}:${page - 1}` })
+    if (page < totalPages - 1) navRow.push({ text: "Siguiente ➡️", callback_data: `cat:${categoryId}:${page + 1}` })
+
+    const rows = [...productButtons]
+    if (navRow.length > 0) rows.push(navRow)
+    rows.push([{ text: "🔙 Categorías", callback_data: "catalog:home" }])
+
+    return { text, keyboard: { inline_keyboard: rows } }
+}
+
+async function handleCatalogCallback(botToken: string, chatId: number, storeId: string, data: string) {
+    const { categories, products } = await loadCatalogData(storeId)
+
+    if (data === "catalog:home") {
+        // Show categories
+        const productCounts: Record<string, number> = {}
+        products.forEach((p: any) => {
+            const catId = p.category_id || "uncategorized"
+            productCounts[catId] = (productCounts[catId] || 0) + 1
+        })
+        const keyboard = buildCategoryKeyboard(categories, productCounts)
+        await sendTelegramMessage(botToken, chatId, "🏪 *Catálogo — Elegí una categoría:*", keyboard)
+        return
+    }
+
+    if (data.startsWith("cat:")) {
+        const parts = data.split(":")
+        const categoryId = parts[1]
+        const page = parseInt(parts[2] || "0", 10)
+
+        let filtered: any[]
+        let categoryName: string
+
+        if (categoryId === "all") {
+            filtered = products
+            categoryName = "Todos los productos"
+        } else {
+            filtered = products.filter((p: any) => p.category_id === categoryId)
+            categoryName = categories.find((c: any) => c.id === categoryId)?.name || "Sin categoría"
+        }
+
+        if (filtered.length === 0) {
+            await sendTelegramMessage(botToken, chatId, `📭 No hay productos activos en *${categoryName}*.`, { inline_keyboard: [[{ text: "🔙 Categorías", callback_data: "catalog:home" }]] })
+            return
+        }
+
+        const { text, keyboard } = buildProductListMessage(filtered, page, categoryName, categoryId)
+        await sendTelegramMessage(botToken, chatId, text, keyboard)
+        return
+    }
+
+    if (data.startsWith("prod:")) {
+        const productId = data.slice(5)
+        const product = products.find((p: any) => p.id === productId)
+        if (!product) {
+            await sendTelegramMessage(botToken, chatId, "❌ Producto no encontrado.", { inline_keyboard: [[{ text: "🔙 Catálogo", callback_data: "catalog:home" }]] })
+            return
+        }
+
+        const p = product as any
+        const stockText = p.unlimited_stock ? "∞" : `${p.stock ?? 0}`
+        const catName = categories.find((c: any) => c.id === p.category_id)?.name || "Sin categoría"
+
+        let caption = `🏷 *${p.name}*\n\n`
+        if (p.description) caption += `${p.description}\n\n`
+        caption += `💰 *Precio:* ${formatPrice(p.price)}\n`
+        caption += `📦 *Stock:* ${stockText}\n`
+        caption += `📂 *Categoría:* ${catName}\n`
+
+        const backButton: InlineKeyboardButton[][] = []
+        if (p.category_id) {
+            backButton.push([{ text: `🔙 ${catName}`, callback_data: `cat:${p.category_id}:0` }])
+        }
+        backButton.push([{ text: "🔙 Catálogo", callback_data: "catalog:home" }])
+        const keyboard = { inline_keyboard: backButton }
+
+        // Try to send with photo, fallback to text if no image or send fails
+        if (p.image_url) {
+            const sent = await sendTelegramPhoto(botToken, chatId, p.image_url, caption, keyboard)
+            if (!sent) {
+                await sendTelegramMessage(botToken, chatId, caption, keyboard)
+            }
+        } else {
+            await sendTelegramMessage(botToken, chatId, caption, keyboard)
+        }
+        return
     }
 }
 
@@ -409,8 +590,9 @@ const HELP_TEXT = `🧠 *Inteligencia IA — Comandos disponibles*
 /horarios — Mejor horario para publicar
 
 *📦 Productos*
+/tienda — 🛍 Explorar catálogo interactivo
 /stock — Productos con stock bajo
-/catalogo — Catálogo completo
+/catalogo — Catálogo completo (texto)
 /top — Top productos más vendidos
 /inactivos — Productos pausados
 /categoria [nombre] — Productos de una categoría
@@ -488,6 +670,38 @@ serve(async (req) => {
             return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } })
         }
 
+        // ─── Callback query (inline keyboard) ─────────────────────────
+        if (body.callback_query) {
+            const cq = body.callback_query
+            const cqChatId = cq.message?.chat?.id
+            const cqData = cq.data
+
+            if (cqChatId && cqData) {
+                // Find store by iterating stores
+                const { data: cbStores } = await supabase.from("stores").select("id, metadata").not("metadata", "is", null)
+                let cbStoreId: string | null = null
+                let cbBotToken: string | null = null
+
+                for (const store of (cbStores || [])) {
+                    const tgConfig = (store.metadata as any)?.telegram_bot_config
+                    if (tgConfig?.enabled && tgConfig?.bot_token) {
+                        const allowed = tgConfig.allowed_chat_ids || []
+                        if (allowed.length === 0 || allowed.includes(cqChatId)) {
+                            cbStoreId = store.id
+                            cbBotToken = tgConfig.bot_token
+                            break
+                        }
+                    }
+                }
+
+                if (cbStoreId && cbBotToken) {
+                    await answerCallbackQuery(cbBotToken, cq.id)
+                    await handleCatalogCallback(cbBotToken, cqChatId, cbStoreId, cqData)
+                }
+            }
+            return new Response("ok", { status: 200 })
+        }
+
         // ─── Telegram webhook message ────────────────────────────────
         const message = body.message
         if (!message?.text || !message?.chat?.id) return new Response("ok", { status: 200 })
@@ -533,6 +747,12 @@ serve(async (req) => {
             delete chatHistories[historyKey]
             delete pendingActions[historyKey]
             await sendTelegramMessage(botToken, chatId, "🗑 Historial y acciones pendientes limpiados.")
+            return new Response("ok", { status: 200 })
+        }
+
+        // ─── /tienda — Interactive catalog ────────────────────────────
+        if (userText === "/tienda" || userText === "/tienda@" || userText.startsWith("/tienda@")) {
+            await handleCatalogCallback(botToken, chatId, storeId, "catalog:home")
             return new Response("ok", { status: 200 })
         }
 
