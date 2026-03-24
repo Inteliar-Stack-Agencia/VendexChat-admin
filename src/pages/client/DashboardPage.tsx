@@ -20,6 +20,7 @@ import {
   Globe,
   Calendar,
   Sparkles,
+  Shield,
 } from 'lucide-react'
 import { Card, Badge, Button } from '../../components/common'
 import OnboardingChecklist from '../../components/dashboard/OnboardingChecklist'

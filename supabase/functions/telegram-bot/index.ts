@@ -38,7 +38,18 @@ interface InlineKeyboardButton {
     callback_data: string
 }
 
-async function sendTelegramMessage(botToken: string, chatId: number, text: string, replyMarkup?: { inline_keyboard: InlineKeyboardButton[][] }) {
+// Persistent reply keyboard with main commands
+const MAIN_REPLY_KEYBOARD = {
+    keyboard: [
+        [{ text: "🛍 Tienda" }, { text: "📊 Resumen" }],
+        [{ text: "🛒 Pedidos" }, { text: "📦 Stock" }],
+        [{ text: "📈 Ventas" }, { text: "❓ Ayuda" }],
+    ],
+    resize_keyboard: true,
+    is_persistent: true,
+}
+
+async function sendTelegramMessage(botToken: string, chatId: number, text: string, replyMarkup?: Record<string, unknown>) {
     const chunks: string[] = []
     let remaining = text
     while (remaining.length > 0) {
@@ -60,7 +71,7 @@ async function sendTelegramMessage(botToken: string, chatId: number, text: strin
     }
 }
 
-async function sendTelegramPhoto(botToken: string, chatId: number, photoUrl: string, caption: string, replyMarkup?: { inline_keyboard: InlineKeyboardButton[][] }) {
+async function sendTelegramPhoto(botToken: string, chatId: number, photoUrl: string, caption: string, replyMarkup?: Record<string, unknown>) {
     const payload: Record<string, unknown> = { chat_id: chatId, photo: photoUrl, caption, parse_mode: "Markdown" }
     if (replyMarkup) payload.reply_markup = replyMarkup
     const res = await fetch(`https://api.telegram.org/bot${botToken}/sendPhoto`, {
@@ -660,6 +671,29 @@ serve(async (req) => {
 
             const meRes = await fetch(`https://api.telegram.org/bot${botToken}/getMe`)
             const meData = await meRes.json()
+
+            // Register bot commands with BotFather automatically
+            await fetch(`https://api.telegram.org/bot${botToken}/setMyCommands`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    commands: [
+                        { command: "start", description: "Iniciar el bot" },
+                        { command: "tienda", description: "🛍 Explorar catálogo interactivo" },
+                        { command: "resumen", description: "📊 Resumen ejecutivo del día" },
+                        { command: "pedidos", description: "🛒 Pedidos de hoy" },
+                        { command: "pendientes", description: "📋 Pedidos pendientes" },
+                        { command: "ventas", description: "📈 Reporte de ventas" },
+                        { command: "stock", description: "📦 Productos con stock bajo" },
+                        { command: "top", description: "🏆 Top productos y clientes" },
+                        { command: "clientes", description: "👥 Top 10 clientes" },
+                        { command: "hoy", description: "📅 Ventas y pedidos de hoy" },
+                        { command: "ayuda", description: "❓ Ver todos los comandos" },
+                        { command: "limpiar", description: "🗑 Borrar historial de chat" },
+                    ]
+                }),
+            })
+
             return new Response(JSON.stringify({ ok: true, botUsername: meData.result?.username || null }), { headers: { ...corsHeaders, "Content-Type": "application/json" } })
         }
 
@@ -732,12 +766,13 @@ serve(async (req) => {
 
         // ─── /start ──────────────────────────────────────────────────
         if (userText === "/start") {
-            await sendTelegramMessage(botToken, chatId, "🧠 *Inteligencia IA* conectada.\n\nPodés preguntarme cualquier cosa sobre tu tienda o usar los comandos.\n\nEscribí /ayuda para ver todo lo que puedo hacer.")
+            const welcomeText = `🧠 *Inteligencia IA* conectada.\n\nPodés preguntarme cualquier cosa sobre tu tienda o usar los botones de abajo.\n\nTambién podés escribirme en lenguaje natural 💬`
+            await sendTelegramMessage(botToken, chatId, welcomeText, MAIN_REPLY_KEYBOARD)
             return new Response("ok", { status: 200 })
         }
 
         // ─── /ayuda ──────────────────────────────────────────────────
-        if (userText === "/ayuda" || userText === "/help") {
+        if (userText === "/ayuda" || userText === "/help" || userText === "❓ Ayuda") {
             await sendTelegramMessage(botToken, chatId, HELP_TEXT)
             return new Response("ok", { status: 200 })
         }
@@ -751,7 +786,7 @@ serve(async (req) => {
         }
 
         // ─── /tienda — Interactive catalog ────────────────────────────
-        if (userText === "/tienda" || userText === "/tienda@" || userText.startsWith("/tienda@")) {
+        if (userText === "/tienda" || userText === "/tienda@" || userText.startsWith("/tienda@") || userText === "🛍 Tienda") {
             await handleCatalogCallback(botToken, chatId, storeId, "catalog:home")
             return new Response("ok", { status: 200 })
         }
@@ -790,8 +825,10 @@ serve(async (req) => {
         const lower = userText.toLowerCase()
         const commandMap: Record<string, string> = {
             "/resumen": "Dame un resumen ejecutivo completo de cómo va el negocio hoy: ventas, pedidos, tendencia y alertas importantes",
+            "📊 Resumen": "Dame un resumen ejecutivo completo de cómo va el negocio hoy: ventas, pedidos, tendencia y alertas importantes",
             "/hoy": "¿Cuántos pedidos y ventas hubo hoy? Listá todos los pedidos de hoy con su estado",
             "/ventas": "Dame un reporte de ventas de la última semana y del mes, con tendencia y comparación",
+            "📈 Ventas": "Dame un reporte de ventas de la última semana y del mes, con tendencia y comparación",
             "/tendencia": "¿Cómo viene la tendencia de ventas? ¿Sube o baja? Dame una predicción para los próximos días",
             "/horarios": "¿Cuál es el mejor horario y día para publicar en redes sociales según los patrones de compra?",
             "/stock": "¿Qué productos tienen stock bajo (5 o menos)? Listálos todos con su stock actual",
@@ -799,8 +836,10 @@ serve(async (req) => {
             "/top": "¿Cuáles son los top 10 productos más vendidos y los top 10 clientes del mes?",
             "/inactivos": "Listá todos los productos que están pausados o inactivos",
             "/pedidos": "Listá todos los pedidos de hoy con cliente, total y estado",
+            "🛒 Pedidos": "Listá todos los pedidos de hoy con cliente, total y estado",
             "/pendientes": "¿Cuántos pedidos hay pendientes y confirmados? Listálos todos",
             "/clientes": "Mostrame el top 10 de mejores clientes con su gasto total y cantidad de pedidos",
+            "📦 Stock": "¿Qué productos tienen stock bajo (5 o menos)? Listálos todos con su stock actual",
         }
 
         // Dynamic commands with arguments
