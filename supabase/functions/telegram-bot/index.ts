@@ -8,9 +8,46 @@ const GROQ_MODEL = "llama-3.3-70b-versatile"
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
-// In-memory conversation history + pending actions per chat
+// In-memory conversation history per chat
 const chatHistories: Record<string, { role: string; content: string }[]> = {}
-const pendingActions: Record<string, AIAction[]> = {}
+
+// ─── Persistent pending actions (DB-backed) ─────────────────────────
+async function savePendingActions(storeId: string, chatId: number, actions: AIAction[]) {
+    // Delete any existing pending actions for this chat first
+    await supabase.from("bot_pending_actions").delete().eq("store_id", storeId).eq("chat_id", chatId)
+    await supabase.from("bot_pending_actions").insert({
+        store_id: storeId,
+        chat_id: chatId,
+        actions: JSON.stringify(actions),
+        expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+    })
+}
+
+async function loadPendingActions(storeId: string, chatId: number): Promise<AIAction[] | null> {
+    const { data } = await supabase
+        .from("bot_pending_actions")
+        .select("id, actions, expires_at")
+        .eq("store_id", storeId)
+        .eq("chat_id", chatId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .single()
+
+    if (!data) return null
+
+    // Check if expired
+    if (new Date(data.expires_at) < new Date()) {
+        await supabase.from("bot_pending_actions").delete().eq("id", data.id)
+        return null
+    }
+
+    const actions = typeof data.actions === "string" ? JSON.parse(data.actions) : data.actions
+    return actions as AIAction[]
+}
+
+async function deletePendingActions(storeId: string, chatId: number) {
+    await supabase.from("bot_pending_actions").delete().eq("store_id", storeId).eq("chat_id", chatId)
+}
 
 const DAYS_ES = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"]
 
@@ -355,6 +392,21 @@ async function loadStoreSnapshot(storeId: string) {
         .eq("store_id", storeId)
         .eq("is_active", true)
 
+    // Resolved feedback (learned answers) — auto-learning
+    const { data: resolvedFeedback } = await supabase
+        .from("bot_feedback")
+        .select("question, notes")
+        .eq("store_id", storeId)
+        .eq("resolved", true)
+        .not("notes", "is", null)
+        .order("created_at", { ascending: false })
+        .limit(50)
+
+    // FAQs and custom AI prompt from store config
+    const botConfig = (store?.metadata as any)?.bot_config
+    const faqs: { question: string; answer: string }[] = botConfig?.faqs || []
+    const aiPrompt: string = (store?.metadata as any)?.ai_prompt || ""
+
     return {
         today,
         dayOfWeek: DAYS_ES[now.getDay()],
@@ -422,6 +474,9 @@ async function loadStoreSnapshot(storeId: string) {
         },
         bestDays,
         bestHours,
+        learnedAnswers: (resolvedFeedback || []).map((f: any) => ({ q: f.question, a: f.notes })),
+        faqs,
+        aiPrompt,
     }
 }
 
@@ -466,26 +521,40 @@ ${snap.allProducts.map((p: any) => `- [ID:${p.id}] [${p.categoria}] ${p.nombre}$
 
 ${snap.lowStock.length > 0 ? `═══ STOCK BAJO (≤5) ═══\n${snap.lowStock.map((p: any) => `⚠️ [ID:${p.id}] ${p.nombre} | Stock: ${p.stock}`).join("\n")}` : ""}
 
-═══ CAPACIDADES ═══
-Podés analizar: ventas, pedidos, clientes, stock, precios, categorías, logística, tendencias, predicciones, horarios óptimos, rentabilidad.
-Podés gestionar: cambiar estado de pedidos, actualizar stock, cambiar precios, activar/pausar productos.
+═══ TUS CAPACIDADES ═══
+1. PREDICCIÓN DE DEMANDA: Basándote en patrones de días/horarios y tendencias, predecí qué productos van a tener más demanda
+2. ANÁLISIS DE RENTABILIDAD: Analizá qué categorías/productos generan más ingresos vs volumen
+3. TIMING ÓPTIMO: Recomendá mejores horarios para publicar en redes basándote en cuándo compran los clientes
+4. ANÁLISIS DE TENDENCIAS: Compará semana vs mes, detectá si las ventas suben o bajan
+5. SEGMENTACIÓN: Analizá comportamiento de clientes y recomendá estrategias
+6. FACTORES EXTERNOS: Considerá día de la semana, momento del mes (quincena/fin de mes), estacionalidad, y contexto general del mercado argentino
+7. PLANES DE ACCIÓN: Generá planes concretos con pasos específicos
+8. GESTIÓN DIRECTA: Podés ejecutar cambios reales sobre pedidos y productos
 
-═══ ACCIONES DE GESTIÓN ═══
-Cuando el usuario pida EJECUTAR cambios, incluí al final de tu respuesta los comandos así (el usuario deberá confirmar con SI):
+═══ GESTIÓN DIRECTA — FORMATO DE ACCIONES ═══
+Cuando el usuario te pida EJECUTAR cambios (no solo analizar), incluí al final de tu respuesta los comandos de acción. Usá este formato EXACTO, uno por línea:
 
-Para cambiar estado de pedido (estados: pending, confirmed, completed, cancelled):
-[[ACTION:{"type":"update_order_status","order_id":"ID_COMPLETO","order_number":"NUM","new_status":"completed","reason":"motivo"}]]
+Para cambiar estado de un pedido (estados válidos: pending, confirmed, completed, cancelled):
+[[ACTION:{"type":"update_order_status","order_id":"ID_COMPLETO_DEL_PEDIDO","order_number":"NUM","new_status":"completed","reason":"descripción"}]]
 
-Para actualizar stock:
-[[ACTION:{"type":"update_product_stock","product_id":"ID","product_name":"NOMBRE","new_stock":10}]]
+Para actualizar stock de un producto:
+[[ACTION:{"type":"update_product_stock","product_id":"ID_DEL_PRODUCTO","product_name":"NOMBRE","new_stock":10}]]
 
-Para cambiar precio:
-[[ACTION:{"type":"update_product_price","product_id":"ID","product_name":"NOMBRE","new_price":1500}]]
+Para cambiar precio de un producto:
+[[ACTION:{"type":"update_product_price","product_id":"ID_DEL_PRODUCTO","product_name":"NOMBRE","new_price":999.99}]]
 
-Para activar/pausar producto:
-[[ACTION:{"type":"update_product_active","product_id":"ID","product_name":"NOMBRE","is_active":false}]]
+Para activar/desactivar un producto:
+[[ACTION:{"type":"update_product_active","product_id":"ID_DEL_PRODUCTO","product_name":"NOMBRE","is_active":true}]]
 
-REGLAS: Usá los IDs exactos del catálogo. Solo incluí acciones cuando el usuario pida ejecutar cambios. Para análisis no incluyas acciones.
+REGLAS IMPORTANTES:
+- Usá los IDs exactos que aparecen en los datos del catálogo o los ID de pedidos recientes
+- Solo incluí acciones cuando el usuario EXPLÍCITAMENTE pida realizar cambios
+- Para análisis o recomendaciones NO incluyas acciones
+- El usuario verá una confirmación antes de que se ejecute cualquier acción
+- Podés incluir múltiples acciones en una misma respuesta
+- NUNCA digas "Listo", "Ya lo cambié", "Hecho" ni ninguna variación — vos NO ejecutás nada, solo proponés la acción
+- Siempre redactá tu respuesta como una PROPUESTA: "Para ocultar X, voy a ejecutar la siguiente acción..." o "Te propongo el siguiente cambio..."
+- Si no incluís el tag [[ACTION:...]] la acción NO se ejecutará, así que SIEMPRE incluilo cuando el usuario pida un cambio
 
 ═══ CONFIGURACIÓN DE LA TIENDA ═══
 - Acepta pedidos: ${snap.storeConfig.acceptOrders ? "✅ Sí" : "❌ No"}
@@ -508,11 +577,23 @@ ${Object.entries(snap.storeConfig.onlineSchedule).map(([day, s]: [string, any]) 
 ${snap.coupons.length > 0 ? `═══ CUPONES ACTIVOS (${snap.coupons.length}) ═══
 ${snap.coupons.map((c: any) => `- ${c.code} | Tipo ${c.tipo} | Valor: ${c.valor} | Vence: ${c.vence} | Usos: ${c.usos}${c.minCompra > 0 ? ` | Mínimo: ${formatPrice(c.minCompra)}` : ""}`).join("\n")}` : ""}
 
+${snap.aiPrompt ? `═══ INSTRUCCIONES ADICIONALES DE LA TIENDA ═══\n${snap.aiPrompt}` : ""}
+
+${snap.faqs.length > 0 ? `═══ RESPUESTAS PREDEFINIDAS (FAQs) ═══\n${snap.faqs.map((f: any) => `P: ${f.question}\nR: ${f.answer}`).join("\n\n")}` : ""}
+
+${snap.learnedAnswers.length > 0 ? `═══ CONOCIMIENTO APRENDIDO (${snap.learnedAnswers.length} respuestas entrenadas) ═══
+Estas son respuestas que el admin entrenó. Usálas como referencia cuando te hagan preguntas similares:
+${snap.learnedAnswers.map((la: any) => `P: ${la.q}\nR: ${la.a}`).join("\n\n")}` : ""}
+
 ═══ INSTRUCCIONES ═══
-- Respondé en español argentino, conciso (es Telegram)
-- Usá emojis para hacer visual
-- Usá datos reales para fundamentar
-- Cuando hagas predicciones, aclará que son basadas en patrones
+- Respondé en español argentino, directo y accionable
+- Sé conciso pero completo (es Telegram, no escribas párrafos innecesarios)
+- Usá datos reales para fundamentar CADA insight — citá números, porcentajes y comparaciones concretas
+- Incluí porcentajes, comparaciones y métricas concretas siempre que sea posible
+- Sé proactivo: si ves algo importante en los datos (stock bajo, tendencia negativa, oportunidad), mencionálo
+- Usá emojis para hacer los reportes más visuales y escaneables
+- Cuando hagas predicciones, aclará que están basadas en los patrones detectados
+- NUNCA inventes datos — solo usá la información que tenés en el contexto
 - Si el usuario pregunta algo para lo que NO tenés datos suficientes en este contexto, respondé lo mejor que puedas Y al final incluí: [[UNKNOWN:pregunta del usuario]]`
 }
 
@@ -780,7 +861,7 @@ serve(async (req) => {
         // ─── /limpiar ────────────────────────────────────────────────
         if (userText === "/limpiar") {
             delete chatHistories[historyKey]
-            delete pendingActions[historyKey]
+            await deletePendingActions(storeId, chatId)
             await sendTelegramMessage(botToken, chatId, "🗑 Historial y acciones pendientes limpiados.")
             return new Response("ok", { status: 200 })
         }
@@ -793,20 +874,20 @@ serve(async (req) => {
 
         // ─── Confirmación de acciones pendientes (SI/NO) ─────────────
         const normalized = userText.toLowerCase().trim()
-        if (pendingActions[historyKey]?.length > 0) {
-            if (normalized === "si" || normalized === "sí" || normalized === "s") {
-                const actions = pendingActions[historyKey]
-                delete pendingActions[historyKey]
+        const pending = await loadPendingActions(storeId, chatId)
+        if (pending && pending.length > 0) {
+            if (normalized === "si" || normalized === "sí" || normalized === "s" || normalized === "confirmar") {
+                await deletePendingActions(storeId, chatId)
                 await sendTelegramMessage(botToken, chatId, "⏳ Ejecutando...")
-                const { ok, fail } = await executeActions(actions)
+                const { ok, fail } = await executeActions(pending)
                 const msg = ok > 0
                     ? `✅ ${ok} acción${ok > 1 ? "es" : ""} ejecutada${ok > 1 ? "s" : ""} correctamente.${fail > 0 ? ` ⚠️ ${fail} fallaron.` : ""}`
                     : `❌ No se pudo ejecutar ninguna acción.`
                 await sendTelegramMessage(botToken, chatId, msg)
                 return new Response("ok", { status: 200 })
             }
-            if (normalized === "no" || normalized === "n") {
-                delete pendingActions[historyKey]
+            if (normalized === "no" || normalized === "n" || normalized === "cancelar") {
+                await deletePendingActions(storeId, chatId)
                 await sendTelegramMessage(botToken, chatId, "❌ Acciones canceladas.")
                 return new Response("ok", { status: 200 })
             }
@@ -910,9 +991,9 @@ serve(async (req) => {
         // ─── Send response ───────────────────────────────────────────
         await sendTelegramMessage(botToken, chatId, cleanText)
 
-        // ─── If there are actions, ask for confirmation ──────────────
+        // ─── If there are actions, save to DB and ask for confirmation ──
         if (actions.length > 0) {
-            pendingActions[historyKey] = actions
+            await savePendingActions(storeId, chatId, actions)
             const confirmMsg = `\n⚡ *${actions.length} acción${actions.length > 1 ? "es" : ""} pendiente${actions.length > 1 ? "s" : ""}:*\n${actions.map((a, i) => `${i + 1}. ${describeAction(a)}`).join("\n")}\n\n¿Confirmar? Respondé *SI* o *NO*`
             await sendTelegramMessage(botToken, chatId, confirmMsg)
         }
