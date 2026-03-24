@@ -79,6 +79,23 @@ export const customersApi = {
         if (error) throw error
     },
 
+    create: async (data: { name: string; whatsapp?: string; email?: string; notes?: string }) => {
+        const storeId = await getStoreId()
+        const { data: created, error } = await supabase
+            .from('customers')
+            .insert({
+                store_id: storeId,
+                name: data.name.trim(),
+                whatsapp: data.whatsapp?.trim() || '',
+                email: data.email?.trim() || null,
+                notes: data.notes?.trim() || null,
+            })
+            .select()
+            .single()
+        if (error) throw error
+        return created
+    },
+
     getOrdersByWhatsapp: async (whatsapp: string) => {
         const storeId = await getStoreId()
         const clean = whatsapp.replace(/\D/g, '')
