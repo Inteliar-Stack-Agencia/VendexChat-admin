@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Users, Search, MessageSquare, ClipboardList, ShoppingBag, TrendingUp, UserCheck, DollarSign, Trash2, Archive, ArchiveRestore } from 'lucide-react'
+import { Users, Search, MessageSquare, ClipboardList, ShoppingBag, TrendingUp, UserCheck, DollarSign, Trash2, Archive, ArchiveRestore, UserPlus } from 'lucide-react'
 import { Card, LoadingSpinner, EmptyState, Modal, Button, showToast, Pagination, ConfirmDialog } from '../../components/common'
 import { customersApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
@@ -28,6 +28,9 @@ export default function CustomersPage() {
     const [customerToDelete, setCustomerToDelete] = useState<Customer | null>(null)
     const [showArchived, setShowArchived] = useState(false)
     const [archivingId, setArchivingId] = useState<string | null>(null)
+    const [isCreatingCustomer, setIsCreatingCustomer] = useState(false)
+    const [creating, setCreating] = useState(false)
+    const [newCustomer, setNewCustomer] = useState({ name: '', whatsapp: '', email: '', notes: '' })
 
     // Debounce search
     useEffect(() => {
@@ -121,6 +124,27 @@ export default function CustomersPage() {
             showToast('error', 'No se pudo archivar el cliente')
         } finally {
             setArchivingId(null)
+        }
+    }
+
+    const handleCreateCustomer = async () => {
+        if (!newCustomer.name.trim()) return
+        setCreating(true)
+        try {
+            await customersApi.create(newCustomer)
+            showToast('success', 'Cliente creado correctamente')
+            setIsCreatingCustomer(false)
+            setNewCustomer({ name: '', whatsapp: '', email: '', notes: '' })
+            loadCustomers()
+        } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : ''
+            if (msg.includes('unique') || msg.includes('duplicate')) {
+                showToast('error', 'Ya existe un cliente con ese WhatsApp')
+            } else {
+                showToast('error', 'No se pudo crear el cliente')
+            }
+        } finally {
+            setCreating(false)
         }
     }
 
@@ -219,17 +243,26 @@ export default function CustomersPage() {
                 <h1 className="text-2xl font-bold text-gray-900">
                     {showArchived ? 'Clientes Archivados' : 'Clientes (CRM)'}
                 </h1>
-                <button
-                    onClick={() => { setShowArchived(!showArchived); setPage(1); setActiveSegment('all') }}
-                    className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all border ${
-                        showArchived
-                            ? 'bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100'
-                            : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
-                    }`}
-                >
-                    <Archive className="w-4 h-4" />
-                    {showArchived ? 'Ver activos' : 'Ver archivados'}
-                </button>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={() => setIsCreatingCustomer(true)}
+                        className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all border bg-emerald-600 border-emerald-600 text-white hover:bg-emerald-700"
+                    >
+                        <UserPlus className="w-4 h-4" />
+                        Nuevo cliente
+                    </button>
+                    <button
+                        onClick={() => { setShowArchived(!showArchived); setPage(1); setActiveSegment('all') }}
+                        className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all border ${
+                            showArchived
+                                ? 'bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100'
+                                : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
+                        }`}
+                    >
+                        <Archive className="w-4 h-4" />
+                        {showArchived ? 'Ver activos' : 'Ver archivados'}
+                    </button>
+                </div>
             </div>
 
             {/* Tarjetas de resumen */}
@@ -549,6 +582,77 @@ export default function CustomersPage() {
                     </div>
                 )}
             </Modal>
+            {/* Modal Nuevo Cliente */}
+            <Modal
+                isOpen={isCreatingCustomer}
+                onClose={() => { setIsCreatingCustomer(false); setNewCustomer({ name: '', whatsapp: '', email: '', notes: '' }) }}
+                title="Nuevo cliente"
+            >
+                <div className="space-y-4">
+                    <div>
+                        <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-1">
+                            Nombre / Razón social <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                            type="text"
+                            placeholder="Ej: Distribuidora García"
+                            value={newCustomer.name}
+                            onChange={(e) => setNewCustomer(p => ({ ...p, name: e.target.value }))}
+                            className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-1">
+                            WhatsApp
+                        </label>
+                        <input
+                            type="text"
+                            placeholder="Ej: 1165689145"
+                            value={newCustomer.whatsapp}
+                            onChange={(e) => setNewCustomer(p => ({ ...p, whatsapp: e.target.value }))}
+                            className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-1">
+                            Email
+                        </label>
+                        <input
+                            type="email"
+                            placeholder="Ej: cliente@empresa.com"
+                            value={newCustomer.email}
+                            onChange={(e) => setNewCustomer(p => ({ ...p, email: e.target.value }))}
+                            className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-1">
+                            Notas internas
+                        </label>
+                        <textarea
+                            placeholder="Ej: Cliente mayorista zona norte, pago a 30 días..."
+                            value={newCustomer.notes}
+                            onChange={(e) => setNewCustomer(p => ({ ...p, notes: e.target.value }))}
+                            className="w-full h-28 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none resize-none"
+                        />
+                    </div>
+                    <div className="flex justify-end gap-3">
+                        <Button variant="outline" onClick={() => { setIsCreatingCustomer(false); setNewCustomer({ name: '', whatsapp: '', email: '', notes: '' }) }}>
+                            Cancelar
+                        </Button>
+                        <Button
+                            variant="primary"
+                            onClick={handleCreateCustomer}
+                            loading={creating}
+                            disabled={!newCustomer.name.trim()}
+                            className="bg-emerald-600 hover:bg-emerald-700"
+                        >
+                            Crear cliente
+                        </Button>
+                    </div>
+                </div>
+            </Modal>
+
             <ConfirmDialog
                 isOpen={!!customerToDelete}
                 onClose={() => setCustomerToDelete(null)}
