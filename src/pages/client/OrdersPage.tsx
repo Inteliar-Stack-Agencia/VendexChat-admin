@@ -351,7 +351,16 @@ export default function OrdersPage() {
                         />
                       </td>
                       <td className="px-4 py-3 font-medium text-gray-900">#{order.order_number || order.id.slice(0, 8)}</td>
-                      <td className="px-4 py-3 text-gray-900">{order.customer_name}</td>
+                      <td className="px-4 py-3 text-gray-900">
+                        <div className="flex flex-col">
+                          <span>{order.customer_name}</span>
+                          {(order.metadata as Record<string, unknown> | null)?.company_name && (
+                            <span className="text-[10px] text-blue-600 font-semibold flex items-center gap-1 mt-0.5">
+                              🏢 {(order.metadata as Record<string, unknown>).company_name as string}
+                            </span>
+                          )}
+                        </div>
+                      </td>
                       <td className="px-4 py-3 text-gray-600 hidden sm:table-cell">{order.customer_whatsapp}</td>
                       <td className="px-4 py-3 font-medium text-gray-900">{formatPrice(order.total)}</td>
                       <td className="px-4 py-3">
