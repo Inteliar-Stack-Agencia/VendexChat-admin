@@ -324,7 +324,7 @@ export interface SubscriptionPlan {
   description: string
   price: number
   annual_price: number
-  interval: 'month' | 'year'
+  interval?: 'month' | 'year'
   features: string[]
   is_popular?: boolean
 }
