@@ -355,6 +355,21 @@ async function loadStoreSnapshot(storeId: string) {
         .eq("store_id", storeId)
         .eq("is_active", true)
 
+    // Resolved feedback (learned answers) — auto-learning
+    const { data: resolvedFeedback } = await supabase
+        .from("bot_feedback")
+        .select("question, notes")
+        .eq("store_id", storeId)
+        .eq("resolved", true)
+        .not("notes", "is", null)
+        .order("created_at", { ascending: false })
+        .limit(50)
+
+    // FAQs and custom AI prompt from store config
+    const botConfig = (store?.metadata as any)?.bot_config
+    const faqs: { question: string; answer: string }[] = botConfig?.faqs || []
+    const aiPrompt: string = (store?.metadata as any)?.ai_prompt || ""
+
     return {
         today,
         dayOfWeek: DAYS_ES[now.getDay()],
@@ -422,6 +437,9 @@ async function loadStoreSnapshot(storeId: string) {
         },
         bestDays,
         bestHours,
+        learnedAnswers: (resolvedFeedback || []).map((f: any) => ({ q: f.question, a: f.notes })),
+        faqs,
+        aiPrompt,
     }
 }
 
@@ -518,6 +536,14 @@ ${Object.entries(snap.storeConfig.onlineSchedule).map(([day, s]: [string, any]) 
 
 ${snap.coupons.length > 0 ? `═══ CUPONES ACTIVOS (${snap.coupons.length}) ═══
 ${snap.coupons.map((c: any) => `- ${c.code} | Tipo ${c.tipo} | Valor: ${c.valor} | Vence: ${c.vence} | Usos: ${c.usos}${c.minCompra > 0 ? ` | Mínimo: ${formatPrice(c.minCompra)}` : ""}`).join("\n")}` : ""}
+
+${snap.aiPrompt ? `═══ INSTRUCCIONES ADICIONALES DE LA TIENDA ═══\n${snap.aiPrompt}` : ""}
+
+${snap.faqs.length > 0 ? `═══ RESPUESTAS PREDEFINIDAS (FAQs) ═══\n${snap.faqs.map((f: any) => `P: ${f.question}\nR: ${f.answer}`).join("\n\n")}` : ""}
+
+${snap.learnedAnswers.length > 0 ? `═══ CONOCIMIENTO APRENDIDO (${snap.learnedAnswers.length} respuestas entrenadas) ═══
+Estas son respuestas que el admin entrenó. Usálas como referencia cuando te hagan preguntas similares:
+${snap.learnedAnswers.map((la: any) => `P: ${la.q}\nR: ${la.a}`).join("\n\n")}` : ""}
 
 ═══ INSTRUCCIONES ═══
 - Respondé en español argentino, directo y accionable
