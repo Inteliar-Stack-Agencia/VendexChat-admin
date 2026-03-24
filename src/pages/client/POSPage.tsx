@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import {
     Search, X, Plus, Minus, Trash2, ShoppingCart, Receipt,
     CreditCard, Banknote, Smartphone, Printer, CheckCircle2,
-    Package, RefreshCw, User,
+    Package, RefreshCw, User, Building2,
 } from 'lucide-react'
 import { productsApi } from '../../services/productsApi'
 import { categoriesApi } from '../../services/categoriesApi'
@@ -37,6 +37,8 @@ export default function POSPage() {
     const [cart, setCart] = useState<CartItem[]>([])
     const [paymentMethod, setPaymentMethod] = useState('efectivo')
     const [customerName, setCustomerName] = useState('')
+    const [customerType, setCustomerType] = useState<'particular' | 'empresa'>('particular')
+    const [companyName, setCompanyName] = useState('')
     const [processing, setProcessing] = useState(false)
 
     // Ticket
@@ -121,6 +123,8 @@ export default function POSPage() {
     const clearCart = () => {
         setCart([])
         setCustomerName('')
+        setCustomerType('particular')
+        setCompanyName('')
     }
 
     const cartTotal = cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0)
@@ -139,6 +143,9 @@ export default function POSPage() {
                 metadata: {
                     source: 'pos',
                     payment_method: paymentMethod,
+                    ...(customerType === 'empresa' && companyName.trim()
+                        ? { company_name: companyName.trim() }
+                        : {}),
                 },
                 items: cart.map(item => ({
                     product_id: item.product.id,
@@ -159,12 +166,15 @@ export default function POSPage() {
                 })),
                 paymentMethod,
                 customerName: customerName.trim() || 'Venta POS',
+                companyName: customerType === 'empresa' ? companyName.trim() : '',
                 total: cartTotal,
                 date: new Date(),
             })
             setShowTicket(true)
             setCart([])
             setCustomerName('')
+            setCustomerType('particular')
+            setCompanyName('')
             showToast('success', 'Venta registrada')
 
             // Reload products to update stock
@@ -424,10 +434,60 @@ export default function POSPage() {
                 {/* Cart Footer */}
                 {cart.length > 0 && (
                     <div className="border-t px-4 py-4 space-y-4 shrink-0 bg-gray-50/50">
+                        {/* Customer type */}
+                        <div>
+                            <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1.5">
+                                Tipo de cliente
+                            </label>
+                            <div className="grid grid-cols-2 gap-2">
+                                <button
+                                    onClick={() => { setCustomerType('particular'); setCompanyName('') }}
+                                    className={`flex items-center justify-center gap-1.5 py-2 rounded-xl border-2 text-xs font-bold transition-all ${
+                                        customerType === 'particular'
+                                            ? 'border-emerald-400 bg-emerald-50 text-emerald-700'
+                                            : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'
+                                    }`}
+                                >
+                                    <User className="w-3.5 h-3.5" />
+                                    Particular
+                                </button>
+                                <button
+                                    onClick={() => setCustomerType('empresa')}
+                                    className={`flex items-center justify-center gap-1.5 py-2 rounded-xl border-2 text-xs font-bold transition-all ${
+                                        customerType === 'empresa'
+                                            ? 'border-blue-400 bg-blue-50 text-blue-700'
+                                            : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'
+                                    }`}
+                                >
+                                    <Building2 className="w-3.5 h-3.5" />
+                                    Empresa
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Company name (only when empresa) */}
+                        {customerType === 'empresa' && (
+                            <div>
+                                <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">
+                                    Empresa <span className="text-rose-500">*</span>
+                                </label>
+                                <div className="relative">
+                                    <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-400" />
+                                    <input
+                                        type="text"
+                                        value={companyName}
+                                        onChange={(e) => setCompanyName(e.target.value)}
+                                        placeholder="Nombre de la empresa"
+                                        className="w-full pl-10 pr-3 py-2 bg-white border border-blue-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300 outline-none"
+                                    />
+                                </div>
+                            </div>
+                        )}
+
                         {/* Customer name */}
                         <div>
                             <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">
-                                Cliente (opcional)
+                                {customerType === 'empresa' ? 'Empleado / Contacto (opcional)' : 'Cliente (opcional)'}
                             </label>
                             <div className="relative">
                                 <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -435,7 +495,7 @@ export default function POSPage() {
                                     type="text"
                                     value={customerName}
                                     onChange={(e) => setCustomerName(e.target.value)}
-                                    placeholder="Nombre del cliente"
+                                    placeholder={customerType === 'empresa' ? 'Nombre del empleado' : 'Nombre del cliente'}
                                     className="w-full pl-10 pr-3 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-300 outline-none"
                                 />
                             </div>
@@ -513,8 +573,13 @@ export default function POSPage() {
                                     {lastOrder.date.toLocaleDateString('es-AR')} {lastOrder.date.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
                                 </p>
                                 <p className="text-[10px] text-gray-500">Ticket: {lastOrder.order_number}</p>
+                                {lastOrder.companyName && (
+                                    <p className="text-[10px] text-gray-500">Empresa: {lastOrder.companyName}</p>
+                                )}
                                 {lastOrder.customerName !== 'Venta POS' && (
-                                    <p className="text-[10px] text-gray-500">Cliente: {lastOrder.customerName}</p>
+                                    <p className="text-[10px] text-gray-500">
+                                        {lastOrder.companyName ? 'Empleado' : 'Cliente'}: {lastOrder.customerName}
+                                    </p>
                                 )}
                             </div>
 
