@@ -8,9 +8,46 @@ const GROQ_MODEL = "llama-3.3-70b-versatile"
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
-// In-memory conversation history + pending actions per chat
+// In-memory conversation history per chat
 const chatHistories: Record<string, { role: string; content: string }[]> = {}
-const pendingActions: Record<string, AIAction[]> = {}
+
+// ─── Persistent pending actions (DB-backed) ─────────────────────────
+async function savePendingActions(storeId: string, chatId: number, actions: AIAction[]) {
+    // Delete any existing pending actions for this chat first
+    await supabase.from("bot_pending_actions").delete().eq("store_id", storeId).eq("chat_id", chatId)
+    await supabase.from("bot_pending_actions").insert({
+        store_id: storeId,
+        chat_id: chatId,
+        actions: JSON.stringify(actions),
+        expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+    })
+}
+
+async function loadPendingActions(storeId: string, chatId: number): Promise<AIAction[] | null> {
+    const { data } = await supabase
+        .from("bot_pending_actions")
+        .select("id, actions, expires_at")
+        .eq("store_id", storeId)
+        .eq("chat_id", chatId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .single()
+
+    if (!data) return null
+
+    // Check if expired
+    if (new Date(data.expires_at) < new Date()) {
+        await supabase.from("bot_pending_actions").delete().eq("id", data.id)
+        return null
+    }
+
+    const actions = typeof data.actions === "string" ? JSON.parse(data.actions) : data.actions
+    return actions as AIAction[]
+}
+
+async function deletePendingActions(storeId: string, chatId: number) {
+    await supabase.from("bot_pending_actions").delete().eq("store_id", storeId).eq("chat_id", chatId)
+}
 
 const DAYS_ES = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"]
 
@@ -510,11 +547,14 @@ Para activar/desactivar un producto:
 [[ACTION:{"type":"update_product_active","product_id":"ID_DEL_PRODUCTO","product_name":"NOMBRE","is_active":true}]]
 
 REGLAS IMPORTANTES:
-- Usá los IDs exactos que aparecen en [ID:...] del catálogo o los ID de pedidos recientes
+- Usá los IDs exactos que aparecen en los datos del catálogo o los ID de pedidos recientes
 - Solo incluí acciones cuando el usuario EXPLÍCITAMENTE pida realizar cambios
 - Para análisis o recomendaciones NO incluyas acciones
 - El usuario verá una confirmación antes de que se ejecute cualquier acción
 - Podés incluir múltiples acciones en una misma respuesta
+- NUNCA digas "Listo", "Ya lo cambié", "Hecho" ni ninguna variación — vos NO ejecutás nada, solo proponés la acción
+- Siempre redactá tu respuesta como una PROPUESTA: "Para ocultar X, voy a ejecutar la siguiente acción..." o "Te propongo el siguiente cambio..."
+- Si no incluís el tag [[ACTION:...]] la acción NO se ejecutará, así que SIEMPRE incluilo cuando el usuario pida un cambio
 
 ═══ CONFIGURACIÓN DE LA TIENDA ═══
 - Acepta pedidos: ${snap.storeConfig.acceptOrders ? "✅ Sí" : "❌ No"}
@@ -821,7 +861,7 @@ serve(async (req) => {
         // ─── /limpiar ────────────────────────────────────────────────
         if (userText === "/limpiar") {
             delete chatHistories[historyKey]
-            delete pendingActions[historyKey]
+            await deletePendingActions(storeId, chatId)
             await sendTelegramMessage(botToken, chatId, "🗑 Historial y acciones pendientes limpiados.")
             return new Response("ok", { status: 200 })
         }
@@ -834,20 +874,20 @@ serve(async (req) => {
 
         // ─── Confirmación de acciones pendientes (SI/NO) ─────────────
         const normalized = userText.toLowerCase().trim()
-        if (pendingActions[historyKey]?.length > 0) {
-            if (normalized === "si" || normalized === "sí" || normalized === "s") {
-                const actions = pendingActions[historyKey]
-                delete pendingActions[historyKey]
+        const pending = await loadPendingActions(storeId, chatId)
+        if (pending && pending.length > 0) {
+            if (normalized === "si" || normalized === "sí" || normalized === "s" || normalized === "confirmar") {
+                await deletePendingActions(storeId, chatId)
                 await sendTelegramMessage(botToken, chatId, "⏳ Ejecutando...")
-                const { ok, fail } = await executeActions(actions)
+                const { ok, fail } = await executeActions(pending)
                 const msg = ok > 0
                     ? `✅ ${ok} acción${ok > 1 ? "es" : ""} ejecutada${ok > 1 ? "s" : ""} correctamente.${fail > 0 ? ` ⚠️ ${fail} fallaron.` : ""}`
                     : `❌ No se pudo ejecutar ninguna acción.`
                 await sendTelegramMessage(botToken, chatId, msg)
                 return new Response("ok", { status: 200 })
             }
-            if (normalized === "no" || normalized === "n") {
-                delete pendingActions[historyKey]
+            if (normalized === "no" || normalized === "n" || normalized === "cancelar") {
+                await deletePendingActions(storeId, chatId)
                 await sendTelegramMessage(botToken, chatId, "❌ Acciones canceladas.")
                 return new Response("ok", { status: 200 })
             }
@@ -951,9 +991,9 @@ serve(async (req) => {
         // ─── Send response ───────────────────────────────────────────
         await sendTelegramMessage(botToken, chatId, cleanText)
 
-        // ─── If there are actions, ask for confirmation ──────────────
+        // ─── If there are actions, save to DB and ask for confirmation ──
         if (actions.length > 0) {
-            pendingActions[historyKey] = actions
+            await savePendingActions(storeId, chatId, actions)
             const confirmMsg = `\n⚡ *${actions.length} acción${actions.length > 1 ? "es" : ""} pendiente${actions.length > 1 ? "s" : ""}:*\n${actions.map((a, i) => `${i + 1}. ${describeAction(a)}`).join("\n")}\n\n¿Confirmar? Respondé *SI* o *NO*`
             await sendTelegramMessage(botToken, chatId, confirmMsg)
         }
