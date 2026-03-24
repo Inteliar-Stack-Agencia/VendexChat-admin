@@ -354,11 +354,14 @@ export default function OrdersPage() {
                       <td className="px-4 py-3 text-gray-900">
                         <div className="flex flex-col">
                           <span>{order.customer_name}</span>
-                          {(order.metadata as Record<string, unknown> | null)?.company_name && (
-                            <span className="text-[10px] text-blue-600 font-semibold flex items-center gap-1 mt-0.5">
-                              🏢 {(order.metadata as Record<string, unknown>).company_name as string}
-                            </span>
-                          )}
+                          {(() => {
+                            const company = ((order.metadata || {}) as Record<string, unknown>).company_name as string | undefined
+                            return company ? (
+                              <span className="text-[10px] text-blue-600 font-semibold flex items-center gap-1 mt-0.5">
+                                🏢 {company}
+                              </span>
+                            ) : null
+                          })()}
                         </div>
                       </td>
                       <td className="px-4 py-3 text-gray-600 hidden sm:table-cell">{order.customer_whatsapp}</td>
