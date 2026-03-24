@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import {
-    Bot, Zap, Save, Plus, Trash2, MessageSquare,
-    Sparkles, Send, Power, User, ToggleLeft, ToggleRight,
-    Copy, CheckCircle2, ChevronRight, Info, Loader2
+    Bot, Save, Plus, Trash2, MessageSquare,
+    Sparkles, Send, User,
+    Copy, CheckCircle2, Info, Loader2
 } from 'lucide-react'
 import FeatureGuard from '../../components/FeatureGuard'
 import { Card, Button, LoadingSpinner, showToast } from '../../components/common'
@@ -88,7 +88,7 @@ function BotConfigPageInner() {
     const [tenant, setTenant] = useState<Tenant | null>(null)
     const [config, setConfig] = useState<BotConfig>(DEFAULT_CONFIG)
     const [aiPrompt, setAiPrompt] = useState('')
-    const [activeTab, setActiveTab] = useState<'config' | 'faqs' | 'preview' | 'connect'>('config')
+    const [activeTab, setActiveTab] = useState<'config' | 'faqs' | 'preview'>('config')
 
     // FAQs
     const [newQuestion, setNewQuestion] = useState('')
@@ -202,27 +202,12 @@ function BotConfigPageInner() {
             {/* Header */}
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                 <div>
-                    <h1 className="text-2xl font-black text-slate-900 uppercase tracking-tight">VENDEx Bot (IA)</h1>
+                    <h1 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Asistente IA</h1>
                     <p className="text-slate-500 text-sm">
-                        Configurá tu asistente virtual para responder y vender por WhatsApp.
+                        Configurá el asistente virtual de tu tienda.
                     </p>
                 </div>
                 <div className="flex items-center gap-3">
-                    {/* Toggle ON/OFF */}
-                    <button
-                        onClick={() => setConfig((p) => ({ ...p, enabled: !p.enabled }))}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-xl font-black text-xs uppercase tracking-widest transition-all border ${config.enabled
-                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                            : 'bg-slate-100 text-slate-500 border-slate-200'
-                            }`}
-                    >
-                        {config.enabled ? (
-                            <ToggleRight className="w-5 h-5" />
-                        ) : (
-                            <ToggleLeft className="w-5 h-5" />
-                        )}
-                        {config.enabled ? 'Bot Activo' : 'Bot Inactivo'}
-                    </button>
                     <Button
                         onClick={handleSave}
                         loading={saving}
@@ -234,16 +219,6 @@ function BotConfigPageInner() {
                 </div>
             </div>
 
-            {/* Status banner */}
-            {config.enabled && (
-                <div className="flex items-center gap-3 p-4 bg-emerald-50 border border-emerald-200 rounded-2xl">
-                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                    <p className="text-sm font-bold text-emerald-700">
-                        Bot activo · Los clientes verán el botón de chat en tu tienda
-                    </p>
-                </div>
-            )}
-
             {/* Tabs */}
             <div className="flex bg-slate-100 p-1 rounded-xl w-fit gap-1">
                 {(
@@ -251,7 +226,6 @@ function BotConfigPageInner() {
                         { id: 'config', label: 'Configuración', icon: Bot },
                         { id: 'faqs', label: 'Respuestas Rápidas', icon: MessageSquare },
                         { id: 'preview', label: 'Preview', icon: Sparkles },
-                        { id: 'connect', label: 'Cómo Conectar', icon: Zap },
                     ] as const
                 ).map(({ id, label, icon: Icon }) => (
                     <button
@@ -548,85 +522,6 @@ function BotConfigPageInner() {
                 </Card>
             )}
 
-            {/* ---- Tab: Cómo Conectar ---- */}
-            {activeTab === 'connect' && (
-                <div className="space-y-4">
-                    <Card className="p-6 space-y-5">
-                        <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">
-                            Pasos para activar el Bot en WhatsApp
-                        </h3>
-
-                        {[
-                            {
-                                step: '1',
-                                title: 'Guardá tu configuración',
-                                desc: 'Completá las secciones de Configuración y Respuestas Rápidas, luego presioná Guardar.',
-                                color: 'indigo',
-                            },
-                            {
-                                step: '2',
-                                title: 'Verificá tu número de WhatsApp',
-                                desc: 'Asegurate de tener el número de WhatsApp de tu tienda cargado en Configuración → Información de Contacto.',
-                                color: 'violet',
-                            },
-                            {
-                                step: '3',
-                                title: 'Solicitá la activación',
-                                desc: 'Desde tu panel, solicitá la vinculación de tu número. El equipo de VENDEx te enviará las instrucciones por email en 24-48hs.',
-                                color: 'blue',
-                            },
-                            {
-                                step: '4',
-                                title: 'Escaneá el QR',
-                                desc: 'Recibirás un código QR para vincular tu WhatsApp con el bot. Solo debés escanearlo desde tu celular.',
-                                color: 'emerald',
-                            },
-                            {
-                                step: '5',
-                                title: '¡Listo! Tu bot está activo',
-                                desc: 'Desde ese momento el bot responderá automáticamente a los mensajes de tus clientes según tu configuración.',
-                                color: 'green',
-                            },
-                        ].map(({ step, title, desc, color }) => (
-                            <div key={step} className="flex gap-4">
-                                <div
-                                    className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-black bg-${color}-100 text-${color}-600`}
-                                >
-                                    {step}
-                                </div>
-                                <div>
-                                    <p className="font-black text-slate-900 text-sm">{title}</p>
-                                    <p className="text-slate-500 text-xs mt-0.5">{desc}</p>
-                                </div>
-                            </div>
-                        ))}
-                    </Card>
-
-                    {/* CTA */}
-                    <Card className="p-6 bg-gradient-to-br from-indigo-50 to-violet-50 border-indigo-100">
-                        <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-200">
-                                <Power className="w-6 h-6 text-white" />
-                            </div>
-                            <div className="flex-1">
-                                <p className="font-black text-slate-900">Solicitar activación del Bot</p>
-                                <p className="text-slate-500 text-xs mt-0.5">
-                                    El equipo de VENDEx te contactará en 24-48hs hábiles
-                                </p>
-                            </div>
-                            <a
-                                href={`https://wa.me/5491100000000?text=${encodeURIComponent(`Hola, quiero activar el VENDEx Bot para mi tienda: ${tenant?.name || ''}`)}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-lg shadow-indigo-100"
-                            >
-                                <ChevronRight className="w-4 h-4" />
-                                Solicitar
-                            </a>
-                        </div>
-                    </Card>
-                </div>
-            )}
         </div>
     )
 }
