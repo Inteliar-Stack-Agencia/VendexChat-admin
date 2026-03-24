@@ -64,11 +64,11 @@ interface StoreSnapshot {
         totalSales7d: number
         totalOrders7d: number
     }
-    recentOrders: Record<string, unknown>[]
-    topCustomers: Record<string, unknown>[]
-    topProducts: Record<string, unknown>[]
-    lowStockProducts: Record<string, unknown>[]
-    allProducts: Record<string, unknown>[]
+    recentOrders: Record<string, any>[]
+    topCustomers: Record<string, any>[]
+    topProducts: Record<string, any>[]
+    lowStockProducts: Record<string, any>[]
+    allProducts: Record<string, any>[]
     customerCount: number
     dayOfWeek: string
 }
