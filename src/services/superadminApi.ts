@@ -31,7 +31,7 @@ export const superadminApi = {
             .eq('status', 'active')
 
         const mrr = activeSubs?.reduce((acc, sub) => {
-            const price = sub.plan_type === 'pro' ? 13.99 : sub.plan_type === 'vip' ? 19.99 : 0
+            const price = sub.plan_type === 'pro' ? 13.99 : sub.plan_type === 'vip' ? 19.99 : sub.plan_type === 'ultra' ? 25 : 0
             return acc + price
         }, 0) || 0
 
