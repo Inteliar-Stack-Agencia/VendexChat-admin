@@ -3,7 +3,7 @@ import { useOutletContext, useLocation } from 'react-router-dom'
 import { Card, Button, Input, LoadingSpinner } from '../../components/common'
 import { tenantApi, authApi, storageApi } from '../../services/api'
 import { Tenant } from '../../types'
-import { CreditCard, Plus, RefreshCw, Trash2, ShieldCheck, Globe, MessageSquare, Palette, LayoutGrid, Upload, Info, Printer } from 'lucide-react'
+import { CreditCard, Plus, RefreshCw, Trash2, ShieldCheck, Globe, MessageSquare, Palette, LayoutGrid, Upload, Info, Printer, CheckCircle2, Clock, AlertCircle } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import FeatureGuard from '../../components/FeatureGuard'
 import { toast } from 'sonner'
@@ -19,7 +19,7 @@ const TABS = [
 ]
 
 export default function SettingsPage() {
-  const { subscription, selectedStoreId } = useAuth()
+  const { subscription, selectedStoreId, token: authToken } = useAuth()
   const { setTenant: setGlobalTenant } = useOutletContext<{ tenant: Tenant | null, setTenant: (t: Tenant) => void }>()
   const location = useLocation()
   const currentPlan = subscription?.plan_type || 'free'
@@ -75,7 +75,6 @@ export default function SettingsPage() {
   const [estimatedTime, setEstimatedTime] = useState('')
   const [orderConfirmMessage, setOrderConfirmMessage] = useState('')
   const [deliveryZones, setDeliveryZones] = useState<{ name: string; cost: number }[]>([])
-  const [modifiersEnabled, setModifiersEnabled] = useState(false)
 
   // Form para personalización
   const [primaryColor, setPrimaryColor] = useState('#10b981')
@@ -152,7 +151,6 @@ export default function SettingsPage() {
         setEstimatedTime(metadata.estimated_time || '')
         setOrderConfirmMessage(metadata.order_confirm_message || '')
         setDeliveryZones(metadata.delivery_zones || [])
-        setModifiersEnabled(!!metadata.modifiers_enabled)
 
         // Load printer settings from metadata
         const printer = metadata.printer || {}
@@ -200,6 +198,9 @@ export default function SettingsPage() {
       return
     }
     try {
+      const prevDomain = tenant?.custom_domain || ''
+      const newDomain = customDomain.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/$/, '')
+
       await tenantApi.updateMe({
         name,
         description,
@@ -233,6 +234,39 @@ export default function SettingsPage() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any)
       toast.success('Información actualizada')
+
+      // Si el dominio cambió, registrarlo en Cloudflare (SSL for SaaS)
+      if (newDomain && newDomain !== prevDomain) {
+        setDomainStatus('registering')
+        try {
+          const res = await fetch('/api/register-custom-hostname', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${authToken}`,
+            },
+            body: JSON.stringify({ domain: newDomain }),
+          })
+          const data = await res.json() as { success?: boolean; ssl_status?: string; error?: string }
+          if (data.success) {
+            setDomainStatus(data.ssl_status === 'active' ? 'active' : 'pending_ssl')
+          } else {
+            setDomainStatus('error')
+            toast.error(data.error ?? 'Error al registrar el dominio en Cloudflare')
+          }
+        } catch {
+          setDomainStatus('error')
+        }
+      } else if (!newDomain && prevDomain) {
+        // Dominio eliminado — remover de Cloudflare
+        try {
+          await fetch('/api/register-custom-hostname', {
+            method: 'DELETE',
+            headers: { Authorization: `Bearer ${authToken}` },
+          })
+          setDomainStatus('idle')
+        } catch { /* silencioso */ }
+      }
     } catch (err: unknown) {
       console.error('[SaveGeneral]', err)
       toast.error(err instanceof Error ? err.message : 'Error al guardar general')
@@ -275,7 +309,6 @@ export default function SettingsPage() {
         estimated_time: estimatedTime,
         order_confirm_message: orderConfirmMessage,
         delivery_zones: deliveryZones,
-        modifiers_enabled: modifiersEnabled,
       }
       await tenantApi.updateMe({
         accept_orders: acceptOrders,
@@ -799,27 +832,6 @@ export default function SettingsPage() {
               <div>
                 <span className="text-sm font-bold text-gray-800">Aceptar pedidos</span>
                 <p className="text-[11px] text-slate-400">Cuando está desactivado, los clientes no podrán realizar pedidos nuevos.</p>
-              </div>
-            </label>
-
-            {/* Personalizaciones de productos (adicionales / opcionales) */}
-            <label className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer border-2 transition-all ${modifiersEnabled ? 'bg-indigo-50 border-indigo-200' : 'bg-slate-50 border-transparent'} ${currentPlan === 'free' ? 'opacity-60' : ''}`}>
-              <input
-                type="checkbox"
-                checked={modifiersEnabled}
-                disabled={currentPlan === 'free'}
-                onChange={(e) => setModifiersEnabled(e.target.checked)}
-                className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-              />
-              <div className="flex-1">
-                <span className="text-sm font-bold text-gray-800 flex items-center gap-2">
-                  Activar Personalizaciones de productos
-                  <span className="text-[9px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded font-black uppercase tracking-wider">PRO</span>
-                </span>
-                <p className="text-[11px] text-slate-400 mt-0.5">Para tiendas de comida y negocios que necesitan adicionales, variantes u opciones por producto (estilo Rappi).</p>
-                {currentPlan === 'free' && (
-                  <p className="text-[11px] text-indigo-500 font-semibold mt-1">Requiere plan PRO o superior.</p>
-                )}
               </div>
             </label>
 
