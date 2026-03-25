@@ -8,13 +8,13 @@ compatibility_flags = ["nodejs_compat"]
 # Reemplazar los IDs por los reales después de crear
 [[kv_namespaces]]
 binding = "DOMAIN_CACHE"
-id = "REPLACE_WITH_REAL_KV_ID"
-preview_id = "REPLACE_WITH_REAL_KV_PREVIEW_ID"
+id = "4b0d34121e614ea3bae3377b0f2268d5"
+preview_id = "5cd2d24c1ed041d7ac023e2bc7e28e42"
 
 # ─── Variables de entorno ─────────────────────────────────────────────────────
 [vars]
 STOREFRONT_URL = "https://vendexchat.app"
-SUPABASE_URL = "https://REPLACE.supabase.co"
+SUPABASE_URL = "https://pjrhfbhqdbyoljactdkj.supabase.co"
 
 # ─── Secrets (configurar via CLI) ────────────────────────────────────────────
 # wrangler secret put SUPABASE_SERVICE_KEY

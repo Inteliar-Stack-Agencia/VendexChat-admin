@@ -112,6 +112,8 @@ export interface Tenant {
   delivery_cost: number
   delivery_info: string | null
   custom_domain: string | null
+  custom_hostname_cf_id: string | null
+  custom_path: string | null
   schedule: Record<string, ScheduleDay> | null // Legacy
   physical_schedule: Record<string, ScheduleDay> | null
   online_schedule: Record<string, ScheduleDay> | null

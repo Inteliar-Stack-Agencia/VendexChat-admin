@@ -60,6 +60,8 @@ export default function SettingsPage() {
   const [instagram, setInstagram] = useState('')
   const [facebook, setFacebook] = useState('')
   const [customDomain, setCustomDomain] = useState('')
+  const [customPath, setCustomPath] = useState('')
+  const [domainStatus, setDomainStatus] = useState<'idle' | 'registering' | 'active' | 'pending_ssl' | 'error'>('idle')
   const [country, setCountry] = useState('')
   const [city, setCity] = useState('')
 
@@ -133,6 +135,7 @@ export default function SettingsPage() {
         setBannerUrl(data.banner_url || '')
         setDeliveryInfo(data.delivery_info || '')
         setCustomDomain(data.custom_domain || '')
+        setCustomPath(data.custom_path || '')
         setLowStockThreshold(String(data.low_stock_threshold ?? 5))
         setCountry(data.country || '')
         setCity(data.city || '')
@@ -202,7 +205,8 @@ export default function SettingsPage() {
         description,
         logo_url: logoUrl,
         banner_url: bannerUrl,
-        custom_domain: customDomain || null,
+        custom_domain: newDomain || null,
+        custom_path: customPath.trim().toLowerCase().replace(/^\//, '') || null,
         metadata: {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           ...((tenant as any)?.metadata || {}),
@@ -578,13 +582,44 @@ export default function SettingsPage() {
             </div>
 
             <FeatureGuard feature="custom-domain" minPlan="pro" fallback="message">
-              <Input
-                label="Dominio Personalizado"
-                value={customDomain}
-                onChange={(e) => setCustomDomain(e.target.value)}
-                placeholder="tienda.tudominio.com"
-                helperText="Asegúrate de apuntar tu CNAME a vendexchat.app"
-              />
+              <div className="space-y-1">
+                <Input
+                  label="Dominio Personalizado"
+                  value={customDomain}
+                  onChange={(e) => { setCustomDomain(e.target.value); setDomainStatus('idle') }}
+                  placeholder="www.tutienda.com"
+                  helperText="Apuntá tu CNAME a servidores.vendexchat.app — el SSL se activa automáticamente."
+                />
+                {domainStatus === 'registering' && (
+                  <p className="flex items-center gap-1.5 text-xs text-blue-600">
+                    <Clock className="w-3.5 h-3.5 animate-spin" /> Registrando dominio en Cloudflare…
+                  </p>
+                )}
+                {domainStatus === 'pending_ssl' && (
+                  <p className="flex items-center gap-1.5 text-xs text-amber-600">
+                    <Clock className="w-3.5 h-3.5" /> Dominio registrado — SSL activándose (puede tardar hasta 24hs)
+                  </p>
+                )}
+                {domainStatus === 'active' && (
+                  <p className="flex items-center gap-1.5 text-xs text-emerald-600">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Dominio activo con SSL
+                  </p>
+                )}
+                {domainStatus === 'error' && (
+                  <p className="flex items-center gap-1.5 text-xs text-red-500">
+                    <AlertCircle className="w-3.5 h-3.5" /> Error al registrar — verificá que el dominio sea correcto
+                  </p>
+                )}
+                {customDomain && (
+                  <Input
+                    label="Ruta personalizada (opcional)"
+                    value={customPath}
+                    onChange={(e) => setCustomPath(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
+                    placeholder="laplata"
+                    helperText={customPath ? `Tu tienda responderá en: ${customDomain}/${customPath}` : `Dejá vacío para usar el dominio raíz: ${customDomain}`}
+                  />
+                )}
+              </div>
             </FeatureGuard>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
