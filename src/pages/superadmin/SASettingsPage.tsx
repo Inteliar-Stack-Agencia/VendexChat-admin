@@ -45,6 +45,10 @@ export default function SASettingsPage() {
                 telegram_chat_id: telegramCredentials.chat_id,
             })
             toast.success('Configuración global actualizada con éxito.')
+        } catch (err: unknown) {
+            toast.error('Error al guardar la configuración', {
+                description: err instanceof Error ? err.message : 'Error desconocido'
+            })
         } finally {
             setSaving(false)
         }
