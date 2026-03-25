@@ -482,12 +482,41 @@ export default function ModifiersPage() {
         </Button>
       </div>
 
-      {/* Info card */}
-      <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl text-sm text-blue-700 flex gap-3 items-start">
-        <UtensilsCrossed className="w-4 h-4 mt-0.5 shrink-0 text-blue-500" />
-        <p>
-          Los grupos se vinculan a productos. Cuando el cliente agrega un producto al carrito, verá las opciones para personalizar su pedido (como en Rappi o PedidosYa).
-        </p>
+      {/* Tutorial de 3 pasos */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {[
+          {
+            step: '1',
+            title: 'Creá un grupo',
+            desc: 'Ej: "Adicionales", "Elige tu acompañamiento", "Sin ingredientes". Definí si el cliente puede elegir una o varias opciones.',
+            color: 'bg-indigo-50 border-indigo-100',
+            badge: 'bg-indigo-600',
+          },
+          {
+            step: '2',
+            title: 'Agregá las opciones',
+            desc: 'Cada opción tiene nombre y precio adicional. Ej: "Papas extra +$300", "Sin cebolla $0", "Queso extra +$200".',
+            color: 'bg-emerald-50 border-emerald-100',
+            badge: 'bg-emerald-600',
+          },
+          {
+            step: '3',
+            title: 'Vinculá a productos',
+            desc: 'Seleccioná a qué productos aplica el grupo. Al pedir ese producto, el cliente verá las opciones para personalizar.',
+            color: 'bg-amber-50 border-amber-100',
+            badge: 'bg-amber-500',
+          },
+        ].map((s) => (
+          <div key={s.step} className={`p-4 rounded-xl border ${s.color} flex gap-3`}>
+            <div className={`w-7 h-7 rounded-full ${s.badge} text-white text-xs font-black flex items-center justify-center shrink-0 mt-0.5`}>
+              {s.step}
+            </div>
+            <div>
+              <p className="text-sm font-bold text-gray-800 mb-1">{s.title}</p>
+              <p className="text-xs text-gray-500 leading-relaxed">{s.desc}</p>
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* Content */}
