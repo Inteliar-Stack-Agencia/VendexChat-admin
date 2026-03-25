@@ -329,10 +329,10 @@ function GroupCard({ group, onEdit, onDelete, onToggle }: GroupCardProps) {
         <div className="flex-1 min-w-0" onClick={() => setExpanded((v) => !v)} role="button">
           <div className="flex items-center gap-2 flex-wrap">
             <h3 className="text-sm font-bold text-gray-900">{group.name}</h3>
-            <Badge variant={group.required ? 'warning' : 'default'} size="sm">
+            <Badge color={group.required ? 'text-amber-700' : 'text-gray-600'} bg={group.required ? 'bg-amber-100' : 'bg-gray-100'}>
               {group.required ? 'Obligatorio' : 'Opcional'}
             </Badge>
-            <Badge variant="default" size="sm">{selLabel}</Badge>
+            <Badge color="text-gray-600" bg="bg-gray-100">{selLabel}</Badge>
           </div>
           {group.product_names && group.product_names.length > 0 && (
             <p className="text-xs text-gray-400 mt-0.5 truncate">
@@ -495,10 +495,14 @@ export default function ModifiersPage() {
         <LoadingSpinner />
       ) : groups.length === 0 ? (
         <EmptyState
-          icon={UtensilsCrossed}
+          icon={<UtensilsCrossed className="w-12 h-12" />}
           title="Sin personalizaciones"
           description='Creá tu primer grupo de opciones. Por ejemplo: "Adicionales", "Elige tu acompañamiento", "Sin ingredientes".'
-          action={{ label: 'Crear primer grupo', onClick: () => setModalGroup(null) }}
+          action={
+            <Button onClick={() => setModalGroup(null)} className="bg-slate-900 hover:bg-slate-800 text-white flex items-center gap-2">
+              <Plus className="w-4 h-4" /> Crear primer grupo
+            </Button>
+          }
         />
       ) : (
         <div className="space-y-3">
