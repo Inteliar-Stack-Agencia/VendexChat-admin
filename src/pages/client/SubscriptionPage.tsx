@@ -79,7 +79,7 @@ export default function SubscriptionPage() {
         if (!isMPAvailable) {
             setProcessingPlanId(planId)
             try {
-                const res = await fetch('/api/create-stripe-subscription', {
+                const res = await fetch('/api/create-paypal-subscription', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -384,7 +384,7 @@ export default function SubscriptionPage() {
                                     )}
                                     {!isCurrent && plan.id !== 'free' && plan.id !== 'ultra' && !isProcessing && (
                                         <span className="text-[8px] opacity-70 font-normal normal-case">
-                                            {MP_COUNTRIES.includes(userCountry || '') ? 'via MP' : 'via Stripe'}
+                                            {MP_COUNTRIES.includes(userCountry || '') ? 'via MP' : 'via PayPal'}
                                         </span>
                                     )}
                                 </button>

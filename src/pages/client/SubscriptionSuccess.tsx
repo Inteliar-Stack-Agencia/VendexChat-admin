@@ -11,9 +11,11 @@ export default function SubscriptionSuccess() {
     const preapprovalId = params.get('preapproval_id')
     const paymentId = params.get('payment_id')
     const sessionId = params.get('session_id')
+    const paypalSubscriptionId = params.get('subscription_id')
     const status = params.get('status')
-    const comprobante = preapprovalId || paymentId || sessionId
-    const isStripe = !!sessionId && !preapprovalId && !paymentId
+    const comprobante = preapprovalId || paymentId || sessionId || paypalSubscriptionId
+    const isStripe = !!sessionId && !preapprovalId && !paymentId && !paypalSubscriptionId
+    const isPayPal = !!paypalSubscriptionId && !preapprovalId && !paymentId && !sessionId
 
     useEffect(() => {
         // Refresh subscription data so the rest of the app reflects the new plan
@@ -32,7 +34,9 @@ export default function SubscriptionSuccess() {
                         ¡Suscripción activada!
                     </h2>
                     <p className="text-slate-500 font-medium">
-                        Tu suscripción fue registrada. Los cobros se realizarán automáticamente cada ciclo. Ya podés usar todas las funciones de tu nuevo plan.
+                        {isPayPal
+                            ? 'Tu suscripción fue registrada. Los cobros se realizarán automáticamente. En unos momentos se activará tu plan.'
+                            : 'Tu suscripción fue registrada. Los cobros se realizarán automáticamente cada ciclo. Ya podés usar todas las funciones de tu nuevo plan.'}
                     </p>
                 </div>
 
@@ -42,6 +46,9 @@ export default function SubscriptionSuccess() {
                         <p className="text-sm font-mono text-slate-600">ID: {comprobante}</p>
                         {isStripe && (
                             <p className="text-[10px] text-slate-400 font-medium">Procesado vía Stripe</p>
+                        )}
+                        {isPayPal && (
+                            <p className="text-[10px] text-slate-400 font-medium">Procesado vía PayPal</p>
                         )}
                         {status && <p className="text-sm text-emerald-600 font-bold capitalize">{status}</p>}
                     </div>
