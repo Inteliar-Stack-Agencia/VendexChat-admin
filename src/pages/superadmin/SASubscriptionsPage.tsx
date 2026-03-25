@@ -20,7 +20,7 @@ export default function SASubscriptionsPage() {
         active: subscriptions.filter(s => s.status === 'active').length,
         past_due: subscriptions.filter(s => s.status === 'past_due' || s.status === 'incomplete').length,
         revenue: subscriptions.filter(s => s.status === 'active').reduce((acc, s) => {
-            const price = s.plan_type === 'pro' ? 13.99 : s.plan_type === 'vip' ? 19.99 : s.plan_type === 'ultra' ? 0 : 0
+            const price = s.plan_type === 'pro' ? 13.99 : s.plan_type === 'vip' ? 19.99 : s.plan_type === 'ultra' ? 25 : 0
             return acc + price
         }, 0)
     }

@@ -92,7 +92,7 @@ export default function SACreateTenantModal({ isOpen, onClose, onConfirm, isSavi
                             onChange={(e) => setFormData(t => ({ ...t, plan_type: e.target.value }))}
                         >
                             <option value="free">FREE</option>
-                            <option value="pro">PRO (Trial 15d)</option>
+                            <option value="ultra">ULTRA (Trial 15d)</option>
                             <option value="vip">VIP</option>
                             <option value="ultra">ULTRA (Bespoke)</option>
                         </select>

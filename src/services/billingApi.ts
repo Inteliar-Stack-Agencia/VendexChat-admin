@@ -17,7 +17,7 @@ const PLAN_META: Record<string, { description: string; is_popular?: boolean }> =
     free:  { description: 'Empezá gratis y digitalizá tu negocio en minutos.' },
     pro:   { description: 'Todo lo que necesitás para crecer y vender más. Incluye Asistente de Ventas IA.', is_popular: true },
     vip:   { description: 'Automatizá tu operación con IA, logística y soporte dedicado.' },
-    ultra: { description: 'Solución empresarial a medida con infraestructura propia.' },
+    ultra: { description: 'Todo incluido + Agente IA WhatsApp disponible como desarrollo a medida.' },
 }
 
 export const billingApi = {

@@ -31,7 +31,7 @@ export const superadminApi = {
             .eq('status', 'active')
 
         const mrr = activeSubs?.reduce((acc, sub) => {
-            const price = sub.plan_type === 'pro' ? 13.99 : sub.plan_type === 'vip' ? 19.99 : 0
+            const price = sub.plan_type === 'pro' ? 13.99 : sub.plan_type === 'vip' ? 19.99 : sub.plan_type === 'ultra' ? 25 : 0
             return acc + price
         }, 0) || 0
 
@@ -188,7 +188,7 @@ export const superadminApi = {
 
         await supabase.from('subscriptions').upsert({
             store_id: storeId,
-            plan_type: data.plan_type || 'pro',
+            plan_type: data.plan_type || 'ultra',
             status: data.plan_type ? 'active' : 'trial',
             current_period_end: trialEndDate.toISOString(),
             billing_cycle: 'monthly'
@@ -197,11 +197,11 @@ export const superadminApi = {
         await supabase.from('stores').update({
             metadata: {
                 ...(finalStore?.metadata || {}),
-                plan_type: data.plan_type || 'pro'
+                plan_type: data.plan_type || 'ultra'
             }
         }).eq('id', storeId)
 
-        return { ...finalStore, metadata: { ...finalStore?.metadata, plan_type: data.plan_type || 'pro' } } as Tenant
+        return { ...finalStore, metadata: { ...finalStore?.metadata, plan_type: data.plan_type || 'ultra' } } as Tenant
     },
 
     listUsers: async () => {
