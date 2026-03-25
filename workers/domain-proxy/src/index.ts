@@ -1,24 +1,25 @@
 /**
  * VendexChat — Domain Proxy Worker
  *
- * Recibe requests en dominios personalizados (ej: morfiviandas.com),
- * resuelve qué tenant corresponde consultando Supabase (con caché KV),
- * y hace proxy transparente al storefront principal.
+ * Soporta dos modos de routing:
  *
- * Setup:
- *   1. Deploy este worker en Cloudflare
- *   2. Agregar ruta: *<dominio_custom>/* → este worker
- *   3. Cada tenant apunta su CNAME a servidores.vendexchat.app
- *   4. Configurar Custom Hostnames (SSL for SaaS) en el Zone de vendexchat.app
+ * 1. Hostname-based:  tienda.com           → tenant con custom_domain='tienda.com'
+ * 2. Path-based:      morfiviandas.com/laplata → tenant con custom_domain='morfiviandas.com'
+ *                                                            y custom_path='laplata'
+ *
+ * Para path-based, el root del dominio (/) hace pass-through al servidor original
+ * (landing page, etc.) si no hay tenant configurado sin custom_path.
  */
 
 export interface Env {
-  /** URL base del storefront, ej: https://vendexchat.app */
   STOREFRONT_URL: string
-  /** URL de Supabase, ej: https://xxxx.supabase.co */
   SUPABASE_URL: string
-  /** Service role key de Supabase (secret) */
   SUPABASE_SERVICE_KEY: string
+}
+
+interface StoreRow {
+  slug: string
+  custom_path: string | null
 }
 
 const NOT_FOUND_HTML = `<!DOCTYPE html>
@@ -45,12 +46,26 @@ const NOT_FOUND_HTML = `<!DOCTYPE html>
 </body>
 </html>`
 
-/** Busca el slug de una tienda por su custom_domain en Supabase */
-async function resolveSlugFromSupabase(
-  domain: string,
+/**
+ * Resuelve hostname + pathPrefix → { slug, remainingPath }
+ *
+ * Lógica:
+ *   1. Buscar tenant con custom_domain=hostname y custom_path=pathPrefix (path-based)
+ *   2. Si no hay, buscar tenant con custom_domain=hostname y custom_path IS NULL (hostname-based)
+ *   3. Si tampoco, retornar null (pass-through o 404)
+ */
+async function resolveTenant(
+  hostname: string,
+  pathname: string,
   env: Env
-): Promise<string | null> {
-  const url = `${env.SUPABASE_URL}/rest/v1/stores?select=slug&custom_domain=eq.${encodeURIComponent(domain)}&is_active=eq.true&limit=1`
+): Promise<{ slug: string; remainingPath: string } | null> {
+
+  // Extraer el primer segmento del path: "/laplata/productos" → "laplata"
+  const segments = pathname.replace(/^\//, '').split('/')
+  const firstSegment = segments[0] || ''
+
+  // Traer todos los tenants con este custom_domain (máximo 20, suficiente)
+  const url = `${env.SUPABASE_URL}/rest/v1/stores?select=slug,custom_path&custom_domain=eq.${encodeURIComponent(hostname)}&is_active=eq.true&limit=20`
 
   const res = await fetch(url, {
     headers: {
@@ -62,13 +77,51 @@ async function resolveSlugFromSupabase(
 
   if (!res.ok) return null
 
-  const rows = await res.json() as { slug: string }[]
-  return rows?.[0]?.slug ?? null
+  const rows = await res.json() as StoreRow[]
+  if (!rows.length) return null
+
+  // Intentar match path-based primero
+  if (firstSegment) {
+    const pathMatch = rows.find(r => r.custom_path === firstSegment)
+    if (pathMatch) {
+      // El path restante es todo lo que viene después del primer segmento
+      const remaining = '/' + segments.slice(1).join('/')
+      return { slug: pathMatch.slug, remainingPath: remaining === '/' ? '' : remaining }
+    }
+  }
+
+  // Fallback: tenant sin custom_path (hostname-based puro)
+  const hostnameMatch = rows.find(r => !r.custom_path)
+  if (hostnameMatch) {
+    return { slug: hostnameMatch.slug, remainingPath: pathname === '/' ? '' : pathname }
+  }
+
+  return null
 }
 
-/** Resuelve domain → slug consultando Supabase */
-async function resolveSlug(domain: string, env: Env): Promise<string | null> {
-  return resolveSlugFromSupabase(domain, env)
+async function proxyTo(targetUrl: string, request: Request, hostname: string): Promise<Response> {
+  const proxyRequest = new Request(targetUrl, {
+    method: request.method,
+    headers: (() => {
+      const h = new Headers(request.headers)
+      h.set('X-Forwarded-Host', hostname)
+      h.set('X-Original-Host', hostname)
+      h.delete('host')
+      return h
+    })(),
+    body: ['GET', 'HEAD'].includes(request.method) ? undefined : request.body,
+    redirect: 'follow',
+  })
+
+  const response = await fetch(proxyRequest)
+  const newHeaders = new Headers(response.headers)
+  newHeaders.delete('x-frame-options')
+
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: newHeaders,
+  })
 }
 
 export default {
@@ -76,59 +129,34 @@ export default {
     const url = new URL(request.url)
     const hostname = url.hostname
 
-    // Ignorar requests al dominio workers.dev (health check, etc.)
+    // Health check en dominio workers.dev
     if (hostname.endsWith('workers.dev')) {
       return new Response('VendexChat Domain Proxy OK', { status: 200 })
     }
 
-    // Resolver hostname → slug
-    let slug: string | null = null
+    // Resolver tenant
+    let tenant: { slug: string; remainingPath: string } | null = null
     try {
-      slug = await resolveSlug(hostname, env)
+      tenant = await resolveTenant(hostname, url.pathname, env)
     } catch (err) {
-      console.error('[domain-proxy] Error resolviendo slug:', err)
+      console.error('[domain-proxy] Error resolviendo tenant:', err)
       return new Response('Error interno del servidor', { status: 502 })
     }
 
-    if (!slug) {
+    // Si no hay tenant → 404
+    if (!tenant) {
       return new Response(NOT_FOUND_HTML, {
         status: 404,
         headers: { 'Content-Type': 'text/html; charset=utf-8' },
       })
     }
 
-    // Construir URL destino: https://vendexchat.app/<slug><path><search>
-    const storefrontBase = env.STOREFRONT_URL.replace(/\/$/, '')
-    const targetPath = url.pathname === '/' ? '' : url.pathname
-    const targetUrl = `${storefrontBase}/${slug}${targetPath}${url.search}`
-
-    // Proxy transparente — el navegador sigue viendo el dominio del tenant
-    const proxyRequest = new Request(targetUrl, {
-      method: request.method,
-      headers: (() => {
-        const h = new Headers(request.headers)
-        h.set('X-Forwarded-Host', hostname)
-        h.set('X-Original-Host', hostname)
-        // No reenviar el host header para evitar loops
-        h.delete('host')
-        return h
-      })(),
-      body: ['GET', 'HEAD'].includes(request.method) ? undefined : request.body,
-      redirect: 'follow',
-    })
+    // Proxy al storefront: vendexchat.app/<slug><remainingPath><search>
+    const base = env.STOREFRONT_URL.replace(/\/$/, '')
+    const targetUrl = `${base}/${tenant.slug}${tenant.remainingPath}${url.search}`
 
     try {
-      const response = await fetch(proxyRequest)
-
-      // Reescribir headers de respuesta para que el browser no se confunda
-      const newHeaders = new Headers(response.headers)
-      newHeaders.delete('x-frame-options') // permitir iframes si el storefront los usa
-
-      return new Response(response.body, {
-        status: response.status,
-        statusText: response.statusText,
-        headers: newHeaders,
-      })
+      return await proxyTo(targetUrl, request, hostname)
     } catch (err) {
       console.error('[domain-proxy] Error proxying:', err)
       return new Response('Error al conectar con la tienda', { status: 502 })
