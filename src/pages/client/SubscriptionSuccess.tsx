@@ -10,8 +10,10 @@ export default function SubscriptionSuccess() {
 
     const preapprovalId = params.get('preapproval_id')
     const paymentId = params.get('payment_id')
+    const sessionId = params.get('session_id')
     const status = params.get('status')
-    const comprobante = preapprovalId || paymentId
+    const comprobante = preapprovalId || paymentId || sessionId
+    const isStripe = !!sessionId && !preapprovalId && !paymentId
 
     useEffect(() => {
         // Refresh subscription data so the rest of the app reflects the new plan
@@ -38,6 +40,9 @@ export default function SubscriptionSuccess() {
                     <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 text-left space-y-1">
                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Comprobante</p>
                         <p className="text-sm font-mono text-slate-600">ID: {comprobante}</p>
+                        {isStripe && (
+                            <p className="text-[10px] text-slate-400 font-medium">Procesado vía Stripe</p>
+                        )}
                         {status && <p className="text-sm text-emerald-600 font-bold capitalize">{status}</p>}
                     </div>
                 )}
