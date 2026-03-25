@@ -20,15 +20,18 @@ import {
   Crown,
   Receipt,
   MessageSquareWarning,
+  UtensilsCrossed,
 } from 'lucide-react'
 
 interface SidebarProps {
   isOpen: boolean
   onClose: () => void
+  modifiersEnabled?: boolean
 }
 
-export default function Sidebar({ isOpen, onClose }: SidebarProps) {
-  const { logout, isSuperadmin } = useAuth()
+export default function Sidebar({ isOpen, onClose, modifiersEnabled }: SidebarProps) {
+  const { logout, isSuperadmin, subscription } = useAuth()
+  const hasPro = ['pro', 'vip', 'ultra'].includes(subscription?.plan_type || '')
   const navigate = useNavigate()
   const isImpersonating = !!localStorage.getItem('vendexchat_impersonated_store')
 
@@ -119,6 +122,13 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                   <FolderOpen className="w-5 h-5" />
                   Categorías
                 </NavLink>
+                {modifiersEnabled && hasPro && (
+                  <NavLink to="/modifiers" className={linkClass} onClick={onClose}>
+                    <UtensilsCrossed className="w-5 h-5" />
+                    Personalizaciones
+                    <span className="ml-auto text-[8px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded font-black uppercase">PRO</span>
+                  </NavLink>
+                )}
                 <NavLink to="/customers" className={linkClass} onClick={onClose}>
                   <Users className="w-5 h-5" />
                   Clientes

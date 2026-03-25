@@ -74,6 +74,7 @@ export default function SettingsPage() {
   const [estimatedTime, setEstimatedTime] = useState('')
   const [orderConfirmMessage, setOrderConfirmMessage] = useState('')
   const [deliveryZones, setDeliveryZones] = useState<{ name: string; cost: number }[]>([])
+  const [modifiersEnabled, setModifiersEnabled] = useState(false)
 
   // Form para personalización
   const [primaryColor, setPrimaryColor] = useState('#10b981')
@@ -149,6 +150,7 @@ export default function SettingsPage() {
         setEstimatedTime(metadata.estimated_time || '')
         setOrderConfirmMessage(metadata.order_confirm_message || '')
         setDeliveryZones(metadata.delivery_zones || [])
+        setModifiersEnabled(!!metadata.modifiers_enabled)
 
         // Load printer settings from metadata
         const printer = metadata.printer || {}
@@ -306,6 +308,7 @@ export default function SettingsPage() {
         estimated_time: estimatedTime,
         order_confirm_message: orderConfirmMessage,
         delivery_zones: deliveryZones,
+        modifiers_enabled: modifiersEnabled,
       }
       await tenantApi.updateMe({
         accept_orders: acceptOrders,
@@ -820,6 +823,27 @@ export default function SettingsPage() {
               <div>
                 <span className="text-sm font-bold text-gray-800">Aceptar pedidos</span>
                 <p className="text-[11px] text-slate-400">Cuando está desactivado, los clientes no podrán realizar pedidos nuevos.</p>
+              </div>
+            </label>
+
+            {/* Personalizaciones de productos (adicionales / opcionales) */}
+            <label className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer border-2 transition-all ${modifiersEnabled ? 'bg-indigo-50 border-indigo-200' : 'bg-slate-50 border-transparent'} ${currentPlan === 'free' ? 'opacity-60' : ''}`}>
+              <input
+                type="checkbox"
+                checked={modifiersEnabled}
+                disabled={currentPlan === 'free'}
+                onChange={(e) => setModifiersEnabled(e.target.checked)}
+                className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+              />
+              <div className="flex-1">
+                <span className="text-sm font-bold text-gray-800 flex items-center gap-2">
+                  Activar Personalizaciones de productos
+                  <span className="text-[9px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded font-black uppercase tracking-wider">PRO</span>
+                </span>
+                <p className="text-[11px] text-slate-400 mt-0.5">Para tiendas de comida y negocios que necesitan adicionales, variantes u opciones por producto (estilo Rappi).</p>
+                {currentPlan === 'free' && (
+                  <p className="text-[11px] text-indigo-500 font-semibold mt-1">Requiere plan PRO o superior.</p>
+                )}
               </div>
             </label>
 
