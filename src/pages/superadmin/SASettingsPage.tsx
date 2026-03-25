@@ -330,9 +330,27 @@ export default function SASettingsPage() {
                                         <p className="text-xs text-slate-400 mt-1">Conectado el {new Date(gw.created_at || Date.now()).toLocaleDateString()}</p>
                                     </div>
                                 </div>
-                                <span className="px-4 py-1.5 rounded-full bg-emerald-50 text-emerald-600 text-[10px] font-black uppercase tracking-widest border border-emerald-100">
-                                    Operativo
-                                </span>
+                                <div className="flex items-center gap-3">
+                                    <span className="px-4 py-1.5 rounded-full bg-emerald-50 text-emerald-600 text-[10px] font-black uppercase tracking-widest border border-emerald-100">
+                                        Operativo
+                                    </span>
+                                    <button
+                                        onClick={async () => {
+                                            if (!confirm(`¿Eliminar pasarela ${gw.provider}?`)) return
+                                            try {
+                                                await superadminApi.deleteGateway(gw.id)
+                                                setGateways(g => g.filter(x => x.id !== gw.id))
+                                                toast.success('Pasarela eliminada.')
+                                            } catch (err: unknown) {
+                                                toast.error('Error al eliminar', { description: err instanceof Error ? err.message : 'Error desconocido' })
+                                            }
+                                        }}
+                                        className="p-2 rounded-xl text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors"
+                                        title="Eliminar pasarela"
+                                    >
+                                        <X className="w-4 h-4" />
+                                    </button>
+                                </div>
                             </div>
                         ))}
                     </div>
