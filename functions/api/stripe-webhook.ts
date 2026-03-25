@@ -1,3 +1,5 @@
+import { sendTelegramMessage } from '../lib/telegram'
+
 interface Env {
   STRIPE_SECRET_KEY: string
   STRIPE_WEBHOOK_SECRET: string
@@ -229,6 +231,11 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       })
       await activateStore(env, storeId)
 
+      await sendTelegramMessage(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY,
+        `💳 <b>Pago recibido — Stripe</b>\n\n🏪 Tienda: <code>${storeId}</code>\n📦 Plan: <b>${planId}</b> (${billingCycle})\n✅ Estado: Suscripción activada`,
+        'payment'
+      )
+
       console.log(`[stripe-webhook] Subscription activated: store=${storeId} plan=${planId} cycle=${billingCycle}`)
       return new Response('ok', { status: 200 })
     }
@@ -258,6 +265,11 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
         current_period_end: newPeriodEnd,
       })
 
+      await sendTelegramMessage(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY,
+        `💰 <b>Cobro recurrente exitoso — Stripe</b>\n\n🏪 Tienda: <code>${existing.store_id}</code>\n📅 Nuevo período hasta: ${newPeriodEnd}`,
+        'payment'
+      )
+
       console.log(`[stripe-webhook] invoice.payment_succeeded: store=${existing.store_id} new period end=${newPeriodEnd}`)
       return new Response('ok', { status: 200 })
     }
@@ -279,6 +291,11 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
         payment_failure_reason: failureReason,
       })
 
+      await sendTelegramMessage(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY,
+        `❌ <b>Pago fallido — Stripe</b>\n\n🔗 Sub: <code>${stripeSubscriptionId}</code>\n⚠️ Motivo: ${failureReason}`,
+        'payment'
+      )
+
       console.log(`[stripe-webhook] invoice.payment_failed: stripe_sub=${stripeSubscriptionId} reason=${failureReason}`)
       return new Response('ok', { status: 200 })
     }
@@ -297,6 +314,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
       if (existing?.store_id) {
         await deactivateStore(env, existing.store_id)
+        await sendTelegramMessage(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY,
+          `⚠️ <b>Suscripción cancelada — Stripe</b>\n\n🏪 Tienda: <code>${existing.store_id}</code>\n📦 Plan: <b>${existing.plan_type}</b> (${existing.billing_cycle})\n❌ Estado: Cancelada`,
+          'subscription'
+        )
         console.log(`[stripe-webhook] Subscription cancelled: store=${existing.store_id}`)
       } else {
         console.log(`[stripe-webhook] Subscription cancelled: stripe_sub=${stripeSubscriptionId} (store not found)`)

@@ -1,3 +1,5 @@
+import { sendTelegramMessage } from '../lib/telegram'
+
 interface Env {
   SUPABASE_URL: string
   SUPABASE_SERVICE_KEY: string
@@ -177,6 +179,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
         lastPaymentStatus: 'authorized',
       })
       await setStoreActive(env, storeId, true)
+      await sendTelegramMessage(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY,
+        `💳 <b>Suscripción activada — PayPal</b>\n\n🏪 Tienda: <code>${storeId}</code>\n📦 Plan: <b>${planId}</b> (${billingCycle})\n✅ Estado: Activa`,
+        'subscription'
+      )
       console.log(`[paypal-webhook] Subscription activated: store=${storeId} plan=${planId} cycle=${billingCycle}`)
       return new Response('ok', { status: 200 })
     }
@@ -203,6 +209,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
         last_payment_status: 'authorized',
         current_period_end: newPeriodEnd,
       })
+      await sendTelegramMessage(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY,
+        `💰 <b>Cobro recurrente exitoso — PayPal</b>\n\n🏪 Tienda: <code>${existing.store_id}</code>\n📅 Nuevo período hasta: ${newPeriodEnd}`,
+        'payment'
+      )
       console.log(`[paypal-webhook] Sale completed: store=${existing.store_id} new period end=${newPeriodEnd}`)
       return new Response('ok', { status: 200 })
     }
@@ -220,6 +230,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
         status: 'past_due',
         last_payment_status: 'payment_failed',
       })
+      await sendTelegramMessage(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY,
+        `❌ <b>Pago fallido — PayPal</b>\n\n🔗 Sub: <code>${paypalSubId}</code>\n⚠️ Evento: ${eventType}`,
+        'payment'
+      )
       console.log(`[paypal-webhook] Payment failed event=${eventType} sub=${paypalSubId}`)
       return new Response('ok', { status: 200 })
     }
@@ -236,6 +250,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       await updateSubscriptionByPayPalId(env, paypalSubId, { status: 'cancelled' })
       if (existing?.store_id) {
         await setStoreActive(env, existing.store_id, false)
+        await sendTelegramMessage(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY,
+          `⚠️ <b>Suscripción cancelada — PayPal</b>\n\n🏪 Tienda: <code>${existing.store_id}</code>\n📦 Plan: <b>${existing.plan_type}</b>\n❌ Evento: ${eventType}`,
+          'subscription'
+        )
       }
       console.log(`[paypal-webhook] Subscription ${eventType}: sub=${paypalSubId}`)
       return new Response('ok', { status: 200 })

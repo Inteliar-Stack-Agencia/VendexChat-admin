@@ -1,3 +1,5 @@
+import { sendTelegramMessage } from '../lib/telegram'
+
 interface Env {
   MP_ACCESS_TOKEN: string
   SUPABASE_URL: string
@@ -226,6 +228,11 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       })
       await activateStore(env, storeId)
 
+      await sendTelegramMessage(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY,
+        `💳 <b>Pago recibido — MercadoPago</b>\n\n🏪 Tienda: <code>${storeId}</code>\n📦 Plan: <b>${planId}</b> (${billingCycle})\n💰 Monto: $${payment.transaction_amount}\n✅ Estado: Suscripción activada`,
+        'payment'
+      )
+
       console.log(`[mp-webhook] Subscription activated (payment): store=${storeId} plan=${planId} cycle=${billingCycle}`)
       return new Response('ok', { status: 200 })
     }
@@ -256,6 +263,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
           currentPeriodEnd: nextChargeDate,
         })
         await activateStore(env, storeId)
+        await sendTelegramMessage(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY,
+          `🔔 <b>Suscripción activada — MercadoPago</b>\n\n🏪 Tienda: <code>${storeId}</code>\n📦 Plan: <b>${planId}</b> (${billingCycle})\n📅 Próximo cobro: ${nextChargeDate ?? 'N/A'}\n✅ Estado: Activa`,
+          'subscription'
+        )
         console.log(`[mp-webhook] Preapproval authorized: store=${storeId} plan=${planId} cycle=${billingCycle}`)
       } else if (preapproval.status === 'paused' || preapproval.status === 'cancelled') {
         await upsertSubscription(env, {
@@ -266,6 +277,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
           mpPreapprovalId: preapproval.id,
         })
         await deactivateStore(env, storeId)
+        await sendTelegramMessage(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY,
+          `⚠️ <b>Suscripción cancelada — MercadoPago</b>\n\n🏪 Tienda: <code>${storeId}</code>\n📦 Plan: <b>${planId}</b> (${billingCycle})\n❌ Estado: ${preapproval.status}`,
+          'subscription'
+        )
         console.log(`[mp-webhook] Preapproval ${preapproval.status}: store=${storeId}`)
       } else {
         console.log(`[mp-webhook] Preapproval status ${preapproval.status} — no action`)
@@ -308,6 +323,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
             status: 'active',
           })
         }
+        await sendTelegramMessage(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY,
+          `💰 <b>Cobro recurrente exitoso — MercadoPago</b>\n\n🏪 Tienda: <code>${storeId}</code>\n📅 Nuevo período hasta: ${newPeriodEnd}`,
+          'payment'
+        )
         console.log(`[mp-webhook] Authorized payment processed: store=${storeId} new period end=${newPeriodEnd}`)
       } else {
         // Payment failed — mark as past_due, do NOT deactivate store (MP will retry)
@@ -339,6 +358,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
             }
           )
         }
+        await sendTelegramMessage(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY,
+          `❌ <b>Pago fallido — MercadoPago</b>\n\n🏪 Tienda: <code>${storeId}</code>\n⚠️ Motivo: ${statusDetail}\n🔄 MP reintentará el cobro automáticamente`,
+          'payment'
+        )
         console.log(`[mp-webhook] Payment failed: store=${storeId} reason=${statusDetail}`)
       }
 
