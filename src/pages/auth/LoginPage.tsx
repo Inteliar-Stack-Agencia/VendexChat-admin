@@ -19,15 +19,6 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (user) {
-      // Check for plan pending from landing page → register → email verify flow
-      const pendingPlan = localStorage.getItem('pendingPlan')
-      const pendingCycle = localStorage.getItem('pendingCycle') || 'monthly'
-      if (pendingPlan) {
-        localStorage.removeItem('pendingPlan')
-        localStorage.removeItem('pendingCycle')
-        navigate(`/subscription?plan=${pendingPlan}&cycle=${pendingCycle}&autostart=true`, { replace: true })
-        return
-      }
       const redirect = searchParams.get('redirect')
       navigate(redirect ? decodeURIComponent(redirect) : '/', { replace: true })
     }
