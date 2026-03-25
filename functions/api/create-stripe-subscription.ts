@@ -1,5 +1,5 @@
 interface Env {
-  MP_ACCESS_TOKEN: string
+  STRIPE_SECRET_KEY: string
   SUPABASE_URL: string
   SUPABASE_SERVICE_KEY: string
   VITE_ADMIN_URL?: string
@@ -39,22 +39,11 @@ async function getPlanFromSupabase(supabaseUrl: string, serviceRoleKey: string, 
   return rows[0] ?? null
 }
 
-async function getExchangeRate(token: string): Promise<number> {
-  const res = await fetch(
-    'https://api.mercadopago.com/currency_conversions/search?from=USD&to=ARS',
-    { headers: { Authorization: `Bearer ${token}` } }
-  )
-  if (!res.ok) throw new Error(`MP exchange rate API error: ${res.status}`)
-  const data = await res.json() as { ratio?: number }
-  if (!data.ratio) throw new Error('Tipo de cambio no disponible')
-  return data.ratio
-}
-
 export const onRequestOptions: PagesFunction = async () =>
   new Response(null, { headers: corsHeaders })
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
-  if (!env.MP_ACCESS_TOKEN) return json({ error: 'MP_ACCESS_TOKEN no configurado' }, 500)
+  if (!env.STRIPE_SECRET_KEY) return json({ error: 'STRIPE_SECRET_KEY no configurado' }, 500)
   if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_KEY) return json({ error: 'Supabase env vars no configurados' }, 500)
 
   let body: { plan_id?: string; billing_cycle?: string; store_id?: string; user_email?: string }
@@ -82,61 +71,51 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   }
 
   const priceUsd = billing_cycle === 'annual' ? plan.annual_price_usd : plan.price_usd
-
-  let exchangeRate: number
-  try {
-    exchangeRate = await getExchangeRate(env.MP_ACCESS_TOKEN)
-  } catch (err) {
-    return json({ error: `No se pudo obtener el tipo de cambio: ${(err as Error).message}` }, 502)
-  }
-
-  const priceArs = Math.round(priceUsd * exchangeRate)
+  const unitAmount = Math.round(priceUsd * 100) // cents
+  const interval = billing_cycle === 'annual' ? 'year' : 'month'
+  const productName = `VENDEx ${plan.name} - ${billing_cycle === 'annual' ? 'Anual' : 'Mensual'}`
 
   const adminUrl = env.ADMIN_URL || env.VITE_ADMIN_URL || 'https://admin.vendexchat.app'
-  const notificationUrl = `${adminUrl}/api/mp-webhook`
+  const successUrl = `${adminUrl}/subscription/success?session_id={CHECKOUT_SESSION_ID}`
+  const cancelUrl = `${adminUrl}/subscription`
 
-  const frequency = billing_cycle === 'annual' ? 12 : 1
-  const frequencyType = 'months'
-
-  const preapproval = {
-    reason: `${plan.name} - ${billing_cycle === 'annual' ? 'Anual' : 'Mensual'}`,
-    external_reference: `${store_id}|${plan_id}|${billing_cycle}`,
-    payer_email: user_email ?? '',
-    auto_recurring: {
-      frequency,
-      frequency_type: frequencyType,
-      transaction_amount: priceArs,
-      currency_id: 'ARS',
-    },
-    back_url: `${adminUrl}/subscription/success`,
-    notification_url: notificationUrl,
-    status: 'pending',
+  const params = new URLSearchParams()
+  params.set('mode', 'subscription')
+  params.set('line_items[0][price_data][currency]', 'usd')
+  params.set('line_items[0][price_data][unit_amount]', String(unitAmount))
+  params.set('line_items[0][price_data][recurring][interval]', interval)
+  params.set('line_items[0][price_data][product_data][name]', productName)
+  params.set('line_items[0][quantity]', '1')
+  params.set('metadata[store_id]', store_id)
+  params.set('metadata[plan_id]', plan_id)
+  params.set('metadata[billing_cycle]', billing_cycle)
+  params.set('success_url', successUrl)
+  params.set('cancel_url', cancelUrl)
+  params.set('billing_address_collection', 'auto')
+  if (user_email) {
+    params.set('customer_email', user_email)
   }
 
   try {
-    const mpRes = await fetch('https://api.mercadopago.com/preapproval', {
+    const stripeRes = await fetch('https://api.stripe.com/v1/checkout/sessions', {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${env.MP_ACCESS_TOKEN}`,
-        'Content-Type': 'application/json',
+        Authorization: `Bearer ${env.STRIPE_SECRET_KEY}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
       },
-      body: JSON.stringify(preapproval),
+      body: params.toString(),
     })
 
-    if (!mpRes.ok) {
-      const errText = await mpRes.text()
-      return json({ error: `MP Preapproval error: ${errText}` }, 502)
+    if (!stripeRes.ok) {
+      const errText = await stripeRes.text()
+      return json({ error: `Stripe Checkout error: ${errText}` }, 502)
     }
 
-    const mpData = await mpRes.json() as { id: string; init_point: string; sandbox_init_point?: string }
+    const session = await stripeRes.json() as { id: string; url: string }
 
     return json({
-      init_point: mpData.init_point,
-      sandbox_init_point: mpData.sandbox_init_point,
-      preapproval_id: mpData.id,
-      price_usd: priceUsd,
-      price_ars: priceArs,
-      exchange_rate: exchangeRate,
+      checkout_url: session.url,
+      session_id: session.id,
     })
   } catch (err) {
     return json({ error: (err as Error).message }, 500)

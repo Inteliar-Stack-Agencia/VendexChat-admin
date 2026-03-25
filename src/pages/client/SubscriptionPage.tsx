@@ -5,7 +5,6 @@ import {
     Shield,
     Crown,
     ArrowRight,
-    MessageCircle,
     Loader2,
     TrendingUp,
 } from 'lucide-react'
@@ -78,11 +77,29 @@ export default function SubscriptionPage() {
         const isMPAvailable = MP_COUNTRIES.includes(userCountry || '')
 
         if (!isMPAvailable) {
-            const amount = billingCycle === 'annual' ? plan.annual_price : plan.price
-            const msg = encodeURIComponent(
-                `Hola! Quiero activar el plan VENDEx ${plan.name} (${billingCycle === 'monthly' ? 'Mensual' : 'Anual'}) - USD $${amount}. Email: ${user.email || ''}`
-            )
-            window.open(`https://wa.me/5491165689145?text=${msg}`, '_blank')
+            setProcessingPlanId(planId)
+            try {
+                const res = await fetch('/api/create-paypal-subscription', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        plan_id: planId,
+                        billing_cycle: billingCycle,
+                        store_id: user.store_id || '',
+                        user_email: user.email || '',
+                    }),
+                })
+                const data = await res.json() as { checkout_url?: string; error?: string }
+                if (!res.ok || !data.checkout_url) {
+                    showToast('error', data.error || 'Error al iniciar el pago')
+                    return
+                }
+                window.location.href = data.checkout_url
+            } catch {
+                showToast('error', 'Error de conexión. Intentá de nuevo.')
+            } finally {
+                setProcessingPlanId(null)
+            }
             return
         }
 
@@ -365,17 +382,12 @@ export default function SubscriptionPage() {
                                     {!isCurrent && plan.id !== 'free' && !isProcessing && (
                                         <ArrowRight className="w-4 h-4" />
                                     )}
-                                    {!isCurrent && plan.id !== 'free' && plan.id !== 'ultra' && !isProcessing && MP_COUNTRIES.includes(userCountry || '') && (
-                                        <span className="text-[8px] opacity-70 font-normal normal-case">via MP</span>
+                                    {!isCurrent && plan.id !== 'free' && plan.id !== 'ultra' && !isProcessing && (
+                                        <span className="text-[8px] opacity-70 font-normal normal-case">
+                                            {MP_COUNTRIES.includes(userCountry || '') ? 'via MP' : 'via PayPal'}
+                                        </span>
                                     )}
                                 </button>
-
-                                {/* WhatsApp fallback for non-MP countries */}
-                                {!MP_COUNTRIES.includes(userCountry || '') && plan.id !== 'free' && plan.id !== 'ultra' && !isCurrent && (
-                                    <p className="text-center text-[10px] text-slate-400 mt-2 flex items-center justify-center gap-1">
-                                        <MessageCircle className="w-3 h-3" /> Activación vía WhatsApp
-                                    </p>
-                                )}
                             </Card>
                         )
                     })}
