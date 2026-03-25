@@ -3,7 +3,7 @@ import { useOutletContext, useLocation } from 'react-router-dom'
 import { Card, Button, Input, LoadingSpinner } from '../../components/common'
 import { tenantApi, authApi, storageApi } from '../../services/api'
 import { Tenant } from '../../types'
-import { CreditCard, Plus, RefreshCw, Trash2, ShieldCheck, Globe, MessageSquare, Palette, LayoutGrid, Upload, Info, Printer } from 'lucide-react'
+import { CreditCard, Plus, RefreshCw, Trash2, ShieldCheck, Globe, MessageSquare, Palette, LayoutGrid, Upload, Info, Printer, CheckCircle2, Clock, AlertCircle } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import FeatureGuard from '../../components/FeatureGuard'
 import { toast } from 'sonner'
@@ -19,7 +19,7 @@ const TABS = [
 ]
 
 export default function SettingsPage() {
-  const { subscription, selectedStoreId } = useAuth()
+  const { subscription, selectedStoreId, token: authToken } = useAuth()
   const { setTenant: setGlobalTenant } = useOutletContext<{ tenant: Tenant | null, setTenant: (t: Tenant) => void }>()
   const location = useLocation()
   const currentPlan = subscription?.plan_type || 'free'
@@ -60,6 +60,7 @@ export default function SettingsPage() {
   const [instagram, setInstagram] = useState('')
   const [facebook, setFacebook] = useState('')
   const [customDomain, setCustomDomain] = useState('')
+  const [domainStatus, setDomainStatus] = useState<'idle' | 'registering' | 'active' | 'pending_ssl' | 'error'>('idle')
   const [country, setCountry] = useState('')
   const [city, setCity] = useState('')
 
@@ -195,12 +196,15 @@ export default function SettingsPage() {
       return
     }
     try {
+      const prevDomain = tenant?.custom_domain || ''
+      const newDomain = customDomain.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/$/, '')
+
       await tenantApi.updateMe({
         name,
         description,
         logo_url: logoUrl,
         banner_url: bannerUrl,
-        custom_domain: customDomain || null,
+        custom_domain: newDomain || null,
         metadata: {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           ...((tenant as any)?.metadata || {}),
@@ -227,6 +231,39 @@ export default function SettingsPage() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any)
       toast.success('Información actualizada')
+
+      // Si el dominio cambió, registrarlo en Cloudflare (SSL for SaaS)
+      if (newDomain && newDomain !== prevDomain) {
+        setDomainStatus('registering')
+        try {
+          const res = await fetch('/api/register-custom-hostname', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${authToken}`,
+            },
+            body: JSON.stringify({ domain: newDomain }),
+          })
+          const data = await res.json() as { success?: boolean; ssl_status?: string; error?: string }
+          if (data.success) {
+            setDomainStatus(data.ssl_status === 'active' ? 'active' : 'pending_ssl')
+          } else {
+            setDomainStatus('error')
+            toast.error(data.error ?? 'Error al registrar el dominio en Cloudflare')
+          }
+        } catch {
+          setDomainStatus('error')
+        }
+      } else if (!newDomain && prevDomain) {
+        // Dominio eliminado — remover de Cloudflare
+        try {
+          await fetch('/api/register-custom-hostname', {
+            method: 'DELETE',
+            headers: { Authorization: `Bearer ${authToken}` },
+          })
+          setDomainStatus('idle')
+        } catch { /* silencioso */ }
+      }
     } catch (err: unknown) {
       console.error('[SaveGeneral]', err)
       toast.error(err instanceof Error ? err.message : 'Error al guardar general')
@@ -575,13 +612,35 @@ export default function SettingsPage() {
             </div>
 
             <FeatureGuard feature="custom-domain" minPlan="pro" fallback="message">
-              <Input
-                label="Dominio Personalizado"
-                value={customDomain}
-                onChange={(e) => setCustomDomain(e.target.value)}
-                placeholder="tienda.tudominio.com"
-                helperText="Asegúrate de apuntar tu CNAME a vendexchat.app"
-              />
+              <div className="space-y-1">
+                <Input
+                  label="Dominio Personalizado"
+                  value={customDomain}
+                  onChange={(e) => { setCustomDomain(e.target.value); setDomainStatus('idle') }}
+                  placeholder="www.tutienda.com"
+                  helperText="Apuntá tu CNAME a servidores.vendexchat.app — el SSL se activa automáticamente."
+                />
+                {domainStatus === 'registering' && (
+                  <p className="flex items-center gap-1.5 text-xs text-blue-600">
+                    <Clock className="w-3.5 h-3.5 animate-spin" /> Registrando dominio en Cloudflare…
+                  </p>
+                )}
+                {domainStatus === 'pending_ssl' && (
+                  <p className="flex items-center gap-1.5 text-xs text-amber-600">
+                    <Clock className="w-3.5 h-3.5" /> Dominio registrado — SSL activándose (puede tardar hasta 24hs)
+                  </p>
+                )}
+                {domainStatus === 'active' && (
+                  <p className="flex items-center gap-1.5 text-xs text-emerald-600">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Dominio activo con SSL
+                  </p>
+                )}
+                {domainStatus === 'error' && (
+                  <p className="flex items-center gap-1.5 text-xs text-red-500">
+                    <AlertCircle className="w-3.5 h-3.5" /> Error al registrar — verificá que el dominio sea correcto
+                  </p>
+                )}
+              </div>
             </FeatureGuard>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
