@@ -95,51 +95,45 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const adminUrl = env.ADMIN_URL || env.VITE_ADMIN_URL || 'https://admin.vendexchat.app'
   const notificationUrl = `${adminUrl}/api/mp-webhook`
 
-  const preference = {
-    items: [
-      {
-        id: `${plan_id}_${billing_cycle}`,
-        title: `${plan.name} - ${billing_cycle === 'annual' ? 'Anual' : 'Mensual'}`,
-        description: `Suscripción VENDEx ${plan.name}`,
-        quantity: 1,
-        currency_id: 'ARS',
-        unit_price: priceArs,
-      },
-    ],
-    payer: user_email ? { email: user_email } : undefined,
+  const frequency = billing_cycle === 'annual' ? 12 : 1
+  const frequencyType = 'months'
+
+  const preapproval = {
+    reason: `${plan.name} - ${billing_cycle === 'annual' ? 'Anual' : 'Mensual'}`,
     external_reference: `${store_id}|${plan_id}|${billing_cycle}`,
-    back_urls: {
-      success: `${adminUrl}/subscription/success`,
-      failure: `${adminUrl}/subscription/failure`,
-      pending: `${adminUrl}/subscription/pending`,
+    payer_email: user_email ?? '',
+    auto_recurring: {
+      frequency,
+      frequency_type: frequencyType,
+      transaction_amount: priceArs,
+      currency_id: 'ARS',
     },
-    auto_return: 'approved',
+    back_url: `${adminUrl}/subscription/success`,
     notification_url: notificationUrl,
-    statement_descriptor: 'VENDExCHAT',
-    expires: false,
+    status: 'pending',
   }
 
   try {
-    const mpRes = await fetch('https://api.mercadopago.com/checkout/preferences', {
+    const mpRes = await fetch('https://api.mercadopago.com/preapproval', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${env.MP_ACCESS_TOKEN}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(preference),
+      body: JSON.stringify(preapproval),
     })
 
     if (!mpRes.ok) {
       const errText = await mpRes.text()
-      return json({ error: `MP Preferences error: ${errText}` }, 502)
+      return json({ error: `MP Preapproval error: ${errText}` }, 502)
     }
 
-    const mpData = await mpRes.json() as { id: string; init_point: string; sandbox_init_point: string }
+    const mpData = await mpRes.json() as { id: string; init_point: string; sandbox_init_point?: string }
 
     return json({
       init_point: mpData.init_point,
       sandbox_init_point: mpData.sandbox_init_point,
-      preference_id: mpData.id,
+      preapproval_id: mpData.id,
       price_usd: priceUsd,
       price_ars: priceArs,
       exchange_rate: exchangeRate,

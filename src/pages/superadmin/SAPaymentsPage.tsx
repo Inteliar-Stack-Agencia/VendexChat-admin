@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowUpRight, Globe, MapPin } from 'lucide-react'
+import { ArrowUpRight, Globe, MapPin, AlertTriangle } from 'lucide-react'
 import { superadminApi } from '../../services/api'
 
 const PLAN_PRICES: Record<string, Record<string, number>> = {
@@ -22,8 +22,9 @@ function getStatusBadge(status: string) {
         case 'trial':
             return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-blue-50 text-blue-600 border border-blue-100">Trial</span>
         case 'past_due':
-            return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-amber-50 text-amber-600 border border-amber-100">Vencido</span>
+            return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-rose-50 text-rose-600 border border-rose-100">Pago Fallido</span>
         case 'canceled':
+        case 'cancelled':
         case 'incomplete':
             return <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-rose-50 text-rose-600 border border-rose-100">Cancelado</span>
         default:
@@ -71,6 +72,8 @@ export default function SAPaymentsPage() {
         filtered.filter(s => s.status === 'active').reduce((acc, s) => acc + getPlanAmount(s.plan_type, 'monthly'), 0)
     , [filtered])
 
+    const pastDueCount = useMemo(() => filtered.filter(s => s.status === 'past_due').length, [filtered])
+
     return (
         <div className="space-y-8">
             <header>
@@ -78,8 +81,17 @@ export default function SAPaymentsPage() {
                 <p className="text-slate-500 mt-1">Suscripciones de tus clientes por país y ciudad.</p>
             </header>
 
+            {filtered.some(s => s.status === 'past_due') && (
+                <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 flex items-center gap-3">
+                    <AlertTriangle className="w-5 h-5 text-rose-500 shrink-0" />
+                    <p className="text-sm font-bold text-rose-700">
+                        {filtered.filter(s => s.status === 'past_due').length} suscripción(es) con pago fallido. Revisalas para tomar acción.
+                    </p>
+                </div>
+            )}
+
             {/* Stats */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                 <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
                     <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">MRR (filtrado)</p>
                     <p className="text-2xl font-black text-slate-900 mt-1">${totalMRR.toFixed(2)}</p>
@@ -91,6 +103,10 @@ export default function SAPaymentsPage() {
                 <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
                     <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total suscripciones</p>
                     <p className="text-2xl font-black text-slate-900 mt-1">{filtered.length}</p>
+                </div>
+                <div className={`rounded-2xl border shadow-sm p-6 ${pastDueCount > 0 ? 'bg-rose-50 border-rose-200' : 'bg-white border-slate-100'}`}>
+                    <p className={`text-[10px] font-black uppercase tracking-widest ${pastDueCount > 0 ? 'text-rose-400' : 'text-slate-400'}`}>Pagos fallidos</p>
+                    <p className={`text-2xl font-black mt-1 ${pastDueCount > 0 ? 'text-rose-700' : 'text-slate-900'}`}>{pastDueCount}</p>
                 </div>
             </div>
 
