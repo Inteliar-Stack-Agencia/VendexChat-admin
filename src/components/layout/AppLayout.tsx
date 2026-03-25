@@ -57,7 +57,8 @@ export default function AppLayout() {
       )}
 
       <div className="flex flex-1 overflow-hidden">
-        <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+        <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} modifiersEnabled={!!(tenant?.metadata as any)?.modifiers_enabled} />
 
         <div className="flex-1 flex flex-col min-w-0">
           <Header
