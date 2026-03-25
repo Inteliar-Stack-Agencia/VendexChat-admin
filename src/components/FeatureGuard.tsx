@@ -6,7 +6,7 @@ import { Button } from './common'
 
 interface FeatureGuardProps {
     children: ReactNode
-    feature: 'analytics' | 'coupons' | 'white-label' | 'bot' | 'logistics' | 'pro-tools' | 'marketing' | 'custom-domain' | 'ai-importer' | 'ai-intelligence' | 'ai-analyst'
+    feature: 'analytics' | 'coupons' | 'white-label' | 'bot' | 'logistics' | 'pro-tools' | 'marketing' | 'custom-domain' | 'ai-importer' | 'ai-intelligence' | 'ai-analyst' | 'modifiers'
     minPlan?: 'pro' | 'vip' | 'ultra'
     fallback?: 'blur' | 'hide' | 'message'
 }

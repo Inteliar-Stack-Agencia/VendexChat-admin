@@ -20,6 +20,7 @@ import { modifiersApi } from '../../services/modifiersApi'
 import { productsApi } from '../../services/productsApi'
 import type { ModifierGroup, ModifierOption, Product } from '../../types'
 import { formatPrice } from '../../utils/helpers'
+import FeatureGuard from '../../components/FeatureGuard'
 
 // ─── Inline option row used in form ────────────────────────────────────────
 interface DraftOption {
@@ -462,6 +463,7 @@ export default function ModifiersPage() {
   }
 
   return (
+    <FeatureGuard feature="modifiers" minPlan="pro">
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -522,5 +524,6 @@ export default function ModifiersPage() {
         />
       )}
     </div>
+    </FeatureGuard>
   )
 }
