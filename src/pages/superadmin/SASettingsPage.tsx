@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Settings, Shield, CreditCard, RefreshCw, Save, AlertCircle, Plus, X } from 'lucide-react'
+import { Settings, Shield, CreditCard, RefreshCw, Save, AlertCircle, Plus, X, Send, Bell, CheckCircle } from 'lucide-react'
 import { superadminApi } from '../../services/api'
 import { toast } from 'sonner'
 import type { PaymentGateway } from '../../types'
@@ -11,8 +11,14 @@ export default function SASettingsPage() {
         master_approval: false,
         email_notifications: true,
         global_announcement_active: false,
-        global_announcement_text: ''
+        global_announcement_text: '',
+        telegram_notifications_enabled: false,
+        telegram_notify_payments: true,
+        telegram_notify_subscriptions: true,
+        telegram_notify_new_stores: true,
     })
+    const [telegramCredentials, setTelegramCredentials] = useState({ bot_token: '', chat_id: '' })
+    const [testingTelegram, setTestingTelegram] = useState(false)
     const [gateways, setGateways] = useState<PaymentGateway[]>([])
     const [showModal, setShowModal] = useState(false)
     const [newGateway, setNewGateway] = useState({ provider: 'stripe', public_key: '', secret_key: '' })
@@ -20,16 +26,52 @@ export default function SASettingsPage() {
 
     useEffect(() => {
         superadminApi.listGateways(true).then(setGateways).catch(console.error)
-        superadminApi.getGlobalSettings().then(res => setSettings(s => ({ ...s, ...(res as typeof s) }))).catch(console.error)
+        superadminApi.getGlobalSettings().then(res => {
+            const raw = res as Record<string, unknown>
+            setSettings(s => ({ ...s, ...raw }))
+            setTelegramCredentials({
+                bot_token: String(raw.telegram_bot_token ?? ''),
+                chat_id: String(raw.telegram_chat_id ?? ''),
+            })
+        }).catch(console.error)
     }, [])
 
     const handleSave = async () => {
         setSaving(true)
         try {
-            await superadminApi.updateGlobalSettings(settings)
+            await superadminApi.updateGlobalSettings({
+                ...settings,
+                telegram_bot_token: telegramCredentials.bot_token,
+                telegram_chat_id: telegramCredentials.chat_id,
+            })
             toast.success('Configuración global actualizada con éxito.')
         } finally {
             setSaving(false)
+        }
+    }
+
+    const handleTestTelegram = async () => {
+        if (!telegramCredentials.bot_token || !telegramCredentials.chat_id) {
+            toast.error('Ingresa el Bot Token y el Chat ID antes de probar.')
+            return
+        }
+        setTestingTelegram(true)
+        try {
+            const res = await fetch('/api/test-telegram', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ bot_token: telegramCredentials.bot_token, chat_id: telegramCredentials.chat_id }),
+            })
+            const data = await res.json() as { ok: boolean; description?: string }
+            if (data.ok) {
+                toast.success('✅ Mensaje de prueba enviado exitosamente.')
+            } else {
+                toast.error('Error al enviar el mensaje de prueba', { description: data.description })
+            }
+        } catch {
+            toast.error('No se pudo conectar con el servidor.')
+        } finally {
+            setTestingTelegram(false)
         }
     }
 
@@ -159,6 +201,92 @@ export default function SASettingsPage() {
                             placeholder="Escribe el mensaje del anuncio aquí..."
                         />
                     </div>
+                </div>
+            </div>
+
+            {/* Telegram Notifications */}
+            <div className="lg:col-span-2 bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden">
+                <div className="p-8 border-b border-slate-50 bg-sky-50/40 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 bg-sky-100 rounded-xl text-sky-600">
+                            <Send className="w-5 h-5" />
+                        </div>
+                        <div>
+                            <h3 className="font-bold text-lg text-slate-900">Notificaciones Telegram</h3>
+                            <p className="text-xs text-slate-400 mt-0.5">Recibe alertas en tiempo real de pagos, suscripciones y nuevas tiendas.</p>
+                        </div>
+                    </div>
+                    <button
+                        onClick={() => setSettings(s => ({ ...s, telegram_notifications_enabled: !s.telegram_notifications_enabled }))}
+                        className={`w-12 h-6 rounded-full transition-colors relative ${settings.telegram_notifications_enabled ? 'bg-sky-500' : 'bg-slate-200'}`}
+                    >
+                        <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${settings.telegram_notifications_enabled ? 'left-7' : 'left-1'}`} />
+                    </button>
+                </div>
+                <div className="p-8 space-y-6">
+                    {/* Credentials */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Bot Token</label>
+                            <input
+                                type="password"
+                                placeholder="123456789:AABBccDD..."
+                                value={telegramCredentials.bot_token}
+                                onChange={(e) => setTelegramCredentials(c => ({ ...c, bot_token: e.target.value }))}
+                                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium text-slate-900 focus:ring-2 focus:ring-sky-500/20 outline-none transition-all placeholder:text-slate-300"
+                            />
+                            <p className="mt-1.5 text-[10px] text-slate-400">Obtén el token de <strong>@BotFather</strong> en Telegram.</p>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Chat ID</label>
+                            <input
+                                type="text"
+                                placeholder="-1001234567890"
+                                value={telegramCredentials.chat_id}
+                                onChange={(e) => setTelegramCredentials(c => ({ ...c, chat_id: e.target.value }))}
+                                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium text-slate-900 focus:ring-2 focus:ring-sky-500/20 outline-none transition-all placeholder:text-slate-300"
+                            />
+                            <p className="mt-1.5 text-[10px] text-slate-400">Puede ser tu chat personal o un grupo/canal.</p>
+                        </div>
+                    </div>
+
+                    {/* Notification toggles */}
+                    <div className="border-t border-slate-100 pt-6 space-y-4">
+                        <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Eventos a notificar</p>
+                        {[
+                            { id: 'telegram_notify_payments', label: 'Pagos', desc: 'Cobros exitosos y pagos fallidos de suscripciones.', icon: CreditCard },
+                            { id: 'telegram_notify_subscriptions', label: 'Suscripciones', desc: 'Activaciones, cancelaciones y cambios de estado.', icon: Bell },
+                            { id: 'telegram_notify_new_stores', label: 'Nuevas tiendas', desc: 'Registros de nuevos comercios en la plataforma.', icon: CheckCircle },
+                        ].map((item) => (
+                            <div key={item.id} className="flex items-center justify-between">
+                                <div className="flex items-start gap-3">
+                                    <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center border border-slate-100 text-slate-400">
+                                        <item.icon className="w-4 h-4" />
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-bold text-slate-900">{item.label}</p>
+                                        <p className="text-xs text-slate-400">{item.desc}</p>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => setSettings(s => ({ ...s, [item.id]: !s[item.id as keyof typeof s] }))}
+                                    className={`w-10 h-5 rounded-full transition-colors relative ${settings[item.id as keyof typeof settings] ? 'bg-sky-500' : 'bg-slate-200'}`}
+                                >
+                                    <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${settings[item.id as keyof typeof settings] ? 'left-5' : 'left-0.5'}`} />
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Test button */}
+                    <button
+                        onClick={handleTestTelegram}
+                        disabled={testingTelegram || !telegramCredentials.bot_token || !telegramCredentials.chat_id}
+                        className="flex items-center gap-2 px-6 py-3 bg-sky-50 border border-sky-200 text-sky-700 font-bold text-sm rounded-xl hover:bg-sky-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                        {testingTelegram ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                        Enviar mensaje de prueba
+                    </button>
                 </div>
             </div>
 
