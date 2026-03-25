@@ -13,8 +13,6 @@
  */
 
 export interface Env {
-  /** KV namespace para cachear domain → slug (binding: DOMAIN_CACHE) */
-  DOMAIN_CACHE: KVNamespace
   /** URL base del storefront, ej: https://vendexchat.app */
   STOREFRONT_URL: string
   /** URL de Supabase, ej: https://xxxx.supabase.co */
@@ -47,9 +45,6 @@ const NOT_FOUND_HTML = `<!DOCTYPE html>
 </body>
 </html>`
 
-/** Duración del caché KV en segundos (1 hora) */
-const CACHE_TTL = 3600
-
 /** Busca el slug de una tienda por su custom_domain en Supabase */
 async function resolveSlugFromSupabase(
   domain: string,
@@ -71,26 +66,9 @@ async function resolveSlugFromSupabase(
   return rows?.[0]?.slug ?? null
 }
 
-/** Resuelve domain → slug usando caché KV primero, luego Supabase */
+/** Resuelve domain → slug consultando Supabase */
 async function resolveSlug(domain: string, env: Env): Promise<string | null> {
-  // 1. Intentar desde KV
-  const cached = await env.DOMAIN_CACHE.get(domain)
-  if (cached !== null) {
-    // El valor "__not_found__" indica que ya buscamos y no existe
-    return cached === '__not_found__' ? null : cached
-  }
-
-  // 2. Consultar Supabase
-  const slug = await resolveSlugFromSupabase(domain, env)
-
-  // 3. Guardar en KV para próximas requests
-  await env.DOMAIN_CACHE.put(
-    domain,
-    slug ?? '__not_found__',
-    { expirationTtl: CACHE_TTL }
-  )
-
-  return slug
+  return resolveSlugFromSupabase(domain, env)
 }
 
 export default {
@@ -98,8 +76,8 @@ export default {
     const url = new URL(request.url)
     const hostname = url.hostname
 
-    // Ignorar requests al dominio principal del worker (health check, etc.)
-    if (hostname === 'servidores.vendexchat.app') {
+    // Ignorar requests al dominio workers.dev (health check, etc.)
+    if (hostname.endsWith('workers.dev')) {
       return new Response('VendexChat Domain Proxy OK', { status: 200 })
     }
 
