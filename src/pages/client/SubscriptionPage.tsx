@@ -16,7 +16,7 @@ import { Subscription, SubscriptionPlan } from '../../types'
 import { useAuth } from '../../contexts/AuthContext'
 
 // Países donde Mercado Pago está disponible
-const MP_COUNTRIES = ['Argentina', 'Uruguay', 'Chile', 'México', 'Colombia', 'Perú', 'Ecuador', 'Paraguay', 'Bolivia']
+const MP_COUNTRIES = ['Argentina']
 
 const ROI_MESSAGES: Record<string, string> = {
     free: 'Ideal para validar tu idea y captar tus primeros pedidos sin costo.',
