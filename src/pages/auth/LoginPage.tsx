@@ -1,5 +1,5 @@
 import { useState, FormEvent, useEffect } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { Eye, EyeOff } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { Button, Input } from '../../components/common'
@@ -15,13 +15,14 @@ export default function LoginPage() {
 
   const { login, user } = useAuth()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
 
   useEffect(() => {
     if (user) {
-      // Dejar que RoleRedirect maneje la lógica centralizada en la ruta raíz
-      navigate('/', { replace: true })
+      const redirect = searchParams.get('redirect')
+      navigate(redirect ? decodeURIComponent(redirect) : '/', { replace: true })
     }
-  }, [user, navigate])
+  }, [user, navigate, searchParams])
 
   const validate = () => {
     const newErrors: typeof errors = {}
