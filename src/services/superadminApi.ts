@@ -445,13 +445,15 @@ export const superadminApi = {
     listSubscriptions: async () => {
         const { data, error } = await supabase
             .from('subscriptions')
-            .select('*, stores(name)')
+            .select('*, stores(name, country, city)')
             .order('updated_at', { ascending: false })
 
         if (error) throw error
         return (data || []).map(s => ({
             ...s,
-            store_name: (s as unknown as { stores?: { name: string } }).stores?.name
+            store_name: (s as unknown as { stores?: { name: string; country?: string; city?: string } }).stores?.name,
+            store_country: (s as unknown as { stores?: { name: string; country?: string; city?: string } }).stores?.country,
+            store_city: (s as unknown as { stores?: { name: string; country?: string; city?: string } }).stores?.city,
         }))
     },
 
