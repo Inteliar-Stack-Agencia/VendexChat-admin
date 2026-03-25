@@ -75,19 +75,54 @@ const GUIDES_CONTENT = {
         title: "Dominios Propios",
         icon: <Globe className="w-8 h-8 text-blue-600" />,
         content: (
-            <div className="space-y-6">
+            <div className="space-y-5">
                 <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100">
-                    <p className="text-sm text-blue-900 font-medium">Usa tu propio dominio (ej: www.tutienda.com) para mayor profesionalismo.</p>
+                    <p className="text-sm text-blue-900 font-medium">Usá tu propio dominio (ej: www.tutienda.com) para mayor profesionalismo. Requiere plan PRO.</p>
                 </div>
-                <div className="space-y-4 text-xs text-slate-600 leading-relaxed">
-                    <p>Para configurar tu dominio debes acceder al panel de tu proveedor (GoDaddy, Nic.ar, etc) y crear un registro:</p>
-                    <div className="p-4 bg-slate-900 text-slate-200 rounded-xl font-mono">
-                        Tipo: CNAME <br />
-                        Host: @ o www <br />
-                        Valor: servidores.vendexchat.app
+
+                <div className="space-y-3 text-xs text-slate-700 leading-relaxed">
+
+                    {/* Paso 1 */}
+                    <div className="flex gap-3">
+                        <span className="w-6 h-6 rounded-full bg-blue-600 text-white text-[11px] font-bold flex items-center justify-center shrink-0">1</span>
+                        <div>
+                            <p className="font-bold text-slate-900 mb-1">Ingresá tu dominio en Configuración → General</p>
+                            <p className="text-slate-500">Escribí solo el dominio, sin https://. Ej: <span className="font-mono bg-slate-100 px-1 rounded">www.morfiviandas.com</span></p>
+                        </div>
                     </div>
+
+                    {/* Paso 2 */}
+                    <div className="flex gap-3">
+                        <span className="w-6 h-6 rounded-full bg-blue-600 text-white text-[11px] font-bold flex items-center justify-center shrink-0">2</span>
+                        <div>
+                            <p className="font-bold text-slate-900 mb-1">Creá el registro CNAME en tu proveedor DNS</p>
+                            <p className="text-slate-500 mb-2">Accedé al panel donde compraste tu dominio (Nic.ar, GoDaddy, Namecheap, etc.) y agregá:</p>
+                            <div className="p-3 bg-slate-900 text-slate-200 rounded-xl font-mono text-[11px] leading-relaxed">
+                                Tipo: CNAME<br />
+                                Host: www<br />
+                                Valor: servidores.vendexchat.app<br />
+                                TTL: Automático
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Paso 3 */}
+                    <div className="flex gap-3">
+                        <span className="w-6 h-6 rounded-full bg-blue-600 text-white text-[11px] font-bold flex items-center justify-center shrink-0">3</span>
+                        <div>
+                            <p className="font-bold text-slate-900 mb-1">Esperá la activación del SSL</p>
+                            <p className="text-slate-500">El certificado HTTPS se activa automáticamente en <strong>hasta 24 horas</strong>. No necesitás hacer nada más.</p>
+                        </div>
+                    </div>
+
+                    {/* Tip Cloudflare */}
+                    <div className="p-3 bg-indigo-50 rounded-xl border border-indigo-100">
+                        <p className="font-bold text-indigo-900 mb-1">¿Usás Cloudflare como DNS?</p>
+                        <p className="text-indigo-700">Si tu dominio usa Cloudflare de DNS, asegurate de que el CNAME tenga el proxy <strong>desactivado</strong> (nube gris ☁️, no naranja 🟠). De lo contrario el SSL puede fallar.</p>
+                    </div>
+
                     <p className="bg-amber-50 p-3 rounded-lg border border-amber-100 text-amber-800 font-bold italic">
-                        Nota: Una vez configurado, el certificado SSL (candadito) se activa automáticamente en 24hs.
+                        ¿No ves el candado HTTPS después de 24hs? Verificá que el CNAME esté bien configurado y guardá el dominio nuevamente en Configuración.
                     </p>
                 </div>
             </div>
