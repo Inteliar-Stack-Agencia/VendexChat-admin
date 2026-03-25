@@ -13,9 +13,7 @@ import { showToast } from '../../components/common/Toast'
 import { billingApi, tenantApi } from '../../services/api'
 import { Subscription, SubscriptionPlan } from '../../types'
 import { useAuth } from '../../contexts/AuthContext'
-
-// Países donde Mercado Pago está disponible
-const MP_COUNTRIES = ['Argentina', 'Uruguay', 'Chile', 'México', 'Colombia', 'Perú', 'Ecuador', 'Paraguay', 'Bolivia']
+import { useNavigate, useSearchParams } from 'react-router-dom'
 
 const ROI_MESSAGES: Record<string, string> = {
     free: 'Ideal para validar tu idea y captar tus primeros pedidos sin costo.',
@@ -29,15 +27,21 @@ const VIP_DIFFERENTIATORS = [
     'Operación más ágil: bot + logística + soporte prioritario en un solo plan.'
 ]
 
+type PaymentMethod = 'mp' | 'paypal'
+
 export default function SubscriptionPage() {
     const { user } = useAuth()
+    const navigate = useNavigate()
+    const [searchParams] = useSearchParams()
+
     const [plans, setPlans] = useState<SubscriptionPlan[]>([])
     const [currentSub, setCurrentSub] = useState<Subscription | null>(null)
     const [loading, setLoading] = useState(true)
     const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('monthly')
-    const [userCountry, setUserCountry] = useState<string | null>(null)
     const [exchangeRate, setExchangeRate] = useState<number | null>(null)
     const [processingPlanId, setProcessingPlanId] = useState<string | null>(null)
+    // Payment method per plan card — default detected from country, switchable by user
+    const [paymentMethods, setPaymentMethods] = useState<Record<string, PaymentMethod>>({})
 
     useEffect(() => {
         const loadData = async () => {
@@ -52,32 +56,61 @@ export default function SubscriptionPage() {
                 const subData = await billingApi.getCurrentSubscription()
                 setCurrentSub(subData)
                 if (subData?.billing_cycle) setBillingCycle(subData.billing_cycle)
-            } catch { /* silent — billingApi returns default */ } finally {
+            } catch { /* silent */ } finally {
                 setLoading(false)
             }
         }
 
-        tenantApi.getMe().then(store => setUserCountry(store.country)).catch(() => {})
-
-        // Fetch exchange rate for ARS display
         fetch('/api/exchange-rate')
             .then(r => r.json())
             .then((d: { rate?: number }) => { if (d.rate) setExchangeRate(d.rate) })
             .catch(() => {})
 
+        // Detect country to set default payment method, but user can always switch
+        tenantApi.getMe()
+            .then(store => {
+                const MP_COUNTRIES = ['Argentina', 'Uruguay', 'Chile', 'México', 'Colombia', 'Perú', 'Ecuador', 'Paraguay', 'Bolivia']
+                const defaultMethod: PaymentMethod = MP_COUNTRIES.includes(store.country || '') ? 'mp' : 'paypal'
+                setPaymentMethods({ pro: defaultMethod, vip: defaultMethod, ultra: defaultMethod })
+            })
+            .catch(() => {
+                setPaymentMethods({ pro: 'mp', vip: 'mp', ultra: 'mp' })
+            })
+
         loadData()
     }, [])
 
+    // Auto-start payment if redirected from login with plan params
+    useEffect(() => {
+        const autoPlan = searchParams.get('plan')
+        const autoCycle = searchParams.get('cycle') as 'monthly' | 'annual' | null
+        const autoStart = searchParams.get('autostart') === 'true'
+
+        if (autoStart && autoPlan && user && plans.length > 0) {
+            if (autoCycle) setBillingCycle(autoCycle)
+            // Small delay to let state settle
+            const timer = setTimeout(() => handleSubscribe(autoPlan), 500)
+            return () => clearTimeout(timer)
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [user, plans, searchParams])
+
     const handleSubscribe = async (planId: string) => {
-        if (!user) { showToast('error', 'Debés iniciar sesión primero'); return }
+        // If not logged in, redirect to login preserving plan selection
+        if (!user) {
+            const cycle = billingCycle
+            navigate(`/login?redirect=/subscription?plan=${planId}%26cycle=${cycle}%26autostart=true`)
+            return
+        }
 
         const plan = plans.find(p => p.id === planId)
         if (!plan) return
 
-        const isMPAvailable = MP_COUNTRIES.includes(userCountry || '')
+        const method = paymentMethods[planId] ?? 'mp'
 
-        if (!isMPAvailable) {
-            setProcessingPlanId(planId)
+        setProcessingPlanId(planId)
+
+        if (method === 'paypal') {
             try {
                 const res = await fetch('/api/create-paypal-subscription', {
                     method: 'POST',
@@ -91,7 +124,7 @@ export default function SubscriptionPage() {
                 })
                 const data = await res.json() as { checkout_url?: string; error?: string }
                 if (!res.ok || !data.checkout_url) {
-                    showToast('error', data.error || 'Error al iniciar el pago')
+                    showToast('error', data.error || 'Error al iniciar el pago con PayPal')
                     return
                 }
                 window.location.href = data.checkout_url
@@ -103,7 +136,7 @@ export default function SubscriptionPage() {
             return
         }
 
-        setProcessingPlanId(planId)
+        // MercadoPago
         try {
             const res = await fetch('/api/create-payment', {
                 method: 'POST',
@@ -115,15 +148,11 @@ export default function SubscriptionPage() {
                     user_email: user.email || '',
                 }),
             })
-
             const data = await res.json() as { init_point?: string; error?: string }
-
             if (!res.ok || !data.init_point) {
-                showToast('error', data.error || 'Error al iniciar el pago')
+                showToast('error', data.error || 'Error al iniciar el pago con MercadoPago')
                 return
             }
-
-            // Redirect to Mercado Pago checkout
             window.location.href = data.init_point
         } catch {
             showToast('error', 'Error de conexión. Intentá de nuevo.')
@@ -155,8 +184,8 @@ export default function SubscriptionPage() {
                 <p className="text-slate-500 font-medium mt-1">Escala tu negocio con herramientas avanzadas y soporte dedicado.</p>
             </header>
 
-            {/* Current Plan Banner */}
-            {currentSub && (
+            {/* Current Plan Banner — only show if actively paying */}
+            {currentSub && currentSub.status === 'active' && (
                 <div className="bg-slate-900 rounded-[2.5rem] p-8 text-white relative overflow-hidden shadow-2xl shadow-indigo-100">
                     <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
                         <div className="flex items-center gap-4">
@@ -167,27 +196,15 @@ export default function SubscriptionPage() {
                                 <p className="text-indigo-200 text-[10px] font-black uppercase tracking-widest">Plan Actual</p>
                                 <div className="flex items-center gap-2">
                                     <h3 className="text-2xl font-black uppercase tracking-tight">VENDEx {currentSub.plan_type}</h3>
-                                    <div className={`px-2 py-0.5 rounded-full border text-[10px] font-black uppercase ${
-                                        currentSub.status === 'active'
-                                            ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400'
-                                            : currentSub.status === 'trial'
-                                                ? 'bg-amber-500/20 border-amber-500/30 text-amber-400'
-                                                : 'bg-slate-500/20 border-slate-500/30 text-slate-400'
-                                    }`}>
-                                        {currentSub.status === 'active'
-                                            ? `Activo (${currentSub.billing_cycle === 'annual' ? 'Anual' : 'Mensual'})`
-                                            : currentSub.status === 'trial'
-                                                ? `Prueba (${Math.max(0, Math.ceil((new Date(currentSub.current_period_end!).getTime() - Date.now()) / 86400000))} días)`
-                                                : currentSub.status}
+                                    <div className="px-2 py-0.5 rounded-full border text-[10px] font-black uppercase bg-emerald-500/20 border-emerald-500/30 text-emerald-400">
+                                        Activo ({currentSub.billing_cycle === 'annual' ? 'Anual' : 'Mensual'})
                                     </div>
                                 </div>
                             </div>
                         </div>
                         <div className="flex items-center gap-8">
                             <div className="text-right hidden sm:block">
-                                <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest">
-                                    {currentSub.status === 'trial' ? 'Vence el' : 'Próximo Cobro'}
-                                </p>
+                                <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest">Próximo Cobro</p>
                                 <p className="text-lg font-bold">
                                     {currentSub.current_period_end
                                         ? new Date(currentSub.current_period_end).toLocaleDateString('es-AR')
@@ -249,8 +266,11 @@ export default function SubscriptionPage() {
             {plans.length > 0 && (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                     {plans.map((plan) => {
-                        const isCurrent = currentSub?.plan_type === plan.id &&
+                        // Only block the button if the plan is ACTIVELY paying (status === 'active')
+                        const isActivelyCurrent = currentSub?.plan_type === plan.id &&
+                            currentSub?.status === 'active' &&
                             (currentSub?.billing_cycle === billingCycle || plan.id === 'free')
+
                         const style = planStyles[plan.id] || planStyles.free
                         const displayPrice = billingCycle === 'monthly' ? plan.price : plan.annual_price / 12
                         const annualTotal = plan.annual_price
@@ -259,6 +279,7 @@ export default function SubscriptionPage() {
                             ? formatARS(billingCycle === 'monthly' ? plan.price : plan.annual_price)
                             : null
                         const isProcessing = processingPlanId === plan.id
+                        const selectedMethod = paymentMethods[plan.id] ?? 'mp'
 
                         return (
                             <Card
@@ -334,7 +355,7 @@ export default function SubscriptionPage() {
                                 )}
 
                                 {/* Features */}
-                                <div className="space-y-3 mb-8 flex-1">
+                                <div className="space-y-3 mb-6 flex-1">
                                     {plan.features.map((feature, i) => {
                                         const isIA = feature.toLowerCase().includes('ia')
                                         return (
@@ -348,6 +369,32 @@ export default function SubscriptionPage() {
                                     })}
                                 </div>
 
+                                {/* Payment method selector — only for paid plans */}
+                                {plan.id !== 'free' && plan.id !== 'ultra' && !isActivelyCurrent && (
+                                    <div className="mb-3 flex items-center gap-1 p-1 bg-slate-100 rounded-xl">
+                                        <button
+                                            onClick={() => setPaymentMethods(m => ({ ...m, [plan.id]: 'mp' }))}
+                                            className={`flex-1 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${
+                                                selectedMethod === 'mp'
+                                                    ? 'bg-white text-slate-900 shadow-sm'
+                                                    : 'text-slate-400 hover:text-slate-600'
+                                            }`}
+                                        >
+                                            MercadoPago 🇦🇷
+                                        </button>
+                                        <button
+                                            onClick={() => setPaymentMethods(m => ({ ...m, [plan.id]: 'paypal' }))}
+                                            className={`flex-1 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${
+                                                selectedMethod === 'paypal'
+                                                    ? 'bg-white text-slate-900 shadow-sm'
+                                                    : 'text-slate-400 hover:text-slate-600'
+                                            }`}
+                                        >
+                                            PayPal 🌎
+                                        </button>
+                                    </div>
+                                )}
+
                                 {/* CTA */}
                                 <button
                                     onClick={() => {
@@ -357,9 +404,9 @@ export default function SubscriptionPage() {
                                             handleSubscribe(plan.id)
                                         }
                                     }}
-                                    disabled={isCurrent || isProcessing || plan.id === 'free'}
+                                    disabled={isActivelyCurrent || isProcessing || plan.id === 'free'}
                                     className={`w-full py-4 rounded-2xl font-black uppercase tracking-widest text-[10px] flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
-                                        isCurrent || plan.id === 'free'
+                                        isActivelyCurrent || plan.id === 'free'
                                             ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
                                             : plan.id === 'pro'
                                                 ? 'bg-indigo-600 text-white hover:bg-slate-900 shadow-xl shadow-indigo-100'
@@ -372,20 +419,17 @@ export default function SubscriptionPage() {
                                         ? <Loader2 className="w-4 h-4 animate-spin" />
                                         : null
                                     }
-                                    {isCurrent
+                                    {isActivelyCurrent
                                         ? 'Tu Plan Actual'
                                         : plan.id === 'ultra'
                                             ? 'Contactar'
                                             : plan.id === 'free'
                                                 ? 'Plan Gratuito'
-                                                : 'Suscribirse'}
-                                    {!isCurrent && plan.id !== 'free' && !isProcessing && (
+                                                : isProcessing
+                                                    ? 'Procesando...'
+                                                    : 'Suscribirse'}
+                                    {!isActivelyCurrent && plan.id !== 'free' && !isProcessing && (
                                         <ArrowRight className="w-4 h-4" />
-                                    )}
-                                    {!isCurrent && plan.id !== 'free' && plan.id !== 'ultra' && !isProcessing && (
-                                        <span className="text-[8px] opacity-70 font-normal normal-case">
-                                            {MP_COUNTRIES.includes(userCountry || '') ? 'via MP' : 'via PayPal'}
-                                        </span>
                                     )}
                                 </button>
                             </Card>
