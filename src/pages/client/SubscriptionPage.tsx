@@ -272,9 +272,9 @@ export default function SubscriptionPage() {
                                             <span className="text-slate-400 text-xs font-bold">USD</span>
                                         )}
                                         <span className="text-4xl font-black text-slate-900 tracking-tighter">
-                                            {plan.id === 'ultra' ? 'Custom' : plan.price === 0 ? '$0' : `$${displayPrice.toFixed(2)}`}
+                                            {plan.price === 0 ? '$0' : `$${displayPrice.toFixed(2)}`}
                                         </span>
-                                        {plan.id !== 'ultra' && <span className="text-slate-400 text-xs font-bold">/ mes</span>}
+                                        {plan.price > 0 && <span className="text-slate-400 text-xs font-bold">/ mes</span>}
                                     </div>
 
                                     {/* ARS estimate */}
@@ -334,9 +334,7 @@ export default function SubscriptionPage() {
                                 {/* CTA */}
                                 <button
                                     onClick={() => {
-                                        if (plan.id === 'ultra') {
-                                            window.open('https://wa.me/5491165689145?text=Hola! Quiero info sobre el plan VENDEx ULTRA', '_blank')
-                                        } else if (plan.id !== 'free') {
+                                        if (plan.id !== 'free') {
                                             handleSubscribe(plan.id)
                                         }
                                     }}
@@ -357,21 +355,19 @@ export default function SubscriptionPage() {
                                     }
                                     {isCurrent
                                         ? 'Tu Plan Actual'
-                                        : plan.id === 'ultra'
-                                            ? 'Contactar'
-                                            : plan.id === 'free'
-                                                ? 'Plan Gratuito'
-                                                : 'Suscribirse'}
+                                        : plan.id === 'free'
+                                            ? 'Plan Gratuito'
+                                            : 'Suscribirse'}
                                     {!isCurrent && plan.id !== 'free' && !isProcessing && (
                                         <ArrowRight className="w-4 h-4" />
                                     )}
-                                    {!isCurrent && plan.id !== 'free' && plan.id !== 'ultra' && !isProcessing && MP_COUNTRIES.includes(userCountry || '') && (
+                                    {!isCurrent && plan.id !== 'free' && !isProcessing && MP_COUNTRIES.includes(userCountry || '') && (
                                         <span className="text-[8px] opacity-70 font-normal normal-case">via MP</span>
                                     )}
                                 </button>
 
                                 {/* WhatsApp fallback for non-MP countries */}
-                                {!MP_COUNTRIES.includes(userCountry || '') && plan.id !== 'free' && plan.id !== 'ultra' && !isCurrent && (
+                                {!MP_COUNTRIES.includes(userCountry || '') && plan.id !== 'free' && !isCurrent && (
                                     <p className="text-center text-[10px] text-slate-400 mt-2 flex items-center justify-center gap-1">
                                         <MessageCircle className="w-3 h-3" /> Activación vía WhatsApp
                                     </p>
