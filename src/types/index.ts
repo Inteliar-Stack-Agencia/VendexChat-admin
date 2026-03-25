@@ -187,6 +187,35 @@ export interface Category {
   created_at: string
 }
 
+// --- Personalizaciones (Modifier Groups) ---
+export interface ModifierOption {
+  id: string
+  group_id: string
+  store_id: string
+  name: string
+  price_delta: number
+  sort_order: number
+  is_active: boolean
+  created_at: string
+}
+
+export interface ModifierGroup {
+  id: string
+  store_id: string
+  name: string
+  description: string | null
+  selection_type: 'single' | 'multiple'
+  required: boolean
+  min_selections: number
+  max_selections: number | null
+  sort_order: number
+  is_active: boolean
+  created_at: string
+  options?: ModifierOption[]
+  product_ids?: string[]         // IDs of products this group is linked to
+  product_names?: string[]       // For display
+}
+
 // --- Cupón ---
 export interface Coupon {
   id: string
