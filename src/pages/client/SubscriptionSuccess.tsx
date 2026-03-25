@@ -8,8 +8,10 @@ export default function SubscriptionSuccess() {
     const [params] = useSearchParams()
     const { refreshSubscription } = useAuth()
 
+    const preapprovalId = params.get('preapproval_id')
     const paymentId = params.get('payment_id')
     const status = params.get('status')
+    const comprobante = preapprovalId || paymentId
 
     useEffect(() => {
         // Refresh subscription data so the rest of the app reflects the new plan
@@ -25,17 +27,17 @@ export default function SubscriptionSuccess() {
 
                 <div className="space-y-2">
                     <h2 className="text-2xl font-black text-slate-900 tracking-tight">
-                        ¡Pago aprobado!
+                        ¡Suscripción activada!
                     </h2>
                     <p className="text-slate-500 font-medium">
-                        Tu suscripción fue activada correctamente. Ya podés usar todas las funciones de tu nuevo plan.
+                        Tu suscripción fue registrada. Los cobros se realizarán automáticamente cada ciclo. Ya podés usar todas las funciones de tu nuevo plan.
                     </p>
                 </div>
 
-                {paymentId && (
+                {comprobante && (
                     <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 text-left space-y-1">
                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Comprobante</p>
-                        <p className="text-sm font-mono text-slate-600">ID: {paymentId}</p>
+                        <p className="text-sm font-mono text-slate-600">ID: {comprobante}</p>
                         {status && <p className="text-sm text-emerald-600 font-bold capitalize">{status}</p>}
                     </div>
                 )}
