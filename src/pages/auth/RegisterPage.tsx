@@ -1,6 +1,6 @@
 import { useState, FormEvent, useEffect } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { Mail } from 'lucide-react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Mail, Zap } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { Button, Input, Select } from '../../components/common'
 import { showToast } from '../../components/common/Toast'
@@ -22,6 +22,12 @@ const COUNTRIES = [
   { value: 'Otro', label: 'Otro (Especificar)' },
 ]
 
+const PLAN_LABELS: Record<string, string> = {
+  pro: 'PRO — USD $13.99/mes',
+  vip: 'VIP — USD $19.99/mes',
+  ultra: 'ULTRA — Custom',
+}
+
 export default function RegisterPage() {
   const [storeName, setStoreName] = useState('')
   const [email, setEmail] = useState('')
@@ -37,6 +43,10 @@ export default function RegisterPage() {
 
   const { register, user } = useAuth()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+
+  const pendingPlan = searchParams.get('plan') || ''
+  const pendingCycle = (searchParams.get('cycle') || 'monthly') as 'monthly' | 'annual'
 
   // Auto-generar slug cuando cambia el nombre de la tienda
   useEffect(() => {
@@ -71,6 +81,11 @@ export default function RegisterPage() {
     setLoading(true)
     try {
       await register({ store_name: storeName, email, slug, country, city, phone })
+      // Persist plan selection so it survives email verification → login flow
+      if (pendingPlan) {
+        localStorage.setItem('pendingPlan', pendingPlan)
+        localStorage.setItem('pendingCycle', pendingCycle)
+      }
       setRegistered(true)
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error al crear la cuenta'
@@ -91,14 +106,22 @@ export default function RegisterPage() {
             <h1 className="text-2xl font-bold text-gray-900">¡Tienda creada!</h1>
             <p className="text-gray-500 mt-1">Solo falta un paso más</p>
           </div>
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 text-center">
-            <p className="text-gray-700 mb-2">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 text-center space-y-4">
+            <p className="text-gray-700">
               Te enviamos un email a <strong>{email}</strong>
             </p>
-            <p className="text-sm text-gray-500 mb-6">
+            <p className="text-sm text-gray-500">
               Hacé click en el enlace del email para establecer tu contraseña y acceder a tu tienda.
             </p>
-            <Link to="/login" className="text-sm text-emerald-600 hover:text-emerald-700 font-medium">
+            {pendingPlan && (
+              <div className="mt-2 p-3 bg-indigo-50 border border-indigo-100 rounded-xl flex items-center gap-2 text-left">
+                <Zap className="w-4 h-4 text-indigo-600 shrink-0" />
+                <p className="text-xs text-indigo-700 font-semibold">
+                  Al ingresar serás redirigido automáticamente para activar tu plan <strong>{PLAN_LABELS[pendingPlan] ?? pendingPlan.toUpperCase()}</strong>.
+                </p>
+              </div>
+            )}
+            <Link to="/login" className="block text-sm text-emerald-600 hover:text-emerald-700 font-medium">
               Volver al login
             </Link>
           </div>
@@ -116,6 +139,20 @@ export default function RegisterPage() {
           <h1 className="text-2xl font-bold text-gray-900">Crear mi tienda</h1>
           <p className="text-gray-500 mt-1">Registra tu tienda en VENDExChat</p>
         </div>
+
+        {/* Plan banner si viene con plan seleccionado */}
+        {pendingPlan && (
+          <div className="mb-4 p-4 bg-indigo-600 rounded-xl flex items-center gap-3 text-white shadow-lg shadow-indigo-100">
+            <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center shrink-0">
+              <Zap className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="text-xs font-black uppercase tracking-widest opacity-80">Plan seleccionado</p>
+              <p className="font-bold text-sm">{PLAN_LABELS[pendingPlan] ?? pendingPlan.toUpperCase()}</p>
+              <p className="text-xs opacity-70">Se activará automáticamente después de confirmar tu cuenta.</p>
+            </div>
+          </div>
+        )}
 
         {/* Formulario */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
@@ -200,7 +237,7 @@ export default function RegisterPage() {
             {errors.terms && <p className="text-xs text-red-600">{errors.terms}</p>}
 
             <Button type="submit" loading={loading} className="w-full h-12 text-base">
-              Crear mi tienda
+              {pendingPlan ? `Crear tienda y activar Plan ${pendingPlan.toUpperCase()}` : 'Crear mi tienda'}
             </Button>
           </form>
 
