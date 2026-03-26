@@ -26,10 +26,9 @@ import {
 interface SidebarProps {
   isOpen: boolean
   onClose: () => void
-  modifiersEnabled?: boolean
 }
 
-export default function Sidebar({ isOpen, onClose, modifiersEnabled }: SidebarProps) {
+export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const { logout, isSuperadmin, subscription } = useAuth()
   const hasPro = ['pro', 'vip', 'ultra'].includes(subscription?.plan_type || '')
   const navigate = useNavigate()
@@ -122,7 +121,7 @@ export default function Sidebar({ isOpen, onClose, modifiersEnabled }: SidebarPr
                   <FolderOpen className="w-5 h-5" />
                   Categorías
                 </NavLink>
-                {modifiersEnabled && hasPro && (
+                {hasPro && (
                   <NavLink to="/modifiers" className={linkClass} onClick={onClose}>
                     <UtensilsCrossed className="w-5 h-5" />
                     Personalizaciones
