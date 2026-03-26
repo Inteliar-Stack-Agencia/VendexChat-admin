@@ -54,6 +54,7 @@ async function _getStoreIdInternal(): Promise<string> {
     const { data: profile } = await supabase.from('profiles').select('store_id').eq('id', user.id).single()
     if (profile?.store_id) {
         _lastSyncedStoreId = profile.store_id
+        localStorage.setItem('vendexchat_selected_store', profile.store_id)
         return profile.store_id
     }
 
@@ -63,6 +64,7 @@ async function _getStoreIdInternal(): Promise<string> {
         const { data: store } = await supabase.from('stores').select('id').eq('slug', metaSlug).single()
         if (store) {
             _lastSyncedStoreId = store.id
+            localStorage.setItem('vendexchat_selected_store', store.id)
             supabase.from('profiles').update({ store_id: store.id }).eq('id', user.id)
                 .then(() => { }, (e) => console.warn('[getStoreId] Profile update failed (non-blocking):', e))
             return store.id
@@ -73,6 +75,7 @@ async function _getStoreIdInternal(): Promise<string> {
     const { data: anyStore } = await supabase.from('stores').select('id').eq('owner_id', user.id).limit(1).single()
     if (anyStore) {
         _lastSyncedStoreId = anyStore.id
+        localStorage.setItem('vendexchat_selected_store', anyStore.id)
         return anyStore.id
     }
 
