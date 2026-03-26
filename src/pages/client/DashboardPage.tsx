@@ -24,6 +24,7 @@ import {
 } from 'lucide-react'
 import { Card, Badge, Button } from '../../components/common'
 import OnboardingChecklist from '../../components/dashboard/OnboardingChecklist'
+import CurrencySelector from '../../components/dashboard/CurrencySelector'
 import { dashboardApi, tenantApi } from '../../services/api'
 import { DashboardStats, Tenant } from '../../types'
 import { formatPrice, orderStatusConfig } from '../../utils/helpers'
@@ -82,6 +83,10 @@ export default function DashboardPage() {
     return plan ? { plan, cycle } : null
   })
 
+  // Moneda de la tienda
+  const [currency, setCurrency] = useState('ARS')
+  const [savingCurrency, setSavingCurrency] = useState(false)
+
   // Asistente de ventas
   const [aiPrompt, setAiPrompt] = useState('')
 
@@ -100,6 +105,7 @@ export default function DashboardPage() {
       .then(([statsData, tenantData]) => {
         setStats(statsData)
         setTenant(tenantData)
+        setCurrency((tenantData.metadata?.currency as string | undefined) || 'ARS')
         const saved = (tenantData.metadata?.ai_prompt as string | undefined) || tenantData.ai_prompt || ''
         const prompt: string = saved || generatePromptTemplate(tenantData)
         setAiPrompt(prompt)
@@ -110,6 +116,20 @@ export default function DashboardPage() {
       })
       .finally(() => setLoading(false))
   }, [selectedStoreId])
+
+  async function handleCurrencyChange(code: string) {
+    setCurrency(code)
+    setSavingCurrency(true)
+    try {
+      const updatedMetadata = { ...(tenant?.metadata ?? {}), currency: code }
+      await tenantApi.updateMe({ metadata: updatedMetadata })
+      setTenant((prev) => prev ? { ...prev, metadata: updatedMetadata } : prev)
+    } catch (err) {
+      console.error('[DashboardPage] Error guardando moneda:', err)
+    } finally {
+      setSavingCurrency(false)
+    }
+  }
 
   const isTrial = subscription?.status === 'trial'
 
@@ -261,6 +281,11 @@ export default function DashboardPage() {
           <p className="text-gray-500 text-sm">Bienvenido de nuevo a tu panel de control.</p>
         </div>
         <div className="flex items-center gap-3">
+          <CurrencySelector
+            value={currency}
+            onChange={handleCurrencyChange}
+            saving={savingCurrency}
+          />
           {currentPlan === 'free' && (
             <Link to="/subscription">
               <Button variant="secondary" size="sm" className="bg-amber-50 text-amber-600 border-amber-100 hover:bg-amber-100">
@@ -301,7 +326,7 @@ export default function DashboardPage() {
             </div>
             <div>
               <p className="text-sm font-medium text-gray-500">Ventas hoy</p>
-              <p className="text-2xl font-bold text-gray-900">{formatPrice(stats?.sales_today ?? 0)}</p>
+              <p className="text-2xl font-bold text-gray-900">{formatPrice(stats?.sales_today ?? 0, currency)}</p>
             </div>
           </div>
         </Card>
@@ -400,7 +425,7 @@ export default function DashboardPage() {
                         </div>
                       </div>
                       <div className="text-right">
-                        <p className="text-sm font-bold text-gray-900">{formatPrice(order.total)}</p>
+                        <p className="text-sm font-bold text-gray-900">{formatPrice(order.total, currency)}</p>
                         <Badge color={statusConf?.color} bg={statusConf?.bg} className="text-[10px]">
                           {statusConf?.label || order.status}
                         </Badge>
