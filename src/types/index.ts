@@ -10,6 +10,7 @@ export type { LucideIcon }
 export interface TenantMetadata {
   plan_type?: string;
   payment_methods?: Record<string, boolean>;
+  currency?: string;
   [key: string]: unknown;
 }
 
