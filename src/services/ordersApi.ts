@@ -38,13 +38,17 @@ export const ordersApi = {
     get: async (id: string | number) => {
         const { data, error } = await supabase.from('orders').select('*, order_items(*)').eq('id', id).single()
         if (error) throw error
-        return data as Order
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { order_items, ...rest } = data as any
+        return { ...rest, items: order_items || [] } as Order
     },
 
     updateStatus: async (id: string | number, status: OrderStatus) => {
-        const { data, error } = await supabase.from('orders').update({ status }).eq('id', id).select().single()
+        const { data, error } = await supabase.from('orders').update({ status }).eq('id', id).select('*, order_items(*)').single()
         if (error) throw error
-        return data as Order
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { order_items, ...rest } = data as any
+        return { ...rest, items: order_items || [] } as Order
     },
 
     updateMetadata: async (id: string | number, metadata: Record<string, unknown>) => {
@@ -52,10 +56,12 @@ export const ordersApi = {
             .from('orders')
             .update({ metadata })
             .eq('id', id)
-            .select()
+            .select('*, order_items(*)')
             .single()
         if (error) throw error
-        return data as Order
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { order_items, ...rest } = data as any
+        return { ...rest, items: order_items || [] } as Order
     },
 
     create: async (order: {
