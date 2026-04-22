@@ -158,6 +158,12 @@ export const ordersApi = {
     },
 
     remove: async (id: string | number) => {
+        const { error: itemsError } = await supabase
+            .from('order_items')
+            .delete()
+            .eq('order_id', id)
+        if (itemsError) throw itemsError
+
         const { error } = await supabase
             .from('orders')
             .delete()
