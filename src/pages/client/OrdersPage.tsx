@@ -1,8 +1,10 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { Eye, ShoppingCart, Printer, Archive, ArchiveRestore, Trash2 } from 'lucide-react'
 import { Card, Badge, EmptyState, Pagination, Button, ConfirmDialog, showToast } from '../../components/common'
 import { ordersApi } from '../../services/api'
+import { getStoreId } from '../../services/coreApi'
+import { supabase } from '../../supabaseClient'
 import { Order } from '../../types'
 import { formatPrice, formatDate, orderStatusConfig } from '../../utils/helpers'
 import { useAuth } from '../../contexts/AuthContext'
@@ -70,6 +72,36 @@ export default function OrdersPage() {
 
   useEffect(() => {
     loadOrders()
+  }, [loadOrders])
+
+  // Realtime: recargar pedidos cuando llega uno nuevo desde la tienda
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
+  useEffect(() => {
+    let active = true
+    getStoreId().then((storeId) => {
+      if (!active) return
+      const channel = supabase
+        .channel(`orders-store-${storeId}`)
+        .on('postgres_changes', {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'orders',
+          filter: `store_id=eq.${storeId}`,
+        }, () => {
+          loadOrders()
+          showToast('success', '🛒 ¡Nuevo pedido recibido!')
+        })
+        .subscribe()
+      channelRef.current = channel
+    }).catch(() => { /* sin sesión activa, sin suscripción */ })
+
+    return () => {
+      active = false
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current)
+        channelRef.current = null
+      }
+    }
   }, [loadOrders])
 
   const filteredOrders = useMemo(() => {
