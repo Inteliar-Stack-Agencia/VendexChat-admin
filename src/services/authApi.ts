@@ -121,13 +121,13 @@ export const authApi = {
     },
 
     register: async (data: { store_name: string; email: string; slug: string; country: string; city: string; phone: string }) => {
-        // Generar password aleatorio - el usuario accederá via magic link
         const randomPassword = crypto.randomUUID() + crypto.randomUUID()
         const { data: authData, error: authError } = await supabase.auth.signUp({
             email: data.email,
             phone: data.phone,
             password: randomPassword,
             options: {
+                emailRedirectTo: `${window.location.origin}/set-password`,
                 data: {
                     name: data.store_name,
                     slug: data.slug,
@@ -141,17 +141,6 @@ export const authApi = {
 
         if (authError) throw authError
         if (!authData.user) throw new Error('No se pudo crear el usuario')
-
-        // Enviar magic link para que el usuario establezca su contraseña
-        await supabase.auth.signInWithOtp({
-            email: data.email,
-            options: {
-                emailRedirectTo: `${window.location.origin}/set-password`,
-            }
-        })
-
-        // Cerrar sesión para que el usuario no entre al dashboard sin verificar email
-        await supabase.auth.signOut()
 
         return {
             token: '',
@@ -195,14 +184,17 @@ export const authApi = {
     signOut: () => supabase.auth.signOut(),
 
     requestPasswordReset: async (email: string) => {
-        const { error } = await supabase.auth.signInWithOtp({
-            email,
-            options: {
-                emailRedirectTo: `${window.location.origin}/dashboard`,
-            }
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+            redirectTo: `${window.location.origin}/set-password`,
         })
         if (error) throw error
-        return { message: 'Se ha enviado un enlace de acceso a tu email' }
+        return { message: 'Se ha enviado un enlace de recuperación a tu email' }
+    },
+
+    setNewPassword: async (newPassword: string) => {
+        const { error } = await supabase.auth.updateUser({ password: newPassword })
+        if (error) throw error
+        return { message: 'Contraseña establecida correctamente' }
     },
 
     changePassword: async (currentPassword: string, newPassword: string) => {
