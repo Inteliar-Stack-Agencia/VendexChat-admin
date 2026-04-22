@@ -39,7 +39,8 @@ export const productsApi = {
     },
 
     get: async (id: string | number) => {
-        const { data, error } = await supabase.from('products').select('*').eq('id', id).single()
+        const storeId = await getStoreId()
+        const { data, error } = await supabase.from('products').select('*').eq('id', id).eq('store_id', storeId).single()
         if (error) throw error
         return data as Product
     },

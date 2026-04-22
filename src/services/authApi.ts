@@ -205,7 +205,16 @@ export const authApi = {
         return { message: 'Se ha enviado un enlace de acceso a tu email' }
     },
 
-    changePassword: async (_currentPassword: string, newPassword: string) => {
+    changePassword: async (currentPassword: string, newPassword: string) => {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user?.email) throw new Error('No hay sesión activa')
+
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+            email: user.email,
+            password: currentPassword
+        })
+        if (signInError) throw new Error('Contraseña actual incorrecta')
+
         const { error } = await supabase.auth.updateUser({ password: newPassword })
         if (error) throw error
         return { message: 'Contraseña cambiada correctamente' }

@@ -37,7 +37,7 @@ const resolveAuthPayload = (response: unknown) => {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [subscription, setSubscription] = useState<Subscription | null>(null)
-  const [token, setToken] = useState<string | null>(localStorage.getItem('vendexchat_token'))
+  const [token, setToken] = useState<string | null>(null)
   const [selectedStoreId, setSelectedStoreId] = useState<string | null>(localStorage.getItem('vendexchat_selected_store'))
   const [storesCount, setStoresCount] = useState<number>(0)
   const [loading, setLoading] = useState(true)
@@ -53,7 +53,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (session && isMounted) {
           const authToken = session.access_token
           setToken(authToken)
-          localStorage.setItem('vendexchat_token', authToken)
 
           try {
             const res = await withTimeout(authApi.me(), 8000, 'authApi.me')
@@ -87,23 +86,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, AUTH_INIT_TIMEOUT)
 
     const { data: { subscription: authListener } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('[AuthContext] Auth Event:', event, !!session)
-
       if (event === 'SIGNED_OUT') {
         resetCoreCache()
         if (isMounted) {
           setUser(null)
           setToken(null)
           setSelectedStoreId(null)
-          localStorage.removeItem('vendexchat_token')
           localStorage.removeItem('vendexchat_selected_store')
           setLoading(false)
         }
       } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
         if (session && isMounted) {
           setToken(session.access_token)
-          localStorage.setItem('vendexchat_token', session.access_token)
-          // No forzamos setLoading(true) aquí para evitar parpadeos si ya estamos cargando
         }
       }
     })
@@ -116,7 +110,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []) // Solo al montar
 
   const selectStore = useCallback((storeId: string) => {
-    console.log('[AuthContext] Selecting store:', storeId)
     localStorage.removeItem('vendexchat_impersonated_store') // Limpiar suplantación al seleccionar manual
     localStorage.setItem('vendexchat_selected_store', storeId)
     setSelectedStoreId(storeId)
@@ -131,7 +124,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error('Token no recibido')
     }
 
-    localStorage.setItem('vendexchat_token', authToken)
     setToken(authToken)
     setUser(payload.user)
 
@@ -142,13 +134,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const register = useCallback(async (data: { store_name: string; email: string; slug: string; country: string; city: string; phone: string }) => {
     await authApi.register(data)
     // No establecer sesión - el usuario debe verificar su email primero
-    // La sesión se creará cuando haga click en el magic link
   }, [])
 
   const logout = useCallback(() => {
     resetCoreCache()
     supabase.auth.signOut().catch((err) => { console.error('[AuthContext] signOut failed:', err) })
-    localStorage.removeItem('vendexchat_token')
     localStorage.removeItem('vendexchat_selected_store')
     setToken(null)
     setUser(null)

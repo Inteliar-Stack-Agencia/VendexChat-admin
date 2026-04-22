@@ -118,10 +118,13 @@ function getGoogleSetupHints(rawMessage: string): GoogleSearchErrorDetails {
   return { setupHints }
 }
 
+const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+
 async function uploadImageFromUrl(imageUrl: string): Promise<string> {
   const res = await fetch(imageUrl)
   if (!res.ok) throw new Error('No se pudo descargar la imagen')
   const blob = await res.blob()
+  if (!ALLOWED_IMAGE_TYPES.includes(blob.type)) throw new Error(`Tipo de archivo no permitido: ${blob.type}`)
   const fileName = `external-${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`
   const filePath = `products/${fileName}`
 

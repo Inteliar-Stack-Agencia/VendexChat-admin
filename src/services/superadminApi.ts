@@ -135,7 +135,7 @@ export const superadminApi = {
 
             const { data: authData, error: authError } = await tempClient.auth.signUp({
                 email: data.email,
-                password: data.password || Math.random().toString(36).slice(-12),
+                password: data.password || Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join('').slice(0, 16),
                 options: {
                     data: {
                         name: data.name,
