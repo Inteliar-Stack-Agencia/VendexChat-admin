@@ -93,29 +93,6 @@ export const superadminApi = {
     },
 
     deleteTenant: async (id: string | number) => {
-        await supabase.from('profiles').update({ store_id: null }).eq('store_id', id)
-
-        const { data: orders } = await supabase.from('orders').select('id').eq('store_id', id)
-        if (orders && orders.length > 0) {
-            const orderIds = orders.map(o => o.id)
-            await supabase.from('order_items').delete().in('order_id', orderIds)
-            await supabase.from('orders').delete().in('id', orderIds)
-        }
-
-        await supabase.from('products').delete().eq('store_id', id)
-        await supabase.from('categories').delete().eq('store_id', id)
-        await supabase.from('subscriptions').delete().eq('store_id', id)
-        await supabase.from('gateways').delete().eq('store_id', id)
-        await supabase.from('coupons').delete().eq('store_id', id)
-
-        try {
-            await supabase.from('sliders').delete().eq('store_id', id)
-            await supabase.from('popups').delete().eq('store_id', id)
-            await supabase.from('crm_contacts').delete().eq('store_id', id)
-        } catch (e) {
-            console.warn('Tablas opcionales no encontradas o sin permisos:', e)
-        }
-
         const { error } = await supabase.from('stores').delete().eq('id', id)
         if (error) throw error
     },
