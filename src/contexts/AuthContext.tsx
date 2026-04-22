@@ -15,7 +15,7 @@ interface AuthContextType {
   token: string | null
   loading: boolean
   login: (email: string, password: string) => Promise<void>
-  register: (data: { store_name: string; email: string; slug: string; country: string; city: string; phone: string }) => Promise<void>
+  register: (data: { store_name: string; email: string; slug: string; country: string; city: string; phone: string; password: string }) => Promise<void>
   logout: () => void
   isAuthenticated: boolean
   isSuperadmin: boolean
@@ -131,9 +131,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSelectedStoreId(null)
   }, [])
 
-  const register = useCallback(async (data: { store_name: string; email: string; slug: string; country: string; city: string; phone: string }) => {
+  const register = useCallback(async (data: { store_name: string; email: string; slug: string; country: string; city: string; phone: string; password: string }) => {
     await authApi.register(data)
-    // No establecer sesión - el usuario debe verificar su email primero
   }, [])
 
   const logout = useCallback(() => {

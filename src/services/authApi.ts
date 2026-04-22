@@ -120,14 +120,13 @@ export const authApi = {
         return allStores as Tenant[]
     },
 
-    register: async (data: { store_name: string; email: string; slug: string; country: string; city: string; phone: string }) => {
-        const randomPassword = crypto.randomUUID() + crypto.randomUUID()
+    register: async (data: { store_name: string; email: string; slug: string; country: string; city: string; phone: string; password: string }) => {
         const { data: authData, error: authError } = await supabase.auth.signUp({
             email: data.email,
             phone: data.phone,
-            password: randomPassword,
+            password: data.password,
             options: {
-                emailRedirectTo: `${window.location.origin}/set-password`,
+                emailRedirectTo: `${window.location.origin}/dashboard`,
                 data: {
                     name: data.store_name,
                     slug: data.slug,

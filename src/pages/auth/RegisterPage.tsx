@@ -1,6 +1,6 @@
 import { useState, FormEvent, useEffect } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { Mail, Zap } from 'lucide-react'
+import { Eye, EyeOff, Mail, Zap } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { Button, Input, Select } from '../../components/common'
 import { showToast } from '../../components/common/Toast'
@@ -35,6 +35,9 @@ export default function RegisterPage() {
   const [country, setCountry] = useState('Argentina')
   const [city, setCity] = useState('')
   const [phone, setPhone] = useState('')
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [slugEdited, setSlugEdited] = useState(false)
   const [acceptTerms, setAcceptTerms] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -69,6 +72,8 @@ export default function RegisterPage() {
     if (!country) newErrors.country = 'Debes seleccionar un país'
     if (!city.trim()) newErrors.city = 'La ciudad es obligatoria'
     if (!phone.trim()) newErrors.phone = 'El teléfono es obligatorio'
+    if (password.length < 8) newErrors.password = 'La contraseña debe tener al menos 8 caracteres'
+    if (password !== confirmPassword) newErrors.confirmPassword = 'Las contraseñas no coinciden'
     if (!acceptTerms) newErrors.terms = 'Debes aceptar los términos y condiciones'
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
@@ -80,7 +85,7 @@ export default function RegisterPage() {
 
     setLoading(true)
     try {
-      await register({ store_name: storeName, email, slug, country, city, phone })
+      await register({ store_name: storeName, email, slug, country, city, phone, password })
       // Persist plan selection so it survives email verification → login flow
       if (pendingPlan) {
         localStorage.setItem('pendingPlan', pendingPlan)
@@ -108,10 +113,10 @@ export default function RegisterPage() {
           </div>
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 text-center space-y-4">
             <p className="text-gray-700">
-              Te enviamos un email a <strong>{email}</strong>
+              Te enviamos un email de confirmación a <strong>{email}</strong>
             </p>
             <p className="text-sm text-gray-500">
-              Hacé click en el enlace del email para establecer tu contraseña y acceder a tu tienda.
+              Hacé click en el enlace del email para confirmar tu cuenta. Después podés iniciar sesión con tu contraseña.
             </p>
             {pendingPlan && (
               <div className="mt-2 p-3 bg-indigo-50 border border-indigo-100 rounded-xl flex items-center gap-2 text-left">
@@ -214,6 +219,42 @@ export default function RegisterPage() {
               onChange={(e) => setEmail(e.target.value)}
               error={errors.email}
               autoComplete="email"
+            />
+
+            <div>
+              <label htmlFor="reg-password" className="block text-sm font-medium text-gray-700 mb-1">
+                Contraseña
+              </label>
+              <div className="relative">
+                <input
+                  id="reg-password"
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="Mínimo 8 caracteres"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="new-password"
+                  className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((p) => !p)}
+                  className="absolute inset-y-0 right-0 px-3 text-gray-500 hover:text-gray-700"
+                  aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+              {errors.password && <p className="mt-1 text-xs text-red-600">{errors.password}</p>}
+            </div>
+
+            <Input
+              label="Confirmar contraseña"
+              type="password"
+              placeholder="Repite tu contraseña"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              error={errors.confirmPassword}
+              autoComplete="new-password"
             />
 
             <label className="flex items-start gap-2 cursor-pointer pt-2">
