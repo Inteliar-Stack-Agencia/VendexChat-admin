@@ -74,13 +74,18 @@ export default function OrdersPage() {
     loadOrders()
   }, [loadOrders])
 
-  // Realtime: recargar pedidos cuando llega uno nuevo desde la tienda
-  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
+  // Ref que siempre apunta a la versión más reciente de loadOrders
+  const loadOrdersRef = useRef(loadOrders)
+  useEffect(() => { loadOrdersRef.current = loadOrders }, [loadOrders])
+
+  // Realtime: suscripción única al montar — no se rehace al cambiar filtros
   useEffect(() => {
     let active = true
+    let channel: ReturnType<typeof supabase.channel> | null = null
+
     getStoreId().then((storeId) => {
       if (!active) return
-      const channel = supabase
+      channel = supabase
         .channel(`orders-store-${storeId}`)
         .on('postgres_changes', {
           event: 'INSERT',
@@ -88,21 +93,17 @@ export default function OrdersPage() {
           table: 'orders',
           filter: `store_id=eq.${storeId}`,
         }, () => {
-          loadOrders()
+          loadOrdersRef.current()
           showToast('success', '🛒 ¡Nuevo pedido recibido!')
         })
         .subscribe()
-      channelRef.current = channel
     }).catch(() => { /* sin sesión activa, sin suscripción */ })
 
     return () => {
       active = false
-      if (channelRef.current) {
-        supabase.removeChannel(channelRef.current)
-        channelRef.current = null
-      }
+      if (channel) supabase.removeChannel(channel)
     }
-  }, [loadOrders])
+  }, []) // Solo al montar — loadOrdersRef se mantiene actualizado sin re-suscribir
 
   const filteredOrders = useMemo(() => {
     const archiveScoped = archiveFilter === 'all'
