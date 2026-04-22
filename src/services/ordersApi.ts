@@ -2,6 +2,20 @@ import { supabase } from '../supabaseClient'
 import { getStoreId } from './coreApi'
 import type { Order, OrderStatus } from '../types'
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const normalizeOrder = (data: any): Order => {
+    const { order_items, ...rest } = data || {}
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const items = (order_items || []).map((it: any) => {
+        const { products, product_name, ...itemRest } = it
+        return {
+            ...itemRest,
+            product_name: product_name || products?.name || 'Producto',
+        }
+    })
+    return { ...rest, items } as Order
+}
+
 export const ordersApi = {
     list: async (params?: { status?: string; page?: number; limit?: number }) => {
         const storeId = await getStoreId()
@@ -36,19 +50,24 @@ export const ordersApi = {
     },
 
     get: async (id: string | number) => {
-        const { data, error } = await supabase.from('orders').select('*, order_items(*)').eq('id', id).single()
+        const { data, error } = await supabase
+            .from('orders')
+            .select('*, order_items(*, products(name))')
+            .eq('id', id)
+            .single()
         if (error) throw error
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { order_items, ...rest } = data as any
-        return { ...rest, items: order_items || [] } as Order
+        return normalizeOrder(data)
     },
 
     updateStatus: async (id: string | number, status: OrderStatus) => {
-        const { data, error } = await supabase.from('orders').update({ status }).eq('id', id).select('*, order_items(*)').single()
+        const { data, error } = await supabase
+            .from('orders')
+            .update({ status })
+            .eq('id', id)
+            .select('*, order_items(*, products(name))')
+            .single()
         if (error) throw error
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { order_items, ...rest } = data as any
-        return { ...rest, items: order_items || [] } as Order
+        return normalizeOrder(data)
     },
 
     updateMetadata: async (id: string | number, metadata: Record<string, unknown>) => {
@@ -56,12 +75,10 @@ export const ordersApi = {
             .from('orders')
             .update({ metadata })
             .eq('id', id)
-            .select('*, order_items(*)')
+            .select('*, order_items(*, products(name))')
             .single()
         if (error) throw error
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { order_items, ...rest } = data as any
-        return { ...rest, items: order_items || [] } as Order
+        return normalizeOrder(data)
     },
 
     create: async (order: {
