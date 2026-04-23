@@ -16,6 +16,7 @@ import {
     ScanLine,
     Camera
 } from 'lucide-react'
+import * as XLSX from 'xlsx'
 import { Card, Button, showToast, Badge } from '../../components/common'
 import PexelsImageSuggestions from '../../components/products/PexelsImageSuggestions'
 import FeatureGuard from '../../components/FeatureGuard'
@@ -113,7 +114,7 @@ export default function AIImporterPage() {
 
         const fileName = file.name.toLowerCase()
         if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
-            showToast('error', 'Excel directo (.xlsx) no compatible. Guardalo como "CSV" y subilo de nuevo.')
+            parseExcel(file)
             return
         }
 
@@ -135,6 +136,83 @@ export default function AIImporterPage() {
             }
         }
         reader.readAsText(file)
+    }
+
+    const parseExcel = (file: File) => {
+        setIsProcessing(true)
+        const reader = new FileReader()
+        reader.onload = (event) => {
+            try {
+                const data = new Uint8Array(event.target?.result as ArrayBuffer)
+                const workbook = XLSX.read(data, { type: 'array' })
+                const sheetName = workbook.SheetNames[0]
+                const sheet = workbook.Sheets[sheetName]
+                const rows: string[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' })
+
+                if (rows.length === 0) {
+                    showToast('error', 'El archivo Excel está vacío.')
+                    setIsProcessing(false)
+                    return
+                }
+
+                const firstRow = rows[0].map(c => String(c).toLowerCase().trim())
+                const hasHeader = firstRow.some(c =>
+                    c.includes('producto') || c.includes('nombre') ||
+                    c.includes('categoria') || c.includes('precio')
+                )
+                const startIndex = hasHeader ? 1 : 0
+
+                let catIdx = 0, nameIdx = 1, priceIdx = 2, descIdx = 3
+                if (hasHeader) {
+                    const ci = firstRow.findIndex(c => c.includes('categoria') || c.includes('categoría'))
+                    const ni = firstRow.findIndex(c => c.includes('producto') || c.includes('nombre'))
+                    const pi = firstRow.findIndex(c => c.includes('precio'))
+                    const di = firstRow.findIndex(c => c.includes('desc'))
+                    if (ci !== -1) catIdx = ci
+                    if (ni !== -1) nameIdx = ni
+                    if (pi !== -1) priceIdx = pi
+                    if (di !== -1) descIdx = di
+                }
+
+                const extracted: TempProduct[] = []
+                for (let i = startIndex; i < rows.length; i++) {
+                    const row = rows[i]
+                    const prodName = String(row[nameIdx] ?? '').trim()
+                    if (!prodName) continue
+
+                    const catName = String(row[catIdx] ?? '').trim()
+                    const rawPrice = String(row[priceIdx] ?? '0').trim()
+                    const desc = String(row[descIdx] ?? '').trim()
+
+                    const category = categories.find(c => c.name.toLowerCase() === catName.toLowerCase())
+                    const normalized = normalizeProductData(prodName, desc)
+                    const price = parseFloat(rawPrice.replace('$', '').replace(/\./g, '').replace(',', '.')) || 0
+
+                    extracted.push({
+                        id: crypto.randomUUID(),
+                        name: normalized.name,
+                        price,
+                        description: normalized.description,
+                        category_id: category?.id || selectedCategoryId,
+                        category_name: category?.name || 'Genérica'
+                    })
+                }
+
+                if (extracted.length > 0) {
+                    setResults(extracted)
+                    setStep(2)
+                    showToast('success', `¡Excel procesado! ${extracted.length} productos listos.`)
+                } else {
+                    showToast('error', 'No se detectaron productos válidos en el Excel.')
+                }
+            } catch (err) {
+                console.error('Excel parse error:', err)
+                showToast('error', 'Error al leer el archivo Excel. Verificá que no esté dañado.')
+            } finally {
+                setIsProcessing(false)
+            }
+        }
+        reader.readAsArrayBuffer(file)
     }
 
     const handleImageScan = async (file: File) => {
