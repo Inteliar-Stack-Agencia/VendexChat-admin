@@ -49,6 +49,7 @@ export default function AIImporterPage() {
     const [isDragging, setIsDragging] = useState(false)
     const [isImageModalOpen, setIsImageModalOpen] = useState(false)
     const [activeProductId, setActiveProductId] = useState<string | null>(null)
+    const [processingStatus, setProcessingStatus] = useState('')
 
     const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -138,55 +139,84 @@ export default function AIImporterPage() {
         reader.readAsText(file)
     }
 
-    const parseExcel = (file: File) => {
+    const parseExcel = async (file: File) => {
         setIsProcessing(true)
+        setProcessingStatus('Leyendo archivo...')
         const reader = new FileReader()
-        reader.onload = (event) => {
+
+        reader.onload = async (event) => {
             try {
                 const data = new Uint8Array(event.target?.result as ArrayBuffer)
                 const workbook = XLSX.read(data, { type: 'array' })
                 const sheetName = workbook.SheetNames[0]
                 const sheet = workbook.Sheets[sheetName]
-                const rows: string[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' })
+                const rows: unknown[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' })
 
-                if (rows.length === 0) {
-                    showToast('error', 'El archivo Excel está vacío.')
-                    setIsProcessing(false)
+                if (rows.length < 2) {
+                    showToast('error', 'El archivo Excel está vacío o solo tiene encabezados.')
                     return
                 }
 
-                const firstRow = rows[0].map(c => String(c).toLowerCase().trim())
-                const hasHeader = firstRow.some(c =>
-                    c.includes('producto') || c.includes('nombre') ||
-                    c.includes('categoria') || c.includes('precio')
-                )
-                const startIndex = hasHeader ? 1 : 0
+                const firstRow = (rows[0] as unknown[]).map(c => String(c).toLowerCase().trim())
+                const nameKeywords = ['producto', 'nombre', 'artículo', 'articulo', 'item', 'name', 'title', 'titulo', 'título']
+                const priceKeywords = ['precio', 'price', 'costo', 'valor', 'importe', 'monto', 'pvp', 'venta']
+                const catKeywords = ['categoria', 'categoría', 'category', 'rubro', 'tipo', 'grupo', 'familia', 'sección', 'seccion']
+                const descKeywords = ['descripcion', 'descripción', 'detalle', 'ingredientes', 'info', 'description', 'observacion', 'nota', 'observaciones']
 
-                let catIdx = 0, nameIdx = 1, priceIdx = 2, descIdx = 3
-                if (hasHeader) {
-                    const ci = firstRow.findIndex(c => c.includes('categoria') || c.includes('categoría'))
-                    const ni = firstRow.findIndex(c => c.includes('producto') || c.includes('nombre'))
-                    const pi = firstRow.findIndex(c => c.includes('precio'))
-                    const di = firstRow.findIndex(c => c.includes('desc'))
-                    if (ci !== -1) catIdx = ci
-                    if (ni !== -1) nameIdx = ni
-                    if (pi !== -1) priceIdx = pi
-                    if (di !== -1) descIdx = di
+                const headerConfidence = firstRow.filter(c =>
+                    nameKeywords.some(k => c.includes(k)) || priceKeywords.some(k => c.includes(k))
+                ).length
+
+                let nameIdx: number | null = null
+                let priceIdx: number | null = null
+                let catIdx: number | null = null
+                let descIdx: number | null = null
+                let startIndex = 0
+
+                if (headerConfidence >= 1) {
+                    startIndex = 1
+                    nameIdx = firstRow.findIndex(c => nameKeywords.some(k => c.includes(k)))
+                    priceIdx = firstRow.findIndex(c => priceKeywords.some(k => c.includes(k)))
+                    catIdx = firstRow.findIndex(c => catKeywords.some(k => c.includes(k)))
+                    descIdx = firstRow.findIndex(c => descKeywords.some(k => c.includes(k)))
+                    if (nameIdx === -1) nameIdx = null
+                    if (priceIdx === -1) priceIdx = null
+                    if (catIdx === -1) catIdx = null
+                    if (descIdx === -1) descIdx = null
                 }
 
+                if (nameIdx === null || priceIdx === null) {
+                    setProcessingStatus('Detectando columnas con IA...')
+                    const mapping = await detectExcelColumnsWithAI(rows)
+                    if (mapping) {
+                        nameIdx = mapping.nameCol
+                        priceIdx = mapping.priceCol
+                        catIdx = mapping.catCol
+                        descIdx = mapping.descCol
+                        startIndex = mapping.startRow
+                    }
+                }
+
+                if (nameIdx === null) {
+                    showToast('error', 'No se pudo identificar la columna de nombres. Revisá el archivo.')
+                    return
+                }
+
+                setProcessingStatus('Extrayendo productos...')
                 const extracted: TempProduct[] = []
                 for (let i = startIndex; i < rows.length; i++) {
-                    const row = rows[i]
+                    const row = rows[i] as unknown[]
                     const prodName = String(row[nameIdx] ?? '').trim()
                     if (!prodName) continue
 
-                    const catName = String(row[catIdx] ?? '').trim()
-                    const rawPrice = String(row[priceIdx] ?? '0').trim()
-                    const desc = String(row[descIdx] ?? '').trim()
+                    const catName = catIdx !== null ? String(row[catIdx] ?? '').trim() : ''
+                    const rawPrice = priceIdx !== null ? String(row[priceIdx] ?? '0').trim() : '0'
+                    const desc = descIdx !== null ? String(row[descIdx] ?? '').trim() : ''
 
                     const category = categories.find(c => c.name.toLowerCase() === catName.toLowerCase())
                     const normalized = normalizeProductData(prodName, desc)
-                    const price = parseFloat(rawPrice.replace('$', '').replace(/\./g, '').replace(',', '.')) || 0
+                    const cleanedPrice = rawPrice.replace(/[^\d.,]/g, '').replace(/\.(?=.*\.)/g, '').replace(',', '.')
+                    const price = parseFloat(cleanedPrice) || 0
 
                     extracted.push({
                         id: crypto.randomUUID(),
@@ -210,10 +240,51 @@ export default function AIImporterPage() {
                 showToast('error', 'Error al leer el archivo Excel. Verificá que no esté dañado.')
             } finally {
                 setIsProcessing(false)
+                setProcessingStatus('')
             }
         }
         reader.readAsArrayBuffer(file)
     }
+
+    const detectExcelColumnsWithAI = async (rows: unknown[][]): Promise<{
+        nameCol: number | null
+        priceCol: number | null
+        catCol: number | null
+        descCol: number | null
+        startRow: number
+    } | null> => {
+        try {
+            const sampleRows = rows.slice(0, 7)
+            const tableText = sampleRows.map((row, i) => {
+                const cells = (row as unknown[]).map((c, j) => `[${j}]: ${String(c)}`)
+                return `Fila ${i}: ${cells.join('  |  ')}`
+            }).join('\n')
+
+            const prompt = `Analizá este fragmento de un Excel de productos comerciales:
+
+${tableText}
+
+Identificá qué índice de columna (0-based) contiene cada uno de estos campos. Ignorá columnas irrelevantes (stock, código, IVA, barcode, etc.).
+Si no existe esa columna, usá null.
+La fila 0 puede ser encabezado (startRow=1) o datos directos (startRow=0).
+
+Devolvé SOLO este JSON sin texto adicional:
+{"nameCol": número_o_null, "priceCol": número_o_null, "catCol": número_o_null, "descCol": número_o_null, "startRow": 0_o_1}`
+
+            const result = await callAI([
+                { role: 'system', content: 'Sos un experto en análisis de hojas de cálculo de productos. Solo devolvés JSON válido, sin texto adicional.' },
+                { role: 'user', content: prompt }
+            ], 'vip')
+
+            const jsonMatch = result.match(/\{[\s\S]*\}/)
+            if (!jsonMatch) return null
+            return JSON.parse(jsonMatch[0])
+        } catch (err) {
+            console.error('AI column detection failed:', err)
+            return null
+        }
+    }
+
 
     const handleImageScan = async (file: File) => {
         setIsScanning(true)
@@ -555,7 +626,7 @@ export default function AIImporterPage() {
                                         {isProcessing ? (
                                             <>
                                                 <Loader2 className="w-5 h-5 animate-spin" />
-                                                Analizando Datos...
+                                                {processingStatus || 'Analizando Datos...'}
                                             </>
                                         ) : (
                                             <>
