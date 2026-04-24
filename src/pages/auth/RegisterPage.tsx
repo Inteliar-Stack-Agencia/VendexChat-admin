@@ -1,6 +1,6 @@
 import { useState, FormEvent, useEffect } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { Eye, EyeOff, Mail, Zap } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
+import { Mail, CheckCircle } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { Button, Input, Select } from '../../components/common'
 import { showToast } from '../../components/common/Toast'
@@ -22,22 +22,12 @@ const COUNTRIES = [
   { value: 'Otro', label: 'Otro (Especificar)' },
 ]
 
-const PLAN_LABELS: Record<string, string> = {
-  pro: 'PRO — USD $13.99/mes',
-  vip: 'VIP — USD $19.99/mes',
-  ultra: 'ULTRA — Custom',
-}
-
 export default function RegisterPage() {
   const [storeName, setStoreName] = useState('')
   const [email, setEmail] = useState('')
   const [slug, setSlug] = useState('')
   const [country, setCountry] = useState('Argentina')
   const [city, setCity] = useState('')
-  const [phone, setPhone] = useState('')
-  const [password, setPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
-  const [showPassword, setShowPassword] = useState(false)
   const [slugEdited, setSlugEdited] = useState(false)
   const [acceptTerms, setAcceptTerms] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -46,10 +36,6 @@ export default function RegisterPage() {
 
   const { register, user } = useAuth()
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
-
-  const pendingPlan = searchParams.get('plan') || ''
-  const pendingCycle = (searchParams.get('cycle') || 'monthly') as 'monthly' | 'annual'
 
   // Auto-generar slug cuando cambia el nombre de la tienda
   useEffect(() => {
@@ -58,8 +44,8 @@ export default function RegisterPage() {
     }
   }, [storeName, slugEdited])
 
-  // Redirigir si ya está autenticado (pero NO si acabamos de registrar)
-  if (user && !registered) {
+  // Redirigir si ya está autenticado
+  if (user) {
     navigate('/dashboard', { replace: true })
     return null
   }
@@ -71,9 +57,6 @@ export default function RegisterPage() {
     if (!slug.trim()) newErrors.slug = 'El slug es obligatorio'
     if (!country) newErrors.country = 'Debes seleccionar un país'
     if (!city.trim()) newErrors.city = 'La ciudad es obligatoria'
-    if (!phone.trim()) newErrors.phone = 'El teléfono es obligatorio'
-    if (password.length < 8) newErrors.password = 'La contraseña debe tener al menos 8 caracteres'
-    if (password !== confirmPassword) newErrors.confirmPassword = 'Las contraseñas no coinciden'
     if (!acceptTerms) newErrors.terms = 'Debes aceptar los términos y condiciones'
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
@@ -85,12 +68,7 @@ export default function RegisterPage() {
 
     setLoading(true)
     try {
-      await register({ store_name: storeName, email, slug, country, city, phone, password })
-      // Persist plan selection so it survives email verification → login flow
-      if (pendingPlan) {
-        localStorage.setItem('pendingPlan', pendingPlan)
-        localStorage.setItem('pendingCycle', pendingCycle)
-      }
+      await register({ store_name: storeName, email, slug, country, city })
       setRegistered(true)
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error al crear la cuenta'
@@ -103,31 +81,23 @@ export default function RegisterPage() {
   if (registered) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="w-full max-w-md">
-          <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-emerald-600 rounded-2xl mb-4">
-              <Mail className="w-8 h-8 text-white" />
+        <div className="w-full max-w-md text-center">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-emerald-100 rounded-full mb-4">
+              <CheckCircle className="w-8 h-8 text-emerald-600" />
             </div>
-            <h1 className="text-2xl font-bold text-gray-900">¡Tienda creada!</h1>
-            <p className="text-gray-500 mt-1">Solo falta un paso más</p>
-          </div>
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 text-center space-y-4">
-            <p className="text-gray-700">
-              Te enviamos un email de confirmación a <strong>{email}</strong>
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">¡Tienda creada!</h1>
+            <p className="text-gray-500 mb-6">
+              Enviamos un email a <strong className="text-gray-900">{email}</strong> para que establezcas tu contraseña.
             </p>
-            <p className="text-sm text-gray-500">
-              Hacé click en el enlace del email para confirmar tu cuenta. Después podés iniciar sesión con tu contraseña.
-            </p>
-            {pendingPlan && (
-              <div className="mt-2 p-3 bg-indigo-50 border border-indigo-100 rounded-xl flex items-center gap-2 text-left">
-                <Zap className="w-4 h-4 text-indigo-600 shrink-0" />
-                <p className="text-xs text-indigo-700 font-semibold">
-                  Al ingresar serás redirigido automáticamente para activar tu plan <strong>{PLAN_LABELS[pendingPlan] ?? pendingPlan.toUpperCase()}</strong>.
-                </p>
+            <div className="bg-emerald-50 rounded-lg p-4 mb-6">
+              <div className="flex items-center gap-2 text-emerald-700 text-sm">
+                <Mail className="w-4 h-4 shrink-0" />
+                <span>Revisá tu bandeja de entrada (y spam) para continuar.</span>
               </div>
-            )}
-            <Link to="/login" className="block text-sm text-emerald-600 hover:text-emerald-700 font-medium">
-              Volver al login
+            </div>
+            <Link to="/login" className="text-emerald-600 hover:text-emerald-700 font-medium text-sm">
+              Ir a iniciar sesión
             </Link>
           </div>
         </div>
@@ -144,20 +114,6 @@ export default function RegisterPage() {
           <h1 className="text-2xl font-bold text-gray-900">Crear mi tienda</h1>
           <p className="text-gray-500 mt-1">Registra tu tienda en VENDExChat</p>
         </div>
-
-        {/* Plan banner si viene con plan seleccionado */}
-        {pendingPlan && (
-          <div className="mb-4 p-4 bg-indigo-600 rounded-xl flex items-center gap-3 text-white shadow-lg shadow-indigo-100">
-            <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center shrink-0">
-              <Zap className="w-4 h-4" />
-            </div>
-            <div>
-              <p className="text-xs font-black uppercase tracking-widest opacity-80">Plan seleccionado</p>
-              <p className="font-bold text-sm">{PLAN_LABELS[pendingPlan] ?? pendingPlan.toUpperCase()}</p>
-              <p className="text-xs opacity-70">Se activará automáticamente después de confirmar tu cuenta.</p>
-            </div>
-          </div>
-        )}
 
         {/* Formulario */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
@@ -202,16 +158,6 @@ export default function RegisterPage() {
             </div>
 
             <Input
-              label="Teléfono (WhatsApp)"
-              type="tel"
-              placeholder="Ej: +54 11 1234-5678"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              error={errors.phone}
-              autoComplete="tel"
-            />
-
-            <Input
               label="Email"
               type="email"
               placeholder="tu@email.com"
@@ -221,41 +167,11 @@ export default function RegisterPage() {
               autoComplete="email"
             />
 
-            <div>
-              <label htmlFor="reg-password" className="block text-sm font-medium text-gray-700 mb-1">
-                Contraseña
-              </label>
-              <div className="relative">
-                <input
-                  id="reg-password"
-                  type={showPassword ? 'text' : 'password'}
-                  placeholder="Mínimo 8 caracteres"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  autoComplete="new-password"
-                  className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((p) => !p)}
-                  className="absolute inset-y-0 right-0 px-3 text-gray-500 hover:text-gray-700"
-                  aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-              {errors.password && <p className="mt-1 text-xs text-red-600">{errors.password}</p>}
+            <div className="bg-blue-50 rounded-lg p-3">
+              <p className="text-xs text-blue-700">
+                Te enviaremos un email para que establezcas tu contraseña de acceso.
+              </p>
             </div>
-
-            <Input
-              label="Confirmar contraseña"
-              type="password"
-              placeholder="Repite tu contraseña"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              error={errors.confirmPassword}
-              autoComplete="new-password"
-            />
 
             <label className="flex items-start gap-2 cursor-pointer pt-2">
               <input
@@ -266,19 +182,15 @@ export default function RegisterPage() {
               />
               <span className="text-sm text-gray-600">
                 Acepto los{' '}
-                <Link to="/terms" target="_blank" className="text-emerald-600 hover:underline">
-                  Términos y Condiciones
-                </Link>
-                {' '}y la{' '}
-                <Link to="/privacy" target="_blank" className="text-emerald-600 hover:underline">
-                  Política de Privacidad
+                <Link to="/legal/terms" className="text-emerald-600 hover:underline">
+                  términos y condiciones
                 </Link>
               </span>
             </label>
             {errors.terms && <p className="text-xs text-red-600">{errors.terms}</p>}
 
             <Button type="submit" loading={loading} className="w-full h-12 text-base">
-              {pendingPlan ? `Crear tienda y activar Plan ${pendingPlan.toUpperCase()}` : 'Crear mi tienda'}
+              Crear mi tienda
             </Button>
           </form>
 

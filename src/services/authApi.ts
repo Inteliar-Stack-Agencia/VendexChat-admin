@@ -120,19 +120,20 @@ export const authApi = {
         return allStores as Tenant[]
     },
 
-    register: async (data: { store_name: string; email: string; slug: string; country: string; city: string; phone: string; password: string }) => {
+    register: async (data: { store_name: string; email: string; slug: string; country: string; city: string }) => {
+        // Generar contraseña temporal segura (el usuario la cambiará por email)
+        const tempPassword = crypto.randomUUID() + 'A1!'
+
         const { data: authData, error: authError } = await supabase.auth.signUp({
             email: data.email,
-            phone: data.phone,
-            password: data.password,
+            password: tempPassword,
             options: {
-                emailRedirectTo: `${window.location.origin}/dashboard`,
                 data: {
                     name: data.store_name,
                     slug: data.slug,
                     country: data.country,
                     city: data.city,
-                    whatsapp: data.phone,
+                    whatsapp: '',
                     role: 'client'
                 }
             }
@@ -140,6 +141,14 @@ export const authApi = {
 
         if (authError) throw authError
         if (!authData.user) throw new Error('No se pudo crear el usuario')
+
+        // Enviar email para que el usuario establezca su propia contraseña
+        await supabase.auth.resetPasswordForEmail(data.email, {
+            redirectTo: `${window.location.origin}/reset-password`,
+        })
+
+        // Cerrar la sesión temporal (el usuario debe establecer su contraseña primero)
+        await supabase.auth.signOut()
 
         return {
             token: '',
@@ -184,28 +193,19 @@ export const authApi = {
 
     requestPasswordReset: async (email: string) => {
         const { error } = await supabase.auth.resetPasswordForEmail(email, {
-            redirectTo: `${window.location.origin}/set-password`,
+            redirectTo: `${window.location.origin}/reset-password`,
         })
         if (error) throw error
-        return { message: 'Se ha enviado un enlace de recuperación a tu email' }
+        return { message: 'Se ha enviado un correo para restablecer tu contraseña' }
     },
 
-    setNewPassword: async (newPassword: string) => {
-        const { error } = await supabase.auth.updateUser({ password: newPassword })
+    resetPassword: async (_token: string, password: string) => {
+        const { error } = await supabase.auth.updateUser({ password })
         if (error) throw error
-        return { message: 'Contraseña establecida correctamente' }
+        return { message: 'Contraseña actualizada correctamente' }
     },
 
-    changePassword: async (currentPassword: string, newPassword: string) => {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user?.email) throw new Error('No hay sesión activa')
-
-        const { error: signInError } = await supabase.auth.signInWithPassword({
-            email: user.email,
-            password: currentPassword
-        })
-        if (signInError) throw new Error('Contraseña actual incorrecta')
-
+    changePassword: async (_currentPassword: string, newPassword: string) => {
         const { error } = await supabase.auth.updateUser({ password: newPassword })
         if (error) throw error
         return { message: 'Contraseña cambiada correctamente' }

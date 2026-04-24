@@ -1,23 +1,6 @@
 import { supabase } from '../supabaseClient'
 import type { Tenant, RecentActivity, GatewayConfig, GlobalStats, StoreStatEntry, Subscription } from '../types'
 
-interface ProfileCreateInput {
-    id: string
-    email: string
-    name: string
-    role: 'client' | 'empresa' | 'superadmin'
-    store_id?: string | null
-    company_filter?: string | null
-}
-
-interface ProfileUpdateInput {
-    name?: string
-    role?: 'client' | 'empresa' | 'superadmin'
-    store_id?: string | null
-    company_filter?: string | null
-    is_active?: boolean
-}
-
 export const superadminApi = {
     overview: async (): Promise<{
         total_stores: number;
@@ -48,7 +31,7 @@ export const superadminApi = {
             .eq('status', 'active')
 
         const mrr = activeSubs?.reduce((acc, sub) => {
-            const price = sub.plan_type === 'pro' ? 13.99 : sub.plan_type === 'vip' ? 19.99 : sub.plan_type === 'ultra' ? 25 : 0
+            const price = sub.plan_type === 'premium' ? 35 : sub.plan_type === 'pro' ? 15 : sub.plan_type === 'vip' ? 25 : 0
             return acc + price
         }, 0) || 0
 
@@ -110,6 +93,29 @@ export const superadminApi = {
     },
 
     deleteTenant: async (id: string | number) => {
+        await supabase.from('profiles').update({ store_id: null }).eq('store_id', id)
+
+        const { data: orders } = await supabase.from('orders').select('id').eq('store_id', id)
+        if (orders && orders.length > 0) {
+            const orderIds = orders.map(o => o.id)
+            await supabase.from('order_items').delete().in('order_id', orderIds)
+            await supabase.from('orders').delete().in('id', orderIds)
+        }
+
+        await supabase.from('products').delete().eq('store_id', id)
+        await supabase.from('categories').delete().eq('store_id', id)
+        await supabase.from('subscriptions').delete().eq('store_id', id)
+        await supabase.from('gateways').delete().eq('store_id', id)
+        await supabase.from('coupons').delete().eq('store_id', id)
+
+        try {
+            await supabase.from('sliders').delete().eq('store_id', id)
+            await supabase.from('popups').delete().eq('store_id', id)
+            await supabase.from('crm_contacts').delete().eq('store_id', id)
+        } catch (e) {
+            console.warn('Tablas opcionales no encontradas o sin permisos:', e)
+        }
+
         const { error } = await supabase.from('stores').delete().eq('id', id)
         if (error) throw error
     },
@@ -129,7 +135,7 @@ export const superadminApi = {
 
             const { data: authData, error: authError } = await tempClient.auth.signUp({
                 email: data.email,
-                password: data.password || Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join('').slice(0, 16),
+                password: data.password || Math.random().toString(36).slice(-12),
                 options: {
                     data: {
                         name: data.name,
@@ -168,21 +174,20 @@ export const superadminApi = {
                 name: data.name,
                 slug: data.slug,
                 country: data.country,
-                is_active: data.is_active ?? true,
-                ...(authUserId ? { owner_id: authUserId } : {})
+                is_active: data.is_active ?? true
             }).select().single()
             if (insertError) throw insertError
-            storeId = newStore.id
+            return newStore as Tenant
         }
 
         const { data: finalStore } = await supabase.from('stores').select('*').eq('id', storeId).single()
 
         const trialEndDate = new Date()
-        trialEndDate.setDate(trialEndDate.getDate() + 15)
+        trialEndDate.setDate(trialEndDate.getDate() + 25)
 
         await supabase.from('subscriptions').upsert({
             store_id: storeId,
-            plan_type: data.plan_type || 'ultra',
+            plan_type: data.plan_type || 'pro',
             status: data.plan_type ? 'active' : 'trial',
             current_period_end: trialEndDate.toISOString(),
             billing_cycle: 'monthly'
@@ -191,11 +196,11 @@ export const superadminApi = {
         await supabase.from('stores').update({
             metadata: {
                 ...(finalStore?.metadata || {}),
-                plan_type: data.plan_type || 'ultra'
+                plan_type: data.plan_type || 'pro'
             }
         }).eq('id', storeId)
 
-        return { ...finalStore, metadata: { ...finalStore?.metadata, plan_type: data.plan_type || 'ultra' } } as Tenant
+        return { ...finalStore, metadata: { ...finalStore?.metadata, plan_type: data.plan_type || 'pro' } } as Tenant
     },
 
     listUsers: async () => {
@@ -207,13 +212,13 @@ export const superadminApi = {
         }))
     },
 
-    createUser: async (data: ProfileCreateInput) => {
+    createUser: async (data: Record<string, unknown>) => {
         const { data: newUser, error } = await supabase.from('profiles').insert(data).select().single()
         if (error) throw error
         return newUser
     },
 
-    updateUser: async (id: string | number, data: ProfileUpdateInput) => {
+    updateUser: async (id: string | number, data: Record<string, unknown>) => {
         const { data: updated, error } = await supabase.from('profiles').update(data).eq('id', id).select().single()
         if (error) throw error
         return updated
@@ -222,23 +227,6 @@ export const superadminApi = {
     deleteUser: async (id: string | number) => {
         const { error } = await supabase.from('profiles').delete().eq('id', id)
         if (error) throw error
-
-        // Also remove the Supabase Auth user so they can't keep logging in
-        try {
-            const { data: { session } } = await supabase.auth.getSession()
-            if (session?.access_token) {
-                await fetch('/api/delete-auth-user', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        Authorization: `Bearer ${session.access_token}`
-                    },
-                    body: JSON.stringify({ userId: String(id) })
-                })
-            }
-        } catch (e) {
-            console.warn('No se pudo eliminar el usuario de Auth (continuando):', e)
-        }
     },
 
     listGlobalOrders: async (params?: { page?: number; limit?: number }) => {
@@ -308,8 +296,6 @@ export const superadminApi = {
         const { data: storeStats } = await supabase
             .from('orders')
             .select('total, store_id, stores(name)')
-            .gte('created_at', sevenDaysAgo.toISOString())
-            .limit(5000)
 
         const storeMap: Record<string, StoreStatEntry> = {}
         storeStats?.forEach((o) => {
@@ -361,22 +347,13 @@ export const superadminApi = {
     },
 
     inviteStaff: async (email: string) => {
-        const { data: { session } } = await supabase.auth.getSession()
-        if (!session) throw new Error('No hay sesión activa')
-
-        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string
-        const res = await fetch(`${supabaseUrl}/functions/v1/invite-staff`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${session.access_token}`,
-            },
-            body: JSON.stringify({ email }),
+        const { data, error } = await supabase.functions.invoke('invite-staff', {
+            body: { email },
         })
 
-        const json = await res.json()
-        if (!res.ok) throw new Error(json.error ?? 'Error al promover usuario')
-        return json
+        if (error) throw new Error(error.message)
+        if (data?.error) throw new Error(data.error)
+        return data
     },
 
     connectGateway: async (provider: string, config: GatewayConfig, isMaster: boolean = false) => {
@@ -396,12 +373,6 @@ export const superadminApi = {
 
         if (error) throw error
         return data
-    },
-
-    deleteGateway: async (id: string) => {
-        const { error } = await supabase.from('gateways').delete().eq('id', id)
-        if (error) throw error
-        return { success: true }
     },
 
     listGateways: async (isMaster: boolean = false) => {
@@ -452,15 +423,13 @@ export const superadminApi = {
     listSubscriptions: async () => {
         const { data, error } = await supabase
             .from('subscriptions')
-            .select('*, stores(name, country, city)')
+            .select('*, stores(name)')
             .order('updated_at', { ascending: false })
 
         if (error) throw error
         return (data || []).map(s => ({
             ...s,
-            store_name: (s as unknown as { stores?: { name: string; country?: string; city?: string } }).stores?.name,
-            store_country: (s as unknown as { stores?: { name: string; country?: string; city?: string } }).stores?.country,
-            store_city: (s as unknown as { stores?: { name: string; country?: string; city?: string } }).stores?.city,
+            store_name: (s as unknown as { stores?: { name: string } }).stores?.name
         }))
     },
 
@@ -504,12 +473,10 @@ export const superadminApi = {
             plan_type: sourceStore.metadata?.plan_type || 'free'
         })
 
-        // Copy store settings from source. DO NOT copy owner_id — if there's a
-        // UNIQUE constraint on owner_id the entire UPDATE silently fails, leaving
-        // the cloned store empty (no logo, no description, no schedule, etc.).
-        const { error: updateError } = await supabase
+        await supabase
             .from('stores')
             .update({
+                owner_id: sourceStore.owner_id,
                 email: data.email || sourceStore.email,
                 logo_url: sourceStore.logo_url,
                 banner_url: sourceStore.banner_url,
@@ -521,14 +488,9 @@ export const superadminApi = {
                 physical_schedule: sourceStore.physical_schedule,
                 online_schedule: sourceStore.online_schedule,
                 delivery_cost: sourceStore.delivery_cost,
-                delivery_info: sourceStore.delivery_info,
-                is_active: true
+                delivery_info: sourceStore.delivery_info
             })
             .eq('id', newStore.id)
-
-        if (updateError) {
-            console.error('[cloneTenant] Failed to copy store settings:', updateError.message)
-        }
 
         const { data: categories } = await supabase
             .from('categories')
@@ -562,8 +524,7 @@ export const superadminApi = {
                             price: p.price,
                             stock: p.stock,
                             unlimited_stock: p.unlimited_stock,
-                            // Strip base64 images — they cause 76MB+ responses in get_catalog
-                            image_url: p.image_url?.startsWith('data:') ? null : p.image_url,
+                            image_url: p.image_url,
                             is_active: p.is_active,
                             is_featured: p.is_featured,
                             sort_order: p.sort_order
@@ -585,14 +546,14 @@ export const superadminApi = {
         if (sourceSub) {
             await supabase
                 .from('subscriptions')
-                .upsert({
+                .insert({
                     store_id: newStore.id,
                     plan_type: sourceSub.plan_type,
                     status: sourceSub.status,
                     current_period_start: sourceSub.current_period_start,
                     current_period_end: sourceSub.current_period_end,
                     billing_cycle: sourceSub.billing_cycle,
-                }, { onConflict: 'store_id' })
+                })
         }
 
         return newStore

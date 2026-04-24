@@ -3,19 +3,14 @@ import { createContext, useContext, useState, useEffect, ReactNode, useCallback 
 import { User } from '../types'
 import { authApi, billingApi } from '../services/api'
 import { supabase } from '../supabaseClient'
-import { resetCoreCache } from '../services/coreApi'
-import { withTimeout } from '../utils/timeout'
 import { Subscription } from '../types'
-
-// Safety timeout: if auth init takes longer than this, stop loading to unblock the UI
-const AUTH_INIT_TIMEOUT = 10000
 
 interface AuthContextType {
   user: User | null
   token: string | null
   loading: boolean
   login: (email: string, password: string) => Promise<void>
-  register: (data: { store_name: string; email: string; slug: string; country: string; city: string; phone: string; password: string }) => Promise<void>
+  register: (data: { store_name: string; email: string; slug: string; country: string; city: string }) => Promise<void>
   logout: () => void
   isAuthenticated: boolean
   isSuperadmin: boolean
@@ -37,7 +32,7 @@ const resolveAuthPayload = (response: unknown) => {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [subscription, setSubscription] = useState<Subscription | null>(null)
-  const [token, setToken] = useState<string | null>(null)
+  const [token, setToken] = useState<string | null>(localStorage.getItem('vendexchat_token'))
   const [selectedStoreId, setSelectedStoreId] = useState<string | null>(localStorage.getItem('vendexchat_selected_store'))
   const [storesCount, setStoresCount] = useState<number>(0)
   const [loading, setLoading] = useState(true)
@@ -53,9 +48,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (session && isMounted) {
           const authToken = session.access_token
           setToken(authToken)
+          localStorage.setItem('vendexchat_token', authToken)
 
           try {
-            const res = await withTimeout(authApi.me(), 8000, 'authApi.me')
+            const res = await authApi.me()
             if (isMounted) setUser(res.user)
           } catch (meError) {
             console.error('[AuthContext] Profile load failed during init:', meError)
@@ -63,8 +59,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (isMounted) {
               setUser({
                 ...session.user,
-                role: (session.user.user_metadata as Record<string, unknown>)?.role as string || 'client'
-              } as unknown as User)
+                role: (session.user.user_metadata as any)?.role || 'client'
+              } as any)
             }
           }
         }
@@ -77,39 +73,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     initAuth()
 
-    // Safety net: if initAuth hangs (bad network, Supabase down), force loading=false
-    const safetyTimeout = setTimeout(() => {
-      if (isMounted) {
-        console.warn('[AuthContext] Safety timeout reached — forcing loading=false')
-        setLoading(false)
-      }
-    }, AUTH_INIT_TIMEOUT)
-
     const { data: { subscription: authListener } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('[AuthContext] Auth Event:', event, !!session)
+
       if (event === 'SIGNED_OUT') {
-        resetCoreCache()
         if (isMounted) {
           setUser(null)
           setToken(null)
           setSelectedStoreId(null)
+          localStorage.removeItem('vendexchat_token')
           localStorage.removeItem('vendexchat_selected_store')
           setLoading(false)
         }
       } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
         if (session && isMounted) {
           setToken(session.access_token)
+          localStorage.setItem('vendexchat_token', session.access_token)
+          // No forzamos setLoading(true) aquí para evitar parpadeos si ya estamos cargando
         }
       }
     })
 
     return () => {
       isMounted = false
-      clearTimeout(safetyTimeout)
       authListener.unsubscribe()
     }
   }, []) // Solo al montar
 
   const selectStore = useCallback((storeId: string) => {
+    console.log('[AuthContext] Selecting store:', storeId)
     localStorage.removeItem('vendexchat_impersonated_store') // Limpiar suplantación al seleccionar manual
     localStorage.setItem('vendexchat_selected_store', storeId)
     setSelectedStoreId(storeId)
@@ -124,6 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error('Token no recibido')
     }
 
+    localStorage.setItem('vendexchat_token', authToken)
     setToken(authToken)
     setUser(payload.user)
 
@@ -131,13 +124,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSelectedStoreId(null)
   }, [])
 
-  const register = useCallback(async (data: { store_name: string; email: string; slug: string; country: string; city: string; phone: string; password: string }) => {
+  const register = useCallback(async (data: { store_name: string; email: string; slug: string; country: string; city: string }) => {
     await authApi.register(data)
+    // No se inicia sesión: el usuario debe establecer su contraseña desde el email
   }, [])
 
   const logout = useCallback(() => {
-    resetCoreCache()
     supabase.auth.signOut().catch((err) => { console.error('[AuthContext] signOut failed:', err) })
+    localStorage.removeItem('vendexchat_token')
     localStorage.removeItem('vendexchat_selected_store')
     setToken(null)
     setUser(null)
@@ -148,7 +142,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refreshSubscription = useCallback(async () => {
     if (!user || user.role === 'superadmin') return
     try {
-      const sub = await withTimeout(billingApi.getCurrentSubscription(), 8000, 'getCurrentSubscription')
+      const sub = await billingApi.getCurrentSubscription()
       setSubscription(sub)
     } catch (err) {
       console.error('Error refreshing subscription:', err)
@@ -160,7 +154,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       refreshSubscription()
 
       // También cargar conteo de tiendas para la UI
-      withTimeout(authApi.getMyStores(), 8000, 'getMyStores').then(stores => {
+      authApi.getMyStores().then(stores => {
         setStoresCount(stores.length)
       }).catch(err => console.error('Error fetching stores count:', err))
     }

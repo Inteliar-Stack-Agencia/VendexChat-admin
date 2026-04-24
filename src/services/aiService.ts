@@ -1,6 +1,6 @@
 import { supabase } from '../supabaseClient'
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string
+const GROQ_MODEL = 'llama-3.3-70b-versatile'
 
 type PlanType = 'free' | 'pro' | 'vip' | 'ultra'
 
@@ -29,22 +29,11 @@ export async function callAI(
         )
         : messages
 
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) throw new Error('No hay sesión activa')
-
-    const response = await fetch(`${SUPABASE_URL}/functions/v1/groq-proxy`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({ messages: enhancedMessages, temperature: 0.3 }),
+    const { data, error } = await supabase.functions.invoke('ai-proxy', {
+        body: { messages: enhancedMessages, model: GROQ_MODEL },
     })
 
-    if (!response.ok) {
-        const err = await response.json().catch(() => ({ error: response.statusText }))
-        throw new Error(err.error ?? 'Error en groq-proxy')
-    }
-    const data = await response.json()
-    return data.choices?.[0]?.message?.content ?? ''
+    if (error) throw new Error(`AI error: ${error.message}`)
+
+    return data?.choices?.[0]?.message?.content ?? ''
 }
