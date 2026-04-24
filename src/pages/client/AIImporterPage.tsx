@@ -14,7 +14,9 @@ import {
     Upload,
     Sparkles,
     ScanLine,
-    Camera
+    Camera,
+    Clipboard,
+    X
 } from 'lucide-react'
 import { Card, Button, showToast, Badge } from '../../components/common'
 import PexelsImageSuggestions from '../../components/products/PexelsImageSuggestions'
@@ -74,6 +76,19 @@ export default function AIImporterPage() {
     useEffect(() => {
         loadCategories()
     }, [])
+
+    const lineCount = rawText.trim()
+        ? rawText.split('\n').filter(l => l.trim().length > 2).length
+        : 0
+
+    const handlePasteFromClipboard = async () => {
+        try {
+            const text = await navigator.clipboard.readText()
+            if (text) setRawText(text)
+        } catch {
+            showToast('error', 'No se pudo acceder al portapapeles. Pegá manualmente con Ctrl+V.')
+        }
+    }
 
     // Generar y descargar plantilla CSV
     const downloadTemplate = () => {
@@ -449,17 +464,46 @@ export default function AIImporterPage() {
                                 </div>
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <div className="space-y-4">
-                                        <div className="flex items-center gap-2 mb-2">
-                                            <div className="w-1.5 h-4 bg-indigo-500 rounded-full" />
-                                            <h4 className="text-xs font-black text-slate-900 uppercase tracking-widest">Opción 1: Pegar Texto</h4>
+                                    <div className="space-y-3">
+                                        <div className="flex items-center justify-between mb-1">
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-1.5 h-4 bg-indigo-500 rounded-full" />
+                                                <h4 className="text-xs font-black text-slate-900 uppercase tracking-widest">Opción 1: Pegar Texto</h4>
+                                            </div>
+                                            <div className="flex items-center gap-1.5">
+                                                {lineCount > 0 && (
+                                                    <span className="text-[9px] font-black text-indigo-600 bg-indigo-50 border border-indigo-100 px-2 py-1 rounded-lg">
+                                                        ~{lineCount} líneas
+                                                    </span>
+                                                )}
+                                                <button
+                                                    onClick={handlePasteFromClipboard}
+                                                    className="flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-slate-500 hover:text-indigo-600 px-2 py-1 rounded-lg hover:bg-indigo-50 transition-all"
+                                                >
+                                                    <Clipboard className="w-3 h-3" /> Pegar
+                                                </button>
+                                                {rawText && (
+                                                    <button
+                                                        onClick={() => setRawText('')}
+                                                        className="w-6 h-6 rounded-lg bg-slate-100 text-slate-400 flex items-center justify-center hover:bg-rose-50 hover:text-rose-500 transition-all"
+                                                    >
+                                                        <X className="w-3 h-3" />
+                                                    </button>
+                                                )}
+                                            </div>
                                         </div>
                                         <textarea
                                             value={rawText}
                                             onChange={(e) => setRawText(e.target.value)}
-                                            placeholder="REGLA: PRODUCTO - PRECIO - DESCRIPCIÓN&#10;&#10;Ejemplos:&#10;Hamburguesa Clásica - $2500 - Con lechuga y tomate&#10;Pizza Margarita - 5000 - Mucho queso y albahaca&#10;Limonada fresca | 1200 | Jengibre y menta"
-                                            className="w-full h-64 p-6 rounded-3xl bg-slate-50 border-2 border-slate-100 text-slate-700 font-medium focus:border-indigo-500 focus:ring-0 transition-all resize-none placeholder:text-slate-300 text-sm"
+                                            placeholder="Pegá tu lista acá. Acepta estos formatos:&#10;&#10;Nombre - Precio - Descripción&#10;Nombre | Precio | Descripción&#10;Nombre; Precio; Descripción&#10;&#10;Ejemplos:&#10;Hamburguesa Clásica - $2500 - Con lechuga&#10;Pizza Margarita | 5000 | Mucho queso&#10;Limonada fresca; 1200; Jengibre y menta"
+                                            className="w-full h-56 p-5 rounded-3xl bg-slate-50 border-2 border-slate-100 text-slate-700 font-medium focus:border-indigo-500 focus:ring-0 transition-all resize-none placeholder:text-slate-300 text-sm"
                                         />
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Separadores válidos:</span>
+                                            {[' - ', ' | ', ' ; '].map(sep => (
+                                                <span key={sep} className="text-[9px] font-black text-indigo-600 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-md font-mono">{sep.trim()}</span>
+                                            ))}
+                                        </div>
                                     </div>
 
                                     <div className="space-y-4">
