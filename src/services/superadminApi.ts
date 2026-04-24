@@ -361,15 +361,22 @@ export const superadminApi = {
     },
 
     inviteStaff: async (email: string) => {
-        const { data, error } = await supabase
-            .from('profiles')
-            .update({ role: 'superadmin' })
-            .eq('email', email)
-            .select()
-            .single()
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!session) throw new Error('No hay sesión activa')
 
-        if (error) throw new Error('El usuario debe estar registrado primero para ser promovido a superadmin.')
-        return data
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string
+        const res = await fetch(`${supabaseUrl}/functions/v1/invite-staff`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify({ email }),
+        })
+
+        const json = await res.json()
+        if (!res.ok) throw new Error(json.error ?? 'Error al promover usuario')
+        return json
     },
 
     connectGateway: async (provider: string, config: GatewayConfig, isMaster: boolean = false) => {
