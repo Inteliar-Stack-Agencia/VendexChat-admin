@@ -26,6 +26,7 @@ import { supabase } from '../../supabaseClient'
 import { getStoreId } from '../../services/api'
 import Tesseract from 'tesseract.js'
 import { normalizeProductData, cleanCSVName, parseCSVPrice } from '../../utils/helpers'
+import * as XLSX from 'xlsx'
 
 interface TempProduct {
     id: string
@@ -127,10 +128,6 @@ export default function AIImporterPage() {
         if (!file) return
 
         const fileName = file.name.toLowerCase()
-        if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
-            showToast('error', 'Excel directo (.xlsx) no compatible. Guardalo como "CSV" y subilo de nuevo.')
-            return
-        }
 
         // Si es una imagen... OCR
         if (file.type.startsWith('image/')) {
@@ -138,14 +135,28 @@ export default function AIImporterPage() {
             return
         }
 
+        // Excel directo via SheetJS
+        if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
+            const xlsReader = new FileReader()
+            xlsReader.onload = (event) => {
+                try {
+                    const data = new Uint8Array(event.target?.result as ArrayBuffer)
+                    const workbook = XLSX.read(data, { type: 'array' })
+                    const sheet = workbook.Sheets[workbook.SheetNames[0]]
+                    const csv = XLSX.utils.sheet_to_csv(sheet, { FS: ';' })
+                    parseCSV(csv)
+                } catch {
+                    showToast('error', 'No se pudo leer el archivo Excel.')
+                }
+            }
+            xlsReader.readAsArrayBuffer(file)
+            return
+        }
+
         const reader = new FileReader()
         reader.onload = (event) => {
             const text = event.target?.result as string
             if (text) {
-                if (text.includes('\u0000') || text.includes('\u0001')) {
-                    showToast('error', 'El archivo parece binario. Asegúrate de exportarlo como CSV.')
-                    return
-                }
                 parseCSV(text)
             }
         }
@@ -245,18 +256,22 @@ export default function AIImporterPage() {
         setIsProcessing(true)
 
         try {
+            const categoryList = categories.length > 0
+                ? `\nCATEGORÍAS DISPONIBLES EN LA TIENDA: ${categories.map(c => c.name).join(', ')}`
+                : ''
             const systemPrompt = `Actúa como un experto en extracción de datos de menús y catálogos comerciales.
             Tu objetivo es convertir texto desordenado en una lista estructurada de productos de ecommerce.
-            
+
             REGLAS CRÍTICAS:
             1. Devuelve EXCLUSIVAMENTE un array de objetos JSON válido.
-            2. Cada objeto debe tener: "name" (string, máx 70 chars), "price" (number), "description" (string).
+            2. Cada objeto debe tener: "name" (string, máx 70 chars), "price" (number), "description" (string), "category" (string).
             3. Si el texto tiene saltos de línea (ej: el nombre arriba y el precio abajo como "Nombre \\n 1500"), únelos como un solo producto.
             4. Si detectas ingredientes o detalles después del nombre, ponlos en "description".
             5. Si no hay precio, usa 0.
             6. Limpia viñetas (- • *) y espacios innecesarios.
-            7. Responde SOLO el JSON, sin texto adicional, sin bloques de código markdown, solo el array [{},{}].
-            
+            7. Para "category": si el texto tiene secciones o títulos que indiquen categoría (ej: "PIZZAS", "BEBIDAS", "POSTRES"), asignala. Si hay categorías disponibles, usá el nombre exacto de la lista. Si no hay categoría clara, dejá "category" como string vacío "".
+            8. Responde SOLO el JSON, sin texto adicional, sin bloques de código markdown, solo el array [{},{}].${categoryList}
+
             TEXTO PARA PROCESAR:
             ${textToUse}`;
 
@@ -285,14 +300,18 @@ export default function AIImporterPage() {
 
             if (!Array.isArray(extractedRaw)) throw new Error('La IA no devolvió una lista');
 
-            const extracted: TempProduct[] = extractedRaw.map((item: { name?: string; price?: number; description?: string }) => {
+            const extracted: TempProduct[] = extractedRaw.map((item: { name?: string; price?: number; description?: string; category?: string }) => {
                 const normalized = normalizeProductData(item.name || 'Sin nombre', item.description || '')
+                const matchedCat = item.category
+                    ? categories.find(c => c.name.toLowerCase() === item.category!.toLowerCase())
+                    : null
                 return {
                     id: crypto.randomUUID(),
                     name: normalized.name.substring(0, 70),
                     price: typeof item.price === 'number' ? item.price : 0,
                     description: normalized.description || '',
-                    category_id: selectedCategoryId || null
+                    category_id: matchedCat?.id || selectedCategoryId || null,
+                    category_name: matchedCat?.name || item.category || ''
                 }
             });
 
@@ -644,14 +663,35 @@ export default function AIImporterPage() {
                                             <th className="px-8 py-4 text-center">Sugerir Foto</th>
                                             <th className="px-8 py-4">Nombre</th>
                                             <th className="px-8 py-4">Precio</th>
-                                            <th className="px-8 py-4">Categoría</th>
+                                            <th className="px-8 py-4">
+                                                <div className="flex items-center gap-2">
+                                                    <span>Categoría</span>
+                                                    {categories.length > 0 && (
+                                                        <select
+                                                            onChange={(e) => {
+                                                                if (!e.target.value) return
+                                                                const cat = categories.find(c => c.id === e.target.value)
+                                                                setResults(prev => prev.map(i => ({ ...i, category_id: e.target.value, category_name: cat?.name || '' })))
+                                                                e.target.value = ''
+                                                            }}
+                                                            className="text-[8px] font-black text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-lg px-1.5 py-0.5 cursor-pointer normal-case tracking-normal"
+                                                            defaultValue=""
+                                                        >
+                                                            <option value="">Aplicar a todos…</option>
+                                                            {categories.map(cat => (
+                                                                <option key={cat.id} value={cat.id}>{cat.name}</option>
+                                                            ))}
+                                                        </select>
+                                                    )}
+                                                </div>
+                                            </th>
                                             <th className="px-8 py-4">Descripción / Origen</th>
                                             <th className="px-8 py-4 text-right">Acción</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100">
                                         {results.map((item) => (
-                                            <tr key={item.id} className="group hover:bg-slate-50/50">
+                                            <tr key={item.id} className={`group hover:bg-slate-50/50 ${item.price === 0 ? 'bg-amber-50/60' : ''}`}>
                                                 <td className="px-8 py-4">
                                                     <div
                                                         onClick={() => { setActiveProductId(item.id); setIsImageModalOpen(true) }}
@@ -677,14 +717,19 @@ export default function AIImporterPage() {
                                                 </td>
                                                 <td className="px-8 py-4">
                                                     <div className="flex items-center gap-1 font-black text-indigo-600 text-sm">
-                                                        <span>$</span>
+                                                        <span className={item.price === 0 ? 'text-amber-500' : ''}>$</span>
                                                         <input
                                                             type="number"
                                                             value={item.price}
-                                                            onChange={(e) => setResults(prev => prev.map(i => i.id === item.id ? { ...i, price: parseFloat(e.target.value) } : i))}
-                                                            className="bg-transparent border-0 focus:ring-1 focus:ring-indigo-500 rounded px-1 -ml-1 text-sm w-24 font-black"
+                                                            onChange={(e) => setResults(prev => prev.map(i => i.id === item.id ? { ...i, price: parseFloat(e.target.value) || 0 } : i))}
+                                                            className={`bg-transparent border-0 focus:ring-1 focus:ring-indigo-500 rounded px-1 -ml-1 text-sm w-24 font-black ${item.price === 0 ? 'text-amber-500' : ''}`}
                                                         />
                                                     </div>
+                                                    {item.price === 0 && (
+                                                        <p className="text-[9px] text-amber-600 font-bold mt-0.5 flex items-center gap-1">
+                                                            <AlertCircle className="w-2.5 h-2.5" /> Sin precio
+                                                        </p>
+                                                    )}
                                                 </td>
                                                 <td className="px-8 py-4">
                                                     {categories.length > 0 ? (
