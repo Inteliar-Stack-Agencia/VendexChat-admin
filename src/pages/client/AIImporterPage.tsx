@@ -198,8 +198,8 @@ export default function AIImporterPage() {
                         name: normalized.name,
                         price: price ? parseFloat(price.replace('$', '').replace(/\./g, '').replace(',', '.')) : 0,
                         description: normalized.description,
-                        category_id: category?.id || selectedCategoryId,
-                        category_name: category?.name || 'Genérica'
+                        category_id: category?.id || null,
+                        category_name: category?.name || catName?.trim() || 'General'
                     })
                 }
             }
@@ -334,19 +334,48 @@ export default function AIImporterPage() {
     }
 
     const saveProducts = async () => {
-        if (!selectedCategoryId && results.some(r => !r.category_id)) {
-            showToast('error', 'Seleccioná una categoría para continuar.')
-            return
-        }
-
         setIsSaving(true)
         try {
             const storeId = await getStoreId()
-            const productsToInsert = results.map(item => {
+
+            // Detect category names from CSV that don't exist yet in DB
+            const newCategoryNames = [...new Set(
+                results
+                    .filter(r => !r.category_id && r.category_name)
+                    .map(r => r.category_name!)
+            )]
+
+            let updatedResults = [...results]
+
+            if (newCategoryNames.length > 0) {
+                const { data: createdCats, error: catError } = await supabase
+                    .from('categories')
+                    .insert(newCategoryNames.map(name => ({ store_id: storeId, name })))
+                    .select('id, name')
+                if (catError) throw catError
+
+                // Map newly created category ids back to products
+                updatedResults = updatedResults.map(r => {
+                    if (r.category_id) return r
+                    const match = createdCats?.find(c => c.name === r.category_name)
+                    return match ? { ...r, category_id: match.id } : r
+                })
+
+                await loadCategories()
+            }
+
+            // Any remaining products without category_id fall back to first available
+            const fallbackCategoryId = selectedCategoryId || categories[0]?.id || null
+            if (!fallbackCategoryId && updatedResults.some(r => !r.category_id)) {
+                showToast('error', 'Seleccioná una categoría para continuar.')
+                return
+            }
+
+            const productsToInsert = updatedResults.map(item => {
                 const { name, description } = normalizeProductData(item.name, item.description)
                 return {
                     store_id: storeId,
-                    category_id: item.category_id || selectedCategoryId,
+                    category_id: item.category_id || fallbackCategoryId,
                     name,
                     price: item.price,
                     description,
@@ -569,6 +598,7 @@ export default function AIImporterPage() {
                                             <th className="px-8 py-4 text-center">Sugerir Foto</th>
                                             <th className="px-8 py-4">Nombre</th>
                                             <th className="px-8 py-4">Precio</th>
+                                            <th className="px-8 py-4">Categoría</th>
                                             <th className="px-8 py-4">Descripción / Origen</th>
                                             <th className="px-8 py-4 text-right">Acción</th>
                                         </tr>
@@ -611,6 +641,28 @@ export default function AIImporterPage() {
                                                     </div>
                                                 </td>
                                                 <td className="px-8 py-4">
+                                                    {categories.length > 0 ? (
+                                                        <select
+                                                            value={item.category_id || ''}
+                                                            onChange={(e) => {
+                                                                const cat = categories.find(c => c.id === e.target.value)
+                                                                setResults(prev => prev.map(i => i.id === item.id ? { ...i, category_id: e.target.value || null, category_name: cat?.name || '' } : i))
+                                                            }}
+                                                            className="bg-transparent border-0 text-xs font-bold text-slate-700 focus:ring-1 focus:ring-indigo-500 rounded px-2 -ml-2 w-full"
+                                                        >
+                                                            <option value="">— nueva —</option>
+                                                            {categories.map(cat => (
+                                                                <option key={cat.id} value={cat.id}>{cat.name}</option>
+                                                            ))}
+                                                        </select>
+                                                    ) : (
+                                                        <span className="text-xs text-slate-400 italic">{item.category_name || '—'}</span>
+                                                    )}
+                                                    {!item.category_id && item.category_name && (
+                                                        <p className="text-[9px] text-amber-600 font-bold mt-0.5">Se creará: {item.category_name}</p>
+                                                    )}
+                                                </td>
+                                                <td className="px-8 py-4">
                                                     <input
                                                         type="text"
                                                         value={item.description}
@@ -636,7 +688,7 @@ export default function AIImporterPage() {
                                 <div className="flex items-center gap-4 w-full sm:w-auto">
                                     <Button
                                         variant="outline"
-                                        onClick={() => setResults([...results, { id: crypto.randomUUID(), name: 'Nuevo Producto', price: 0, description: 'Agregado manualmente', category_id: null }])}
+                                        onClick={() => setResults([...results, { id: crypto.randomUUID(), name: 'Nuevo Producto', price: 0, description: 'Agregado manualmente', category_id: selectedCategoryId || categories[0]?.id || null, category_name: categories.find(c => c.id === (selectedCategoryId || categories[0]?.id))?.name || '' }])}
                                         className="flex-1 sm:flex-none border-2 border-slate-200 text-slate-600 font-black uppercase tracking-widest text-[10px] px-6 py-4 rounded-2xl flex items-center gap-2 hover:bg-white transition-all hover:scale-105 active:scale-95"
                                     >
                                         <Plus className="w-4 h-4" /> Agregar Fila
