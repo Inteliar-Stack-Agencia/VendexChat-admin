@@ -18,8 +18,8 @@
 | AL-03 | ALTA | `productsApi.get()` sin filtro de `store_id` (IDOR) | ✅ Filtra por `store_id` del usuario (`productsApi.ts:42`) |
 | AL-04 | ALTA | Contraseña con `Math.random()` (no criptográfico) | ✅ Reemplazado por `crypto.getRandomValues` (`superadminApi.ts:138`) |
 | ME-01 | MEDIA | `console.log` con datos sensibles en producción | ✅ Eliminados en `AuthContext.tsx` |
-| ME-02 | MEDIA | PII de clientes enviada a Groq sin anonimizar | ⚠️ Pendiente |
-| ME-03 | MEDIA | `createUser`/`updateUser` aceptan `Record<string, unknown>` | ⚠️ Pendiente |
+| ME-02 | MEDIA | PII de clientes enviada a Groq sin anonimizar | ✅ Anonimizado en `AIAssistantPage.tsx` (nombre → primer nombre + ***) |
+| ME-03 | MEDIA | `createUser`/`updateUser` aceptan `Record<string, unknown>` | ✅ Tipado estricto con `ProfileCreateInput`/`ProfileUpdateInput` |
 | BA-01 | BAJA | Impersonation via localStorage sin firma | ⚠️ Documentado — seguridad recae en RLS |
 | BA-02 | BAJA | Imágenes externas subidas sin validar MIME type | ✅ Validación agregada (`PexelsImageSuggestions.tsx:128`) |
 | BA-03 | BAJA | `VITE_GROQ_API_KEY` expuesta en bundle del browser | ⚠️ Pendiente: mover a Edge Function |
@@ -49,9 +49,6 @@
 ## Pendientes (próxima sesión)
 
 1. **CR-03 / BA-03**: Mover `inviteStaff` y llamadas a Groq a Edge Functions de Supabase/Cloudflare
-2. **ME-02**: Anonimizar PII antes de enviar snapshot a Groq en `AIAssistantPage.tsx`
-3. **ME-03**: Tipado estricto en `superadminApi.createUser` / `updateUser`
-4. **Performance**: Agregar índices faltantes en `profiles` (`store_id`, `email`) y limpiar índices duplicados en 6 tablas
 
 ---
 
