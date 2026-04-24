@@ -347,14 +347,12 @@ export const superadminApi = {
     },
 
     inviteStaff: async (email: string) => {
-        const { data, error } = await supabase
-            .from('profiles')
-            .update({ role: 'superadmin' })
-            .eq('email', email)
-            .select()
-            .single()
+        const { data, error } = await supabase.functions.invoke('invite-staff', {
+            body: { email },
+        })
 
-        if (error) throw new Error('El usuario debe estar registrado primero para ser promovido a superadmin.')
+        if (error) throw new Error(error.message)
+        if (data?.error) throw new Error(data.error)
         return data
     },
 
