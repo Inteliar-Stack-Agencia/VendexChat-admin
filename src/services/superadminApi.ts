@@ -1,6 +1,23 @@
 import { supabase } from '../supabaseClient'
 import type { Tenant, RecentActivity, GatewayConfig, GlobalStats, StoreStatEntry, Subscription } from '../types'
 
+interface ProfileCreateInput {
+    id: string
+    email: string
+    name: string
+    role: 'client' | 'empresa' | 'superadmin'
+    store_id?: string | null
+    company_filter?: string | null
+}
+
+interface ProfileUpdateInput {
+    name?: string
+    role?: 'client' | 'empresa' | 'superadmin'
+    store_id?: string | null
+    company_filter?: string | null
+    is_active?: boolean
+}
+
 export const superadminApi = {
     overview: async (): Promise<{
         total_stores: number;
@@ -190,13 +207,13 @@ export const superadminApi = {
         }))
     },
 
-    createUser: async (data: Record<string, unknown>) => {
+    createUser: async (data: ProfileCreateInput) => {
         const { data: newUser, error } = await supabase.from('profiles').insert(data).select().single()
         if (error) throw error
         return newUser
     },
 
-    updateUser: async (id: string | number, data: Record<string, unknown>) => {
+    updateUser: async (id: string | number, data: ProfileUpdateInput) => {
         const { data: updated, error } = await supabase.from('profiles').update(data).eq('id', id).select().single()
         if (error) throw error
         return updated

@@ -292,7 +292,8 @@ export default function AIAssistantPage() {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             topCustomersRaw.forEach((o: any) => {
                 const key = o.customer_whatsapp || o.customer_name || 'desconocido'
-                if (!customerMap[key]) customerMap[key] = { name: o.customer_name, phone: o.customer_whatsapp, total: 0, orders: 0 }
+                const anonName = o.customer_name ? o.customer_name.split(' ')[0] + ' ***' : 'Cliente'
+                if (!customerMap[key]) customerMap[key] = { name: anonName, phone: '***', total: 0, orders: 0 }
                 customerMap[key].total += Number(o.total) || 0
                 customerMap[key].orders++
             })
@@ -323,7 +324,7 @@ export default function AIAssistantPage() {
                     id: o.id.slice(0, 8),
                     fullId: o.id,
                     num: o.order_number,
-                    cliente: o.customer_name,
+                    cliente: o.customer_name ? o.customer_name.split(' ')[0] + ' ***' : 'Cliente',
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     empresa: (o as any).metadata?.company_name || null,
                     total: o.total,
