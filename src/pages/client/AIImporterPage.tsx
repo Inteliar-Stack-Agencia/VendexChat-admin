@@ -23,7 +23,7 @@ import { callAI } from '../../services/aiService'
 import { supabase } from '../../supabaseClient'
 import { getStoreId } from '../../services/api'
 import Tesseract from 'tesseract.js'
-import { normalizeProductData } from '../../utils/helpers'
+import { normalizeProductData, cleanCSVName, parseCSVPrice } from '../../utils/helpers'
 
 interface TempProduct {
     id: string
@@ -190,16 +190,18 @@ export default function AIImporterPage() {
                 if (parts.length < 2) continue
 
                 const [catName, prodName, price, desc] = parts
-                if (prodName) {
-                    const category = categories.find(c => c.name.toLowerCase() === catName?.toLowerCase())
-                    const normalized = normalizeProductData(prodName, desc || '')
+                const cleanedName = cleanCSVName(prodName || '')
+                if (cleanedName) {
+                    const cleanedCat = cleanCSVName(catName || '')
+                    const category = categories.find(c => c.name.toLowerCase() === cleanedCat.toLowerCase())
+                    const normalized = normalizeProductData(cleanedName, cleanCSVName(desc || ''))
                     extracted.push({
                         id: crypto.randomUUID(),
                         name: normalized.name,
-                        price: price ? parseFloat(price.replace('$', '').replace(/\./g, '').replace(',', '.')) : 0,
+                        price: parseCSVPrice(price || ''),
                         description: normalized.description,
                         category_id: category?.id || null,
-                        category_name: category?.name || catName?.trim() || 'General'
+                        category_name: category?.name || cleanedCat || 'General'
                     })
                 }
             }
