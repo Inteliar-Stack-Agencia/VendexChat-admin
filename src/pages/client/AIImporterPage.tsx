@@ -327,18 +327,38 @@ export default function AIImporterPage() {
             console.error('AI Processing Error:', err);
             showToast('info', 'IA ocupada o formato difícil. Usando extracción de emergencia...')
 
-            const lines = textToUse.split('\n').map(l => l.trim()).filter(l => l.length > 2);
+            const rawLines = textToUse.split('\n').map(l => l.trim()).filter(l => l.length > 2);
             const fallbackResults: TempProduct[] = [];
             let lastProduct: TempProduct | null = null;
 
+            // Pre-merge wrapped continuation lines before parsing
+            const lines: string[] = [];
+            for (const line of rawLines) {
+                const last = lines[lines.length - 1];
+                const isContinuation = last && (
+                    line.startsWith('(') ||
+                    (line.startsWith('x ') && /^\d/.test(line[2] ?? '')) ||
+                    /^\d+\s+UNIDADES?\)/i.test(line)
+                );
+                if (isContinuation) {
+                    lines[lines.length - 1] = last + ' ' + line;
+                } else {
+                    lines.push(line);
+                }
+            }
+
             lines.forEach(line => {
-                const priceRegex = /(?:\$|ARS|AR\$|USD)?\s?(\d+(?:\.\d{3})*(?:,\d{2})?)/i;
+                // Require $ sign to avoid matching numbers embedded in product names (e.g., "16x22", "10x15")
+                const priceRegex = /(?:\$|ARS|AR\$|USD)\s?(\d+(?:\.\d{3})*(?:,\d{2})?)/i;
                 const match = line.match(priceRegex);
                 const priceValue = match ? parseFloat(match[1].replace(/\./g, '').replace(',', '.')) : null;
-                const nameOnly = line.replace(priceRegex, '').replace(/^[-•*+]\s?/, '').trim();
+                const nameOnly = line
+                    .replace(priceRegex, '')
+                    .replace(/\s*\(COMPRA\s+x\s+\d+\s+UNIDADES?\)/gi, '')
+                    .replace(/^[-•*+]\s?/, '')
+                    .trim();
 
-                if (priceValue !== null && nameOnly.length < 2 && lastProduct) {
-                    // Es probablemente el precio del producto anterior
+                if (priceValue !== null && (nameOnly.length < 2 || /^\(/.test(nameOnly)) && lastProduct) {
                     lastProduct.price = priceValue;
                 } else if (nameOnly.length > 2) {
                     const normalized = normalizeProductData(nameOnly, '');
