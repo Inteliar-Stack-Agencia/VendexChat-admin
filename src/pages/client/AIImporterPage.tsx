@@ -209,22 +209,42 @@ export default function AIImporterPage() {
 
             const firstLine = lines[0]
             const separator = firstLine.includes(';') ? ';' : ','
-            const startIndex = (firstLine.toLowerCase().includes('categoria') || firstLine.toLowerCase().includes('producto')) ? 1 : 0
+            const firstLineLower = firstLine.toLowerCase()
+            const hasHeader = firstLineLower.includes('product') || firstLineLower.includes('precio') ||
+                firstLineLower.includes('nombre') || firstLineLower.includes('categor')
+
+            // Detect column positions from header; fall back to template order (cat, product, price, desc)
+            let colProduct = 1, colPrice = 2, colCategory = 0, colDesc = 3
+            if (hasHeader) {
+                const headers = firstLine.split(separator).map(h => h.trim().toLowerCase().replace(/^"|"$/g, ''))
+                headers.forEach((h, i) => {
+                    if (h.includes('product') || h.includes('nombre')) colProduct = i
+                    else if (h.includes('precio') || h.includes('price') || h.includes('valor')) colPrice = i
+                    else if (h.includes('categor')) colCategory = i
+                    else if (h.includes('desc')) colDesc = i
+                })
+            }
+
+            const startIndex = hasHeader ? 1 : 0
 
             for (let i = startIndex; i < lines.length; i++) {
                 const parts = lines[i].split(separator).map(s => s?.trim().replace(/^"|"$/g, ''))
                 if (parts.length < 2) continue
 
-                const [catName, prodName, price, desc] = parts
-                const cleanedName = cleanCSVName(prodName || '')
+                const prodName = parts[colProduct] || ''
+                const price = parts[colPrice] || ''
+                const catName = parts[colCategory] || ''
+                const desc = parts[colDesc] || ''
+
+                const cleanedName = cleanCSVName(prodName)
                 if (cleanedName) {
-                    const cleanedCat = cleanCSVName(catName || '')
+                    const cleanedCat = cleanCSVName(catName)
                     const category = categories.find(c => c.name.toLowerCase() === cleanedCat.toLowerCase())
-                    const normalized = normalizeProductData(cleanedName, cleanCSVName(desc || ''))
+                    const normalized = normalizeProductData(cleanedName, cleanCSVName(desc))
                     extracted.push({
                         id: crypto.randomUUID(),
                         name: normalized.name,
-                        price: parseCSVPrice(price || ''),
+                        price: parseCSVPrice(price),
                         description: normalized.description,
                         category_id: category?.id || null,
                         category_name: category?.name || cleanedCat || 'General'
