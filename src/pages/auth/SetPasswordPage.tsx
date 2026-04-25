@@ -38,7 +38,7 @@ export default function SetPasswordPage() {
 
     setLoading(true)
     try {
-      await authApi.setNewPassword(password)
+      await authApi.resetPassword('', password)
       showToast('success', 'Contraseña creada correctamente')
       navigate('/', { replace: true })
     } catch (err) {

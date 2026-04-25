@@ -356,6 +356,11 @@ export const superadminApi = {
         return data
     },
 
+    deleteGateway: async (id: string) => {
+        const { error } = await supabase.from('gateways').delete().eq('id', id)
+        if (error) throw error
+    },
+
     connectGateway: async (provider: string, config: GatewayConfig, isMaster: boolean = false) => {
         const { data, error } = await supabase
             .from('gateways')
