@@ -1,6 +1,5 @@
 import { useState, FormEvent, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Mail, CheckCircle } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { Button, Input, Select } from '../../components/common'
 import { showToast } from '../../components/common/Toast'
@@ -28,10 +27,11 @@ export default function RegisterPage() {
   const [slug, setSlug] = useState('')
   const [country, setCountry] = useState('Argentina')
   const [city, setCity] = useState('')
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [slugEdited, setSlugEdited] = useState(false)
   const [acceptTerms, setAcceptTerms] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [registered, setRegistered] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
 
   const { register, user } = useAuth()
@@ -57,6 +57,20 @@ export default function RegisterPage() {
     if (!slug.trim()) newErrors.slug = 'El slug es obligatorio'
     if (!country) newErrors.country = 'Debes seleccionar un país'
     if (!city.trim()) newErrors.city = 'La ciudad es obligatoria'
+    if (!password) {
+      newErrors.password = 'La contraseña es obligatoria'
+    } else if (password.length < 8) {
+      newErrors.password = 'Mínimo 8 caracteres'
+    } else if (!/[A-Z]/.test(password)) {
+      newErrors.password = 'Debe contener al menos una mayúscula'
+    } else if (!/[0-9]/.test(password)) {
+      newErrors.password = 'Debe contener al menos un número'
+    }
+    if (!confirmPassword) {
+      newErrors.confirmPassword = 'Confirma tu contraseña'
+    } else if (password && confirmPassword !== password) {
+      newErrors.confirmPassword = 'Las contraseñas no coinciden'
+    }
     if (!acceptTerms) newErrors.terms = 'Debes aceptar los términos y condiciones'
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
@@ -68,41 +82,15 @@ export default function RegisterPage() {
 
     setLoading(true)
     try {
-      await register({ store_name: storeName, email, slug, country, city })
-      setRegistered(true)
+      await register({ store_name: storeName, email, slug, country, city, password })
+      showToast('success', `¡Bienvenido/a! Revisá tu email para más info.`)
+      navigate('/select-store', { replace: true })
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error al crear la cuenta'
       showToast('error', message)
     } finally {
       setLoading(false)
     }
-  }
-
-  if (registered) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="w-full max-w-md text-center">
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-emerald-100 rounded-full mb-4">
-              <CheckCircle className="w-8 h-8 text-emerald-600" />
-            </div>
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">¡Tienda creada!</h1>
-            <p className="text-gray-500 mb-6">
-              Enviamos un email a <strong className="text-gray-900">{email}</strong> para que establezcas tu contraseña.
-            </p>
-            <div className="bg-emerald-50 rounded-lg p-4 mb-6">
-              <div className="flex items-center gap-2 text-emerald-700 text-sm">
-                <Mail className="w-4 h-4 shrink-0" />
-                <span>Revisá tu bandeja de entrada (y spam) para continuar.</span>
-              </div>
-            </div>
-            <Link to="/login" className="text-emerald-600 hover:text-emerald-700 font-medium text-sm">
-              Ir a iniciar sesión
-            </Link>
-          </div>
-        </div>
-      </div>
-    )
   }
 
   return (
@@ -167,11 +155,25 @@ export default function RegisterPage() {
               autoComplete="email"
             />
 
-            <div className="bg-blue-50 rounded-lg p-3">
-              <p className="text-xs text-blue-700">
-                Te enviaremos un email para que establezcas tu contraseña de acceso.
-              </p>
-            </div>
+            <Input
+              label="Contraseña"
+              type="password"
+              placeholder="Mínimo 8 caracteres"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              error={errors.password}
+              autoComplete="new-password"
+            />
+
+            <Input
+              label="Confirmar contraseña"
+              type="password"
+              placeholder="Repetir contraseña"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              error={errors.confirmPassword}
+              autoComplete="new-password"
+            />
 
             <label className="flex items-start gap-2 cursor-pointer pt-2">
               <input

@@ -120,13 +120,10 @@ export const authApi = {
         return allStores as Tenant[]
     },
 
-    register: async (data: { store_name: string; email: string; slug: string; country: string; city: string }) => {
-        // Generar contraseña temporal segura (el usuario la cambiará por email)
-        const tempPassword = crypto.randomUUID() + 'A1!'
-
+    register: async (data: { store_name: string; email: string; slug: string; country: string; city: string; password: string }) => {
         const { data: authData, error: authError } = await supabase.auth.signUp({
             email: data.email,
-            password: tempPassword,
+            password: data.password,
             options: {
                 data: {
                     name: data.store_name,
@@ -142,17 +139,12 @@ export const authApi = {
         if (authError) throw authError
         if (!authData.user) throw new Error('No se pudo crear el usuario')
 
-        // Enviar email para que el usuario establezca su propia contraseña
-        await supabase.auth.resetPasswordForEmail(data.email, {
-            redirectTo: `${window.location.origin}/reset-password`,
-        })
-
-        // Cerrar la sesión temporal (el usuario debe establecer su contraseña primero)
-        await supabase.auth.signOut()
-
         return {
-            token: '',
-            user: authData.user as unknown as User
+            token: authData.session?.access_token || '',
+            user: {
+                ...authData.user,
+                role: (authData.user.user_metadata as { role?: string })?.role || 'client'
+            } as unknown as User
         }
     },
 
