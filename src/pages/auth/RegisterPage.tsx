@@ -28,6 +28,8 @@ export default function RegisterPage() {
   const [slug, setSlug] = useState('')
   const [country, setCountry] = useState('Argentina')
   const [city, setCity] = useState('')
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [slugEdited, setSlugEdited] = useState(false)
   const [acceptTerms, setAcceptTerms] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -57,6 +59,20 @@ export default function RegisterPage() {
     if (!slug.trim()) newErrors.slug = 'El slug es obligatorio'
     if (!country) newErrors.country = 'Debes seleccionar un país'
     if (!city.trim()) newErrors.city = 'La ciudad es obligatoria'
+    if (!password) {
+      newErrors.password = 'La contraseña es obligatoria'
+    } else if (password.length < 8) {
+      newErrors.password = 'Mínimo 8 caracteres'
+    } else if (!/[A-Z]/.test(password)) {
+      newErrors.password = 'Debe contener al menos una mayúscula'
+    } else if (!/[0-9]/.test(password)) {
+      newErrors.password = 'Debe contener al menos un número'
+    }
+    if (!confirmPassword) {
+      newErrors.confirmPassword = 'Confirma tu contraseña'
+    } else if (password && confirmPassword !== password) {
+      newErrors.confirmPassword = 'Las contraseñas no coinciden'
+    }
     if (!acceptTerms) newErrors.terms = 'Debes aceptar los términos y condiciones'
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
@@ -68,7 +84,7 @@ export default function RegisterPage() {
 
     setLoading(true)
     try {
-      await register({ store_name: storeName, email, slug, country, city })
+      await register({ store_name: storeName, email, slug, country, city, password })
       setRegistered(true)
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error al crear la cuenta'
@@ -88,12 +104,12 @@ export default function RegisterPage() {
             </div>
             <h1 className="text-2xl font-bold text-gray-900 mb-2">¡Tienda creada!</h1>
             <p className="text-gray-500 mb-6">
-              Enviamos un email a <strong className="text-gray-900">{email}</strong> para que establezcas tu contraseña.
+              Enviamos un email de confirmación a <strong className="text-gray-900">{email}</strong>.
             </p>
             <div className="bg-emerald-50 rounded-lg p-4 mb-6">
               <div className="flex items-center gap-2 text-emerald-700 text-sm">
                 <Mail className="w-4 h-4 shrink-0" />
-                <span>Revisá tu bandeja de entrada (y spam) para continuar.</span>
+                <span>Confirmá tu email y luego iniciá sesión con tu contraseña.</span>
               </div>
             </div>
             <Link to="/login" className="text-emerald-600 hover:text-emerald-700 font-medium text-sm">
@@ -167,11 +183,25 @@ export default function RegisterPage() {
               autoComplete="email"
             />
 
-            <div className="bg-blue-50 rounded-lg p-3">
-              <p className="text-xs text-blue-700">
-                Te enviaremos un email para que establezcas tu contraseña de acceso.
-              </p>
-            </div>
+            <Input
+              label="Contraseña"
+              type="password"
+              placeholder="Mínimo 8 caracteres"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              error={errors.password}
+              autoComplete="new-password"
+            />
+
+            <Input
+              label="Confirmar contraseña"
+              type="password"
+              placeholder="Repetir contraseña"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              error={errors.confirmPassword}
+              autoComplete="new-password"
+            />
 
             <label className="flex items-start gap-2 cursor-pointer pt-2">
               <input
