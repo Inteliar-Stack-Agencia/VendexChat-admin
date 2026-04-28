@@ -101,7 +101,7 @@ serve(async (req) => {
       } else {
         await adminClient
           .from("profiles")
-          .upsert({ id: user.id, email: user.email, role, store_id: storeId })
+          .upsert({ id: user.id, role, store_id: storeId })
       }
     } else {
       // El trigger ya creó el store: activarlo si está inactivo
