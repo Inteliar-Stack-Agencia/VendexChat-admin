@@ -125,8 +125,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const register = useCallback(async (data: { store_name: string; email: string; slug: string; country: string; city: string; password: string }) => {
-    await authApi.register(data)
-    // No se inicia sesión: el usuario debe establecer su contraseña desde el email
+    const response = await authApi.register(data)
+    const payload = resolveAuthPayload(response)
+    const authToken = payload.token ?? payload.access_token
+
+    if (authToken) {
+      localStorage.setItem('vendexchat_token', authToken)
+      setToken(authToken)
+      setUser(payload.user)
+      localStorage.removeItem('vendexchat_selected_store')
+      setSelectedStoreId(null)
+    }
   }, [])
 
   const logout = useCallback(() => {

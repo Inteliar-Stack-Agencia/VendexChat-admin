@@ -139,12 +139,12 @@ export const authApi = {
         if (authError) throw authError
         if (!authData.user) throw new Error('No se pudo crear el usuario')
 
-        // Cerrar sesión hasta que el usuario confirme su email
-        await supabase.auth.signOut()
-
         return {
-            token: '',
-            user: authData.user as unknown as User
+            token: authData.session?.access_token || '',
+            user: {
+                ...authData.user,
+                role: (authData.user.user_metadata as { role?: string })?.role || 'client'
+            } as unknown as User
         }
     },
 
