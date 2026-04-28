@@ -120,6 +120,16 @@ export const authApi = {
         return allStores as Tenant[]
     },
 
+    checkSlugAvailable: async (slug: string): Promise<boolean> => {
+        const { data, error } = await supabase
+            .from('stores')
+            .select('id')
+            .eq('slug', slug)
+            .maybeSingle()
+        if (error) return true // assume available on error to not block user
+        return data === null
+    },
+
     register: async (data: { store_name: string; email: string; slug: string; country: string; city: string; password: string }) => {
         const { data: authData, error: authError } = await supabase.auth.signUp({
             email: data.email,

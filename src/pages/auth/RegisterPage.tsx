@@ -1,9 +1,10 @@
-import { useState, FormEvent, useEffect } from 'react'
+import { useState, FormEvent, useEffect, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { Button, Input, Select } from '../../components/common'
 import { showToast } from '../../components/common/Toast'
 import { generateSlug } from '../../utils/helpers'
+import { authApi } from '../../services/authApi'
 
 const COUNTRIES = [
   { value: 'Argentina', label: 'Argentina' },
@@ -30,9 +31,12 @@ export default function RegisterPage() {
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [slugEdited, setSlugEdited] = useState(false)
+  const [slugAvailable, setSlugAvailable] = useState<boolean | null>(null)
+  const [slugChecking, setSlugChecking] = useState(false)
   const [acceptTerms, setAcceptTerms] = useState(false)
   const [loading, setLoading] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const slugCheckTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const { register, user } = useAuth()
   const navigate = useNavigate()
@@ -43,6 +47,19 @@ export default function RegisterPage() {
       setSlug(generateSlug(storeName))
     }
   }, [storeName, slugEdited])
+
+  // Verificar disponibilidad del slug con debounce
+  useEffect(() => {
+    if (!slug) { setSlugAvailable(null); return }
+    if (slugCheckTimer.current) clearTimeout(slugCheckTimer.current)
+    setSlugChecking(true)
+    slugCheckTimer.current = setTimeout(async () => {
+      const available = await authApi.checkSlugAvailable(slug)
+      setSlugAvailable(available)
+      setSlugChecking(false)
+    }, 500)
+    return () => { if (slugCheckTimer.current) clearTimeout(slugCheckTimer.current) }
+  }, [slug])
 
   // Redirigir si ya está autenticado
   if (user) {
@@ -55,6 +72,7 @@ export default function RegisterPage() {
     if (!storeName.trim()) newErrors.storeName = 'El nombre de la tienda es obligatorio'
     if (!email) newErrors.email = 'El email es obligatorio'
     if (!slug.trim()) newErrors.slug = 'El slug es obligatorio'
+    else if (slugAvailable === false) newErrors.slug = 'Esa URL ya está en uso, elegí otra'
     if (!country) newErrors.country = 'Debes seleccionar un país'
     if (!city.trim()) newErrors.city = 'La ciudad es obligatoria'
     if (!password) {
@@ -122,9 +140,20 @@ export default function RegisterPage() {
                 onChange={(e) => {
                   setSlug(generateSlug(e.target.value))
                   setSlugEdited(true)
+                  setSlugAvailable(null)
                 }}
                 error={errors.slug}
-                helperText={slug ? `Tu tienda estará en: vendexchat.app/${slug}` : undefined}
+                helperText={
+                  slug
+                    ? slugChecking
+                      ? `Verificando disponibilidad…`
+                      : slugAvailable === false
+                        ? undefined
+                        : slugAvailable === true
+                          ? `✓ Disponible · Tu tienda estará en: vendexchat.app/${slug}`
+                          : `Tu tienda estará en: vendexchat.app/${slug}`
+                    : undefined
+                }
               />
             </div>
 
