@@ -155,29 +155,37 @@ export const superadminApi = {
         }
 
         let storeId: string | null = null
-        for (let i = 0; i < 5; i++) {
-            await new Promise(r => setTimeout(r, 500))
-            const { data: store } = await supabase.from('stores').select('id').eq('slug', data.slug).single()
+        // Poll up to 10×1s for the on_auth_user_created trigger to create the store
+        for (let i = 0; i < 10; i++) {
+            await new Promise(r => setTimeout(r, 1000))
+            const { data: store } = await supabase.from('stores').select('id').eq('slug', data.slug).maybeSingle()
             if (store) {
                 storeId = store.id
                 break
             }
         }
 
-        if (storeId) {
-            await supabase.from('stores').update({
-                country: data.country,
-                is_active: data.is_active ?? true
-            }).eq('id', storeId)
-        } else {
+        if (!storeId) {
+            // Trigger didn't create the store — create it manually
             const { data: newStore, error: insertError } = await supabase.from('stores').insert({
                 name: data.name,
                 slug: data.slug,
                 country: data.country,
-                is_active: data.is_active ?? true
+                is_active: data.is_active ?? true,
+                ...(authUserId ? { owner_id: authUserId } : {})
             }).select().single()
             if (insertError) throw insertError
-            return newStore as Tenant
+            storeId = newStore.id
+        } else {
+            await supabase.from('stores').update({
+                country: data.country,
+                is_active: data.is_active ?? true
+            }).eq('id', storeId)
+        }
+
+        // Ensure the profile is linked to the store
+        if (authUserId) {
+            await supabase.from('profiles').update({ store_id: storeId }).eq('id', authUserId)
         }
 
         const { data: finalStore } = await supabase.from('stores').select('*').eq('id', storeId).single()
