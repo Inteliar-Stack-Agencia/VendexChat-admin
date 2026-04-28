@@ -149,6 +149,23 @@ export const authApi = {
         if (authError) throw authError
         if (!authData.user) throw new Error('No se pudo crear el usuario')
 
+        // Fallback: si el trigger de DB no creó la tienda/perfil, lo hace esta Edge Function.
+        // Es no-fatal: si ya fueron creados por el trigger, la función retorna sin cambios.
+        if (authData.session) {
+            try {
+                await supabase.functions.invoke('ensure-store-profile', {
+                    body: {
+                        store_name: data.store_name,
+                        slug: data.slug,
+                        country: data.country,
+                        city: data.city,
+                    },
+                })
+            } catch (e) {
+                console.warn('[register] ensure-store-profile falló (no bloqueante):', e)
+            }
+        }
+
         return {
             token: authData.session?.access_token || '',
             user: {
