@@ -45,7 +45,7 @@ BEGIN
     END LOOP;
 
     INSERT INTO public.stores (name, slug, email, whatsapp, country, city, owner_id, is_active)
-    VALUES (v_name, v_final_slug, NEW.email, v_whatsapp, v_country, v_city, NEW.id, false)
+    VALUES (v_name, v_final_slug, NEW.email, v_whatsapp, v_country, v_city, NEW.id, true)
     RETURNING id INTO v_store_id;
 
     INSERT INTO public.profiles (id, email, role, store_id)
