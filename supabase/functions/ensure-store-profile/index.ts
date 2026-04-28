@@ -38,81 +38,111 @@ serve(async (req) => {
 
     const { store_name, slug, country, city } = await req.json()
 
-    // Si el perfil ya tiene store_id, no hay nada que hacer
+    // Buscar perfil existente
     const { data: existingProfile } = await adminClient
       .from("profiles")
       .select("id, store_id")
       .eq("id", user.id)
       .maybeSingle()
 
-    if (existingProfile?.store_id) {
-      return new Response(
-        JSON.stringify({ success: true, store_id: existingProfile.store_id, created: false }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      )
-    }
+    let storeId = existingProfile?.store_id ?? null
 
-    // Resolver slug con fallback a parte del email
-    const baseSlug = (slug || user.email?.split("@")[0] || "tienda")
-      .toLowerCase()
-      .replace(/[^a-z0-9-]/g, "-")
-      .replace(/-+/g, "-")
-      .replace(/^-|-$/g, "")
+    if (!storeId) {
+      // El trigger no creó el store (o falló): crearlo manualmente
+      const baseSlug = (slug || user.email?.split("@")[0] || "tienda")
+        .toLowerCase()
+        .replace(/[^a-z0-9-]/g, "-")
+        .replace(/-+/g, "-")
+        .replace(/^-|-$/g, "")
 
-    let finalSlug = baseSlug
-    let attempt = 0
+      let finalSlug = baseSlug
+      let attempt = 0
 
-    while (true) {
-      const { data: existing } = await adminClient
+      while (true) {
+        const { data: existing } = await adminClient
+          .from("stores")
+          .select("id")
+          .eq("slug", finalSlug)
+          .maybeSingle()
+
+        if (!existing) break
+
+        attempt++
+        if (attempt > 5) {
+          finalSlug = `${baseSlug}-${Math.floor(Math.random() * 9000) + 1000}`
+          break
+        }
+        finalSlug = `${baseSlug}-${attempt}`
+      }
+
+      const { data: store, error: storeError } = await adminClient
         .from("stores")
+        .insert({
+          name: store_name || user.email?.split("@")[0] || "Mi Tienda",
+          slug: finalSlug,
+          email: user.email,
+          whatsapp: "",
+          country: country || "Argentina",
+          city: city || "",
+          owner_id: user.id,
+          is_active: true,
+        })
         .select("id")
-        .eq("slug", finalSlug)
-        .maybeSingle()
+        .single()
 
-      if (!existing) break
+      if (storeError) throw new Error(`Error al crear tienda: ${storeError.message}`)
 
-      attempt++
-      finalSlug = attempt > 5
-        ? `${baseSlug}-${Math.floor(Math.random() * 9000) + 1000}`
-        : `${baseSlug}-${attempt}`
+      storeId = store.id
 
-      if (attempt > 5) break
+      const role = (user.user_metadata as Record<string, string>)?.role || "client"
+
+      if (existingProfile) {
+        await adminClient.from("profiles").update({ store_id: storeId }).eq("id", user.id)
+      } else {
+        await adminClient
+          .from("profiles")
+          .upsert({ id: user.id, email: user.email, role, store_id: storeId })
+      }
+    } else {
+      // El trigger ya creó el store: activarlo si está inactivo
+      await adminClient
+        .from("stores")
+        .update({ is_active: true })
+        .eq("id", storeId)
+        .eq("is_active", false)
     }
 
-    // Crear la tienda
-    const { data: store, error: storeError } = await adminClient
+    // Crear suscripción trial si no existe (igual que createTenant)
+    const trialEnd = new Date()
+    trialEnd.setDate(trialEnd.getDate() + 25)
+
+    await adminClient.from("subscriptions").upsert(
+      {
+        store_id: storeId,
+        plan_type: "free",
+        status: "trial",
+        current_period_end: trialEnd.toISOString(),
+        billing_cycle: "monthly",
+      },
+      { onConflict: "store_id" }
+    )
+
+    // Sync plan_type en metadata del store
+    const { data: currentStore } = await adminClient
       .from("stores")
-      .insert({
-        name: store_name || user.email?.split("@")[0] || "Mi Tienda",
-        slug: finalSlug,
-        email: user.email,
-        whatsapp: "",
-        country: country || "Argentina",
-        city: city || "",
-        owner_id: user.id,
-        is_active: false,
-      })
-      .select("id")
+      .select("metadata")
+      .eq("id", storeId)
       .single()
 
-    if (storeError) throw new Error(`Error al crear tienda: ${storeError.message}`)
-
-    const role = (user.user_metadata as Record<string, string>)?.role || "client"
-
-    // Crear o actualizar perfil
-    if (existingProfile) {
-      await adminClient
-        .from("profiles")
-        .update({ store_id: store.id })
-        .eq("id", user.id)
-    } else {
-      await adminClient
-        .from("profiles")
-        .upsert({ id: user.id, email: user.email, role, store_id: store.id })
-    }
+    await adminClient
+      .from("stores")
+      .update({
+        metadata: { ...(currentStore?.metadata || {}), plan_type: "free" },
+      })
+      .eq("id", storeId)
 
     return new Response(
-      JSON.stringify({ success: true, store_id: store.id, created: true }),
+      JSON.stringify({ success: true, store_id: storeId }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     )
   } catch (err) {
