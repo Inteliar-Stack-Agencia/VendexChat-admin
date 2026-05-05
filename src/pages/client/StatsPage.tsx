@@ -148,11 +148,12 @@ export default function StatsPage() {
         try {
             const data = await statsApi.getOrdersByCompany(range, getDateRange())
             const rows: Record<string, unknown>[] = []
-            data.forEach((o: { metadata?: Record<string, unknown>; customer_name: string; total: number; order_number: string; created_at: string; items: { quantity: number; price: number; notes: string | null; products: { name: string } | null }[] }) => {
+            data.forEach((o: { metadata?: Record<string, unknown>; customer_name: string; customer_notes?: string | null; total: number; order_number: string; created_at: string; items: { quantity: number; price: number; products: { name: string } | null }[] }) => {
                 const empresa = (o.metadata?.company_name as string) || '(Sin empresa)'
                 const empleado = o.customer_name || ''
                 const fecha = formatDate(o.created_at)
                 const nPedido = o.order_number || ''
+                const diaEntrega = o.customer_notes || ''
                 if (o.items && o.items.length > 0) {
                     o.items.forEach(item => {
                         rows.push({
@@ -161,7 +162,7 @@ export default function StatsPage() {
                             'Cantidad': item.quantity || 0,
                             'Empleado': empleado,
                             'Empresa': empresa,
-                            'Día de Entrega': item.notes || '',
+                            'Día de Entrega': diaEntrega,
                             'Precio Unit.': item.price || 0,
                             'Fecha': fecha,
                         })
@@ -173,7 +174,7 @@ export default function StatsPage() {
                         'Cantidad': '',
                         'Empleado': empleado,
                         'Empresa': empresa,
-                        'Día de Entrega': '',
+                        'Día de Entrega': diaEntrega,
                         'Precio Unit.': '',
                         'Fecha': fecha,
                     })
