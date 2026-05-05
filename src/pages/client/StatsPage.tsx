@@ -148,7 +148,7 @@ export default function StatsPage() {
         try {
             const data = await statsApi.getOrdersByCompany(range, getDateRange())
             const rows: Record<string, unknown>[] = []
-            data.forEach((o: { metadata?: Record<string, unknown>; customer_name: string; total: number; order_number: string; created_at: string; items: { quantity: number; price: number; products: { name: string } | null }[] }) => {
+            data.forEach((o: { metadata?: Record<string, unknown>; customer_name: string; total: number; order_number: string; created_at: string; items: { quantity: number; price: number; notes: string | null; products: { name: string } | null }[] }) => {
                 const empresa = (o.metadata?.company_name as string) || '(Sin empresa)'
                 const empleado = o.customer_name || ''
                 const fecha = formatDate(o.created_at)
@@ -156,26 +156,26 @@ export default function StatsPage() {
                 if (o.items && o.items.length > 0) {
                     o.items.forEach(item => {
                         rows.push({
-                            'Empresa': empresa,
-                            'Empleado': empleado,
                             'N° Pedido': nPedido,
-                            'Fecha': fecha,
                             'Producto': item.products?.name || 'Desconocido',
                             'Cantidad': item.quantity || 0,
+                            'Empleado': empleado,
+                            'Empresa': empresa,
+                            'Día de Entrega': item.notes || '',
                             'Precio Unit.': item.price || 0,
-                            'Subtotal': (item.quantity || 0) * (item.price || 0),
+                            'Fecha': fecha,
                         })
                     })
                 } else {
                     rows.push({
-                        'Empresa': empresa,
-                        'Empleado': empleado,
                         'N° Pedido': nPedido,
-                        'Fecha': fecha,
                         'Producto': '',
                         'Cantidad': '',
+                        'Empleado': empleado,
+                        'Empresa': empresa,
+                        'Día de Entrega': '',
                         'Precio Unit.': '',
-                        'Subtotal': o.total || 0,
+                        'Fecha': fecha,
                     })
                 }
             })
