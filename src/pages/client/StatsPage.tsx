@@ -180,7 +180,8 @@ export default function StatsPage() {
                 }
             })
             exportToExcel(rows, 'Reporte_Por_Empresa')
-        } catch {
+        } catch (err) {
+            console.error('Error al obtener datos por empresa:', err)
             showToast('error', 'Error al obtener datos por empresa')
         } finally {
             setExporting(null)
