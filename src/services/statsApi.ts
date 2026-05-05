@@ -155,16 +155,16 @@ export const statsApi = {
         const orderIds = orders.map(o => o.id)
         const { data: items, error: itemsError } = await supabase
             .from('order_items')
-            .select('order_id, quantity, price, products(name)')
+            .select('order_id, quantity, price, notes, products(name)')
             .in('order_id', orderIds)
 
         if (itemsError) throw itemsError
 
-        const itemsByOrder: Record<string, { quantity: number; price: number; products: { name: string } | null }[]> = {}
-        ;(items || []).forEach((item: { order_id: string; quantity: number; price: number; products: { name: string } | { name: string }[] | null }) => {
+        const itemsByOrder: Record<string, { quantity: number; price: number; notes: string | null; products: { name: string } | null }[]> = {}
+        ;(items || []).forEach((item: { order_id: string; quantity: number; price: number; notes: string | null; products: { name: string } | { name: string }[] | null }) => {
             if (!itemsByOrder[item.order_id]) itemsByOrder[item.order_id] = []
             const prod = Array.isArray(item.products) ? item.products[0] : item.products
-            itemsByOrder[item.order_id].push({ quantity: item.quantity, price: item.price, products: prod })
+            itemsByOrder[item.order_id].push({ quantity: item.quantity, price: item.price, notes: item.notes ?? null, products: prod })
         })
 
         return orders.map(o => ({ ...o, items: itemsByOrder[o.id] || [] }))

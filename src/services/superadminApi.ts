@@ -510,6 +510,10 @@ export const superadminApi = {
             .select('*')
             .eq('store_id', sourceId)
 
+        if (!categories || categories.length === 0) {
+            console.warn('[cloneTenant] No categories found for source store. Possible RLS issue or empty catalog.', { sourceId })
+        }
+
         if (categories && categories.length > 0) {
             for (const cat of categories) {
                 const { data: newCat, error: catError } = await supabase
@@ -522,27 +526,38 @@ export const superadminApi = {
                     .select()
                     .single()
 
-                if (!catError && newCat) {
-                    const { data: products } = await supabase
-                        .from('products')
-                        .select('*')
-                        .eq('category_id', cat.id)
+                if (catError || !newCat) {
+                    console.error('[cloneTenant] Failed to insert category', cat.name, catError)
+                    continue
+                }
 
-                    if (products && products.length > 0) {
-                        const productsToInsert = products.map(p => ({
-                            store_id: newStore.id,
-                            category_id: newCat.id,
-                            name: p.name,
-                            description: p.description,
-                            price: p.price,
-                            stock: p.stock,
-                            unlimited_stock: p.unlimited_stock,
-                            image_url: p.image_url,
-                            is_active: p.is_active,
-                            is_featured: p.is_featured,
-                            sort_order: p.sort_order
-                        }))
-                        await supabase.from('products').insert(productsToInsert)
+                const { data: products, error: prodReadError } = await supabase
+                    .from('products')
+                    .select('*')
+                    .eq('category_id', cat.id)
+
+                if (prodReadError) {
+                    console.error('[cloneTenant] Failed to read products for category', cat.name, prodReadError)
+                    continue
+                }
+
+                if (products && products.length > 0) {
+                    const productsToInsert = products.map(p => ({
+                        store_id: newStore.id,
+                        category_id: newCat.id,
+                        name: p.name,
+                        description: p.description,
+                        price: p.price,
+                        stock: p.stock,
+                        unlimited_stock: p.unlimited_stock,
+                        image_url: p.image_url,
+                        is_active: p.is_active,
+                        is_featured: p.is_featured,
+                        sort_order: p.sort_order
+                    }))
+                    const { error: prodInsertError } = await supabase.from('products').insert(productsToInsert)
+                    if (prodInsertError) {
+                        console.error('[cloneTenant] Failed to insert products for category', cat.name, prodInsertError)
                     }
                 }
             }
