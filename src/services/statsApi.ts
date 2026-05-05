@@ -143,7 +143,7 @@ export const statsApi = {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let query: any = supabase
             .from('orders')
-            .select('id, created_at, total, status, order_number, customer_name, customer_whatsapp, customer_notes, delivery_address, metadata, order_items(order_id, quantity, price, products(name))')
+            .select('id, created_at, total, status, order_number, customer_name, customer_whatsapp, customer_notes, delivery_address, metadata, order_items(order_id, quantity, price, notes, products(name))')
             .eq('store_id', storeId)
             .order('created_at', { ascending: false })
             .limit(2000)
@@ -158,7 +158,7 @@ export const statsApi = {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const items = (o.order_items || []).map((item: any) => {
                 const prod = Array.isArray(item.products) ? item.products[0] : item.products
-                return { quantity: item.quantity, price: item.price, notes: null, products: prod }
+                return { quantity: item.quantity, price: item.price, notes: item.notes ?? null, products: prod }
             })
             const { order_items: _, ...rest } = o
             return { ...rest, items }
