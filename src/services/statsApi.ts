@@ -155,7 +155,7 @@ export const statsApi = {
         const orderIds = orders.map(o => o.id)
         const { data: items, error: itemsError } = await supabase
             .from('order_items')
-            .select('order_id, quantity, price, notes, products(name)')
+            .select('order_id, quantity, price, products(name)')
             .in('order_id', orderIds)
 
         if (itemsError) throw itemsError
