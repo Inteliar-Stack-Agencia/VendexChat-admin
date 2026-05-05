@@ -143,7 +143,7 @@ export const statsApi = {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let query: any = supabase
             .from('orders')
-            .select('id, created_at, total, status, order_number, customer_name, customer_whatsapp, delivery_address, metadata, order_items(order_id, quantity, price, products(name))')
+            .select('id, created_at, total, status, order_number, customer_name, customer_whatsapp, customer_notes, delivery_address, metadata, order_items(order_id, quantity, price, products(name))')
             .eq('store_id', storeId)
             .order('created_at', { ascending: false })
             .limit(2000)
