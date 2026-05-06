@@ -84,6 +84,7 @@ export const productsApi = {
     },
 
     update: async (id: string | number, data: Partial<ProductFormData>) => {
+        const storeId = await getStoreId()
         const updateData: Partial<ProductFormData> = { ...data }
 
         if (data.name !== undefined || data.description !== undefined) {
@@ -98,7 +99,7 @@ export const productsApi = {
         if (data.price !== undefined) updateData.price = typeof data.price === 'string' ? parseFloat(data.price) : data.price
         if (data.stock !== undefined) updateData.stock = typeof data.stock === 'string' ? parseInt(data.stock) : data.stock
 
-        const { data: updatedProd, error } = await supabase.from('products').update(updateData).eq('id', id).select('*, categories(name)').single()
+        const { data: updatedProd, error } = await supabase.from('products').update(updateData).eq('id', id).eq('store_id', storeId).select('*, categories(name)').single()
         if (error) throw error
         return {
             ...updatedProd,

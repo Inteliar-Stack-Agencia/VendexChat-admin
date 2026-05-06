@@ -51,10 +51,12 @@ export const couponsApi = {
         if (data.min_purchase_amount !== undefined) updateData.min_purchase_amount = Number(data.min_purchase_amount)
         if (data.usage_limit !== undefined) (updateData as { usage_limit?: number | string | null }).usage_limit = data.usage_limit ? Number(data.usage_limit) : null
 
+        const storeId = await getStoreId()
         const { data: updated, error } = await supabase
             .from('coupons')
             .update(updateData)
             .eq('id', id)
+            .eq('store_id', storeId)
             .select()
             .single()
 
@@ -63,10 +65,12 @@ export const couponsApi = {
     },
 
     delete: async (id: string) => {
+        const storeId = await getStoreId()
         const { error } = await supabase
             .from('coupons')
             .delete()
             .eq('id', id)
+            .eq('store_id', storeId)
 
         if (error) throw error
     },
