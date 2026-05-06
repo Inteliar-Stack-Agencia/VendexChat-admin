@@ -235,8 +235,10 @@ export default function SettingsPage() {
       } as any)
       toast.success('Información actualizada')
 
-      // Si el dominio cambió, registrarlo en Cloudflare (SSL for SaaS)
-      if (newDomain && newDomain !== prevDomain) {
+      // Si el dominio cambió y NO es path-based, registrarlo en Cloudflare (SSL for SaaS)
+      // Path-based routing usa el dominio del cliente en Cloudflare directamente, no necesita SSL for SaaS
+      const hasCustomPath = customPath.trim().length > 0
+      if (newDomain && newDomain !== prevDomain && !hasCustomPath) {
         setDomainStatus('registering')
         try {
           const res = await fetch('/api/register-custom-hostname', {
