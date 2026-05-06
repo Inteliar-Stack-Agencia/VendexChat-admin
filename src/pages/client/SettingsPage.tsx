@@ -291,7 +291,8 @@ export default function SettingsPage() {
       toast.success('Contacto actualizado')
     } catch (err: unknown) {
       console.error('[SaveContact]', err)
-      toast.error(err instanceof Error ? err.message : 'Error al guardar contacto')
+      const msg = err instanceof Error ? err.message : (err as { message?: string })?.message || 'Error al guardar contacto'
+      toast.error(msg)
     } finally {
       setSaving(false)
     }
@@ -433,9 +434,9 @@ export default function SettingsPage() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       handleUpdateTenantState({ metadata: updatedMetadata } as any)
       toast.success('Métodos manuales actualizados')
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Error saving manual payments:', err)
-      toast.error('Error al guardar')
+      toast.error(err instanceof Error ? err.message : 'Error al guardar')
     } finally {
       setSaving(false)
     }
