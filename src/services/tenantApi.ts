@@ -79,6 +79,9 @@ async function _updateMeInternal(data: Partial<Tenant>): Promise<Tenant> {
         p_data: data
     })
 
-    if (rpcError) throw rpcError
+    if (rpcError) {
+        console.error('[tenantApi.updateMe] RPC also failed:', rpcError)
+        throw new Error(rpcError.message || 'Error al guardar')
+    }
     return rpcResult as unknown as Tenant
 }
