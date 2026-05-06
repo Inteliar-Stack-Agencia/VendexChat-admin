@@ -124,6 +124,9 @@ async function proxyTo(targetUrl: string, request: Request, hostname: string): P
   })
 }
 
+// Paths que son assets estáticos del storefront (no slugs de tenant)
+const STATIC_ASSET_RE = /^\/(assets|_next|favicon\.ico|favicon\.png|icons|images|robots\.txt|sitemap\.xml)(\/?.*)?$/i
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url)
@@ -132,6 +135,19 @@ export default {
     // Health check en dominio workers.dev
     if (hostname.endsWith('workers.dev')) {
       return new Response('VendexChat Domain Proxy OK', { status: 200 })
+    }
+
+    // Assets estáticos: proxear directo al storefront sin slug
+    // (el browser los pide como /assets/... desde el dominio personalizado)
+    if (STATIC_ASSET_RE.test(url.pathname)) {
+      const base = env.STOREFRONT_URL.replace(/\/$/, '')
+      const targetUrl = `${base}${url.pathname}${url.search}`
+      try {
+        return await proxyTo(targetUrl, request, hostname)
+      } catch (err) {
+        console.error('[domain-proxy] Error proxying static asset:', err)
+        return new Response('Asset not found', { status: 404 })
+      }
     }
 
     // Resolver tenant
