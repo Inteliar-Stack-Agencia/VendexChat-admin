@@ -42,7 +42,7 @@ async function uploadToSupabase(file: File, bucket: string, path: string): Promi
 
     if (error) {
         console.error('storageApi.uploadToSupabase error:', error)
-        throw error
+        throw new Error(error.message || 'Error al subir imagen a Supabase Storage')
     }
 
     const { data: { publicUrl } } = supabase.storage

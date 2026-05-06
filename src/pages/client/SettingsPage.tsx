@@ -487,7 +487,15 @@ export default function SettingsPage() {
     try {
       const extension = file.name.split('.').pop()
       const path = `${tenant.id}/${type}_${Date.now()}.${extension}`
-      const url = await storageApi.uploadImage(file, 'stores', path, type === 'logo' ? 'logo' : 'banner')
+      let url: string
+      try {
+        url = await storageApi.uploadImage(file, 'stores', path, type === 'logo' ? 'logo' : 'banner')
+      } catch (uploadErr: unknown) {
+        console.error('Error uploading image (Settings):', uploadErr)
+        const msg = uploadErr instanceof Error ? uploadErr.message : 'Error al subir la imagen. Verifica el tamaño y formato.'
+        toast.error(msg)
+        return
+      }
 
       if (isLogo) {
         setLogoUrl(url)
@@ -501,8 +509,8 @@ export default function SettingsPage() {
 
       toast.success(`${isLogo ? 'Logo' : 'Banner'} subido y guardado correctamente`)
     } catch (err: unknown) {
-      console.error('Error uploading image (Settings):', err)
-      toast.error(err instanceof Error ? err.message : 'Error al subir la imagen. Verifica el tamaño y formato.')
+      console.error('Error saving image URL (Settings):', err)
+      toast.error(err instanceof Error ? err.message : 'Error al guardar la imagen')
     } finally {
       if (isLogo) {
         setUploadingLogo(false)
