@@ -217,12 +217,14 @@ export default function SettingsPage() {
           history_title: historyTitle
         }
       })
+      const cleanPath = customPath.trim().toLowerCase().replace(/^\//, '') || null
       handleUpdateTenantState({
         name,
         description,
         logo_url: logoUrl,
         banner_url: bannerUrl,
-        custom_domain: customDomain || null,
+        custom_domain: newDomain || null,
+        custom_path: cleanPath,
         metadata: {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           ...((tenant as any)?.metadata || {}),
@@ -235,10 +237,10 @@ export default function SettingsPage() {
       } as any)
       toast.success('Información actualizada')
 
-      // Si el dominio cambió y NO es path-based, registrarlo en Cloudflare (SSL for SaaS)
-      // Path-based routing usa el dominio del cliente en Cloudflare directamente, no necesita SSL for SaaS
-      const hasCustomPath = customPath.trim().length > 0
-      if (newDomain && newDomain !== prevDomain && !hasCustomPath) {
+      // Si el dominio cambió, registrarlo en Cloudflare (SSL for SaaS)
+      // Aplica tanto para hostname-based como path-based, ya que ambos necesitan
+      // que Cloudflare reconozca el hostname para rutear el tráfico al worker proxy
+      if (newDomain && newDomain !== prevDomain) {
         setDomainStatus('registering')
         try {
           const res = await fetch('/api/register-custom-hostname', {
