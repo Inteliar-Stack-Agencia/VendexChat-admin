@@ -120,6 +120,7 @@ export const modifiersApi = {
         max_selections: data.max_selections,
       })
       .eq('id', groupId)
+      .eq('store_id', storeId)
 
     if (error) throw error
 
@@ -147,15 +148,18 @@ export const modifiersApi = {
   },
 
   deleteGroup: async (groupId: string): Promise<void> => {
-    const { error } = await supabase.from('modifier_groups').delete().eq('id', groupId)
+    const storeId = await getStoreId()
+    const { error } = await supabase.from('modifier_groups').delete().eq('id', groupId).eq('store_id', storeId)
     if (error) throw error
   },
 
   toggleGroupActive: async (groupId: string, isActive: boolean): Promise<void> => {
+    const storeId = await getStoreId()
     const { error } = await supabase
       .from('modifier_groups')
       .update({ is_active: isActive })
       .eq('id', groupId)
+      .eq('store_id', storeId)
     if (error) throw error
   },
 

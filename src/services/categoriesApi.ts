@@ -36,13 +36,15 @@ export const categoriesApi = {
     },
 
     update: async (id: string | number, data: { name?: string; sort_order?: number }) => {
-        const { data: updatedCat, error } = await supabase.from('categories').update(data).eq('id', id).select().single()
+        const storeId = await getStoreId()
+        const { data: updatedCat, error } = await supabase.from('categories').update(data).eq('id', id).eq('store_id', storeId).select().single()
         if (error) throw error
         return updatedCat as Category
     },
 
     deleteCategory: async (id: string | number) => {
-        const { error } = await supabase.from('categories').delete().eq('id', id)
+        const storeId = await getStoreId()
+        const { error } = await supabase.from('categories').delete().eq('id', id).eq('store_id', storeId)
         if (error) throw error
     },
 }
