@@ -15,6 +15,7 @@ export default function TenantGeneralConfig({ tenant, onUpdate, onChangePlan, is
     const [newSlug, setNewSlug] = useState(tenant.slug)
     const [editingDomain, setEditingDomain] = useState(false)
     const [newDomain, setNewDomain] = useState(tenant.custom_domain || '')
+    const [newPath, setNewPath] = useState(tenant.custom_path || '')
 
     const handleUpdateSlug = async () => {
         const sanitized = newSlug.trim().toLowerCase().replace(/\s+/g, '-')
@@ -23,8 +24,9 @@ export default function TenantGeneralConfig({ tenant, onUpdate, onChangePlan, is
     }
 
     const handleUpdateDomain = async () => {
-        const domain = newDomain.trim().toLowerCase().replace(/^https?:\/\//, '')
-        const success = await onUpdate({ custom_domain: domain || null })
+        const domain = newDomain.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/$/, '')
+        const path = newPath.trim().toLowerCase().replace(/^\//, '').replace(/\/$/, '') || null
+        const success = await onUpdate({ custom_domain: domain || null, custom_path: path })
         if (success) setEditingDomain(false)
     }
 
@@ -76,20 +78,42 @@ export default function TenantGeneralConfig({ tenant, onUpdate, onChangePlan, is
                     <label className="block text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2">Dominio Personalizado</label>
                     <div className="flex items-center gap-2">
                         {editingDomain ? (
-                            <div className="flex-1 flex gap-2">
-                                <input
-                                    type="text"
-                                    value={newDomain}
-                                    onChange={(e) => setNewDomain(e.target.value)}
-                                    placeholder="www.mitienda.com"
-                                    className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500/20 outline-none"
-                                />
-                                <button onClick={handleUpdateDomain} disabled={isSavingGeneral} className="px-3 py-2 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 disabled:opacity-50">OK</button>
-                                <button onClick={() => { setEditingDomain(false); setNewDomain(tenant.custom_domain || ''); }} className="px-3 py-2 bg-slate-200 text-slate-600 text-xs font-bold rounded-lg hover:bg-slate-300">X</button>
+                            <div className="flex-1 flex flex-col gap-2">
+                                <div className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        value={newDomain}
+                                        onChange={(e) => setNewDomain(e.target.value)}
+                                        placeholder="mitienda.com"
+                                        className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500/20 outline-none"
+                                    />
+                                    <span className="flex items-center text-slate-400 font-bold text-sm">/</span>
+                                    <input
+                                        type="text"
+                                        value={newPath}
+                                        onChange={(e) => setNewPath(e.target.value)}
+                                        placeholder="sub-ruta (opcional)"
+                                        className="w-40 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500/20 outline-none"
+                                    />
+                                </div>
+                                <p className="text-[10px] text-slate-400">Ej: <span className="font-mono">morfiviandas.com.ar</span> / <span className="font-mono">laplata</span> → varias tiendas bajo un mismo dominio</p>
+                                <div className="flex gap-2">
+                                    <button onClick={handleUpdateDomain} disabled={isSavingGeneral} className="px-3 py-2 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 disabled:opacity-50">Guardar</button>
+                                    <button onClick={() => { setEditingDomain(false); setNewDomain(tenant.custom_domain || ''); setNewPath(tenant.custom_path || ''); }} className="px-3 py-2 bg-slate-200 text-slate-600 text-xs font-bold rounded-lg hover:bg-slate-300">Cancelar</button>
+                                </div>
                             </div>
                         ) : (
                             <div className="flex-1 flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
-                                <span className={`font-bold ${tenant.custom_domain ? 'text-slate-900' : 'text-slate-300'}`}>{tenant.custom_domain || 'Sin dominio propio'}</span>
+                                <div>
+                                    <span className={`font-bold ${tenant.custom_domain ? 'text-slate-900' : 'text-slate-300'}`}>
+                                        {tenant.custom_domain
+                                            ? `${tenant.custom_domain}${tenant.custom_path ? `/${tenant.custom_path}` : ''}`
+                                            : 'Sin dominio propio'}
+                                    </span>
+                                    {tenant.custom_path && (
+                                        <span className="ml-2 text-[10px] font-black uppercase tracking-widest text-indigo-500 bg-indigo-50 px-1.5 py-0.5 rounded">path-based</span>
+                                    )}
+                                </div>
                                 <div className="flex items-center gap-3">
                                     <button onClick={() => setEditingDomain(true)} className="text-[10px] font-black text-indigo-600 hover:text-indigo-800 uppercase tracking-widest">{tenant.custom_domain ? 'Editar' : 'Agregar'}</button>
                                 </div>
