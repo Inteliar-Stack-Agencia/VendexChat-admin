@@ -65,6 +65,8 @@ export default function AppLayout() {
             storeName={tenant?.name}
             storeSlug={tenant?.slug}
             storeCity={tenant?.city}
+            customDomain={tenant?.custom_domain ?? undefined}
+            customPath={tenant?.custom_path ?? undefined}
           />
 
           <main className="flex-1 p-4 lg:p-6 overflow-auto">

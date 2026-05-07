@@ -7,11 +7,23 @@ interface HeaderProps {
   storeName?: string
   storeSlug?: string
   storeCity?: string | null
+  customDomain?: string
+  customPath?: string
 }
 
 const STOREFRONT_URL = import.meta.env.VITE_STOREFRONT_URL || 'https://vendexchat.app'
 
-export default function Header({ onMenuClick, storeName, storeSlug, storeCity }: HeaderProps) {
+function buildStoreUrl(slug?: string, customDomain?: string, customPath?: string): string | null {
+  if (!slug) return null
+  if (customDomain) {
+    const base = `https://${customDomain}`
+    return customPath ? `${base}/${customPath}` : base
+  }
+  return `${STOREFRONT_URL}/${slug}`
+}
+
+export default function Header({ onMenuClick, storeName, storeSlug, storeCity, customDomain, customPath }: HeaderProps) {
+  const storeUrl = buildStoreUrl(storeSlug, customDomain, customPath)
   const { user, isSuperadmin, storesCount } = useAuth()
   const isImpersonating = !!localStorage.getItem('vendexchat_impersonated_store')
 
@@ -32,9 +44,9 @@ export default function Header({ onMenuClick, storeName, storeSlug, storeCity }:
       </div>
 
       <div className="flex items-center gap-3">
-        {(storeSlug && STOREFRONT_URL) ? (
+        {storeUrl ? (
           <a
-            href={`${STOREFRONT_URL}/${storeSlug}`}
+            href={storeUrl}
             target="_blank"
             rel="noopener noreferrer"
             className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all shadow-sm ${(isSuperadmin && !isImpersonating)
