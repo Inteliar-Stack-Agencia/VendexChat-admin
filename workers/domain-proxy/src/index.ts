@@ -122,8 +122,9 @@ async function proxyTo(targetUrl: string, request: Request, hostname: string): P
   })
 }
 
-// Paths que son assets estáticos del storefront (no slugs de tenant)
-const STATIC_ASSET_RE = /^\/(assets|_next|favicon\.ico|favicon\.png|icons|images|robots\.txt|sitemap\.xml)(\/?.*)?$/i
+// Paths que son assets estáticos del storefront (no slugs de tenant).
+// Cubre directorios conocidos Y cualquier archivo con extensión estática en la raíz.
+const STATIC_ASSET_RE = /^\/(assets|_next|icons|images|static)(\/?.*)?$|^\/.+\.(js|css|png|jpg|jpeg|svg|ico|webp|gif|woff|woff2|ttf|eot|json|txt|xml|webmanifest|map)$/i
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -135,13 +136,15 @@ export default {
       return new Response('VendexChat Domain Proxy OK', { status: 200 })
     }
 
-    // Assets estáticos: redirigir al storefront directamente.
-    // Se usa redirect en vez de proxy porque el storefront puede rechazar
-    // solicitudes sin el host correcto cuando vienen de otro worker.
+    // Assets estáticos: proxear directo al storefront sin resolver tenant.
     if (STATIC_ASSET_RE.test(url.pathname)) {
       const base = env.STOREFRONT_URL.replace(/\/$/, '')
       const targetUrl = `${base}${url.pathname}${url.search}`
-      return Response.redirect(targetUrl, 302)
+      try {
+        return await proxyTo(targetUrl, request, hostname)
+      } catch {
+        return new Response('Asset not found', { status: 404 })
+      }
     }
 
     // Resolver tenant
