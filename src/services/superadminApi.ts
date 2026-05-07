@@ -88,8 +88,17 @@ export const superadminApi = {
 
     updateTenant: async (id: string | number, data: Partial<Tenant>) => {
         const { data: updated, error } = await supabase.from('stores').update(data).eq('id', id).select().single()
-        if (error) throw error
-        return updated as Tenant
+        if (!error && updated) return updated as Tenant
+
+        // RLS can block direct updates for stores the superadmin doesn't own.
+        // update_my_store is SECURITY DEFINER and allows superadmin to update any store.
+        console.warn('[superadminApi.updateTenant] Direct update blocked, using RPC fallback:', error?.message)
+        const { data: rpcResult, error: rpcError } = await supabase.rpc('update_my_store', {
+            p_store_id: id,
+            p_data: data,
+        })
+        if (rpcError) throw new Error(rpcError.message || 'Error al guardar')
+        return rpcResult as Tenant
     },
 
     deleteTenant: async (id: string | number) => {
