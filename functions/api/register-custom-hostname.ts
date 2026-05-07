@@ -169,14 +169,17 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
   if (!cfData.success) {
     const errMsg = cfData.errors?.[0]?.message ?? 'Error de Cloudflare'
-    // Si el hostname ya existe en CF (otro tenant lo registró), informar
+    // Si el hostname ya existe en CF significa que otro tenant del mismo dominio
+    // ya lo registró (caso path-based: morfiviandas.com.ar con múltiples tiendas).
+    // El hostname ya está activo en Cloudflare, así que el ruteo funcionará igual.
+    // No guardamos custom_hostname_cf_id ya que este tenant no es dueño del hostname.
     if (errMsg.includes('already exists')) {
-      return json({ error: 'Este dominio ya está registrado en otro tenant' }, 409)
+      return json({ success: true, status: 'active', ssl_status: 'active', shared_hostname: true })
     }
     return json({ error: errMsg }, 400)
   }
 
-  // Guardar el CF hostname ID en la DB
+  // Guardar el CF hostname ID en la DB (solo el primer tenant en registrar el dominio)
   await updateStoreCFId(tenant.id, cfData.result.id, env)
 
   // Retornar info de validación para mostrar al usuario
