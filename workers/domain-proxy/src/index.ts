@@ -104,8 +104,6 @@ async function proxyTo(targetUrl: string, request: Request, hostname: string): P
     method: request.method,
     headers: (() => {
       const h = new Headers(request.headers)
-      h.set('X-Forwarded-Host', hostname)
-      h.set('X-Original-Host', hostname)
       h.delete('host')
       return h
     })(),
