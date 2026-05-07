@@ -104,12 +104,8 @@ async function proxyTo(targetUrl: string, request: Request, hostname: string): P
     method: request.method,
     headers: (() => {
       const h = new Headers(request.headers)
-      // Do NOT forward X-Forwarded-Host — the storefront routes by slug from
-      // the URL path. Sending the custom domain here triggers its own
-      // custom-domain lookup, which returns the wrong store when multiple
-      // stores share the same custom_domain (path-based tenants).
-      h.delete('X-Forwarded-Host')
-      h.delete('X-Original-Host')
+      h.set('X-Forwarded-Host', hostname)
+      h.set('X-Original-Host', hostname)
       h.delete('host')
       return h
     })(),
@@ -172,7 +168,12 @@ export default {
     const targetUrl = `${base}/${tenant.slug}${tenant.remainingPath}${url.search}`
 
     try {
-      return await proxyTo(targetUrl, request, hostname)
+      const response = await proxyTo(targetUrl, request, hostname)
+      // Header de diagnóstico: permite verificar en devtools qué resolvió el worker
+      const headers = new Headers(response.headers)
+      headers.set('X-Proxy-Target', targetUrl)
+      headers.set('X-Resolved-Slug', tenant.slug)
+      return new Response(response.body, { status: response.status, statusText: response.statusText, headers })
     } catch (err) {
       console.error('[domain-proxy] Error proxying:', err)
       return new Response('Error al conectar con la tienda', { status: 502 })
