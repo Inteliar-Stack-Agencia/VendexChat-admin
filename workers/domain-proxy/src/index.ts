@@ -137,17 +137,13 @@ export default {
       return new Response('VendexChat Domain Proxy OK', { status: 200 })
     }
 
-    // Assets estáticos: proxear directo al storefront sin slug
-    // (el browser los pide como /assets/... desde el dominio personalizado)
+    // Assets estáticos: redirigir al storefront directamente.
+    // Se usa redirect en vez de proxy porque el storefront puede rechazar
+    // solicitudes sin el host correcto cuando vienen de otro worker.
     if (STATIC_ASSET_RE.test(url.pathname)) {
       const base = env.STOREFRONT_URL.replace(/\/$/, '')
       const targetUrl = `${base}${url.pathname}${url.search}`
-      try {
-        return await proxyTo(targetUrl, request, hostname)
-      } catch (err) {
-        console.error('[domain-proxy] Error proxying static asset:', err)
-        return new Response('Asset not found', { status: 404 })
-      }
+      return Response.redirect(targetUrl, 302)
     }
 
     // Resolver tenant
