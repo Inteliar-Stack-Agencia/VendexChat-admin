@@ -278,6 +278,7 @@ export interface OrderItem {
   quantity: number
   unit_price: number
   subtotal: number
+  notes?: string | null
 }
 
 // --- Dashboard ---

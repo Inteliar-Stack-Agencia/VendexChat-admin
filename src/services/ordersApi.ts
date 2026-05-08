@@ -20,7 +20,7 @@ export const ordersApi = {
     list: async (params?: { status?: string; page?: number; limit?: number }) => {
         const storeId = await getStoreId()
 
-        let query = supabase.from('orders').select('*', { count: 'exact' }).eq('store_id', storeId)
+        let query = supabase.from('orders').select('*, order_items(notes)', { count: 'exact' }).eq('store_id', storeId)
         if (params?.status && params.status !== 'all') query = query.eq('status', params.status)
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -41,7 +41,7 @@ export const ordersApi = {
         if (error) throw error
 
         return {
-            data: data as Order[],
+            data: (data || []).map(normalizeOrder),
             total: count || 0,
             page: params?.page || 1,
             limit: params?.limit || 10,

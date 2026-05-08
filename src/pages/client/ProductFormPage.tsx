@@ -84,14 +84,7 @@ export default function ProductFormPage() {
   }, [id, isEditing, navigate])
 
   const updateField = (field: keyof ProductFormData, value: unknown) => {
-    let finalValue = value
-    if (field === 'name' && typeof value === 'string') {
-      finalValue = value.toUpperCase()
-    } else if (field === 'description' && typeof value === 'string') {
-      finalValue = value.toLowerCase()
-    }
-
-    setForm((prev) => ({ ...prev, [field]: finalValue }))
+    setForm((prev) => ({ ...prev, [field]: value }))
     setErrors((prev) => ({ ...prev, [field]: '' }))
   }
 

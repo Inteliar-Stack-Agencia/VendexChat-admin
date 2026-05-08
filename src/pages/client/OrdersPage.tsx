@@ -366,6 +366,7 @@ export default function OrdersPage() {
                   <th className="text-left px-4 py-3 font-medium text-gray-500">Total</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-500">Estado</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-500 hidden sm:table-cell">Fecha</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-500 hidden sm:table-cell">Día entrega</th>
                   <th className="text-right px-4 py-3 font-medium text-gray-500">Acciones</th>
                 </tr>
               </thead>
@@ -373,6 +374,7 @@ export default function OrdersPage() {
                 {filteredOrders.map((order) => {
                   const statusConf = orderStatusConfig[order.status]
                   const archived = isArchived(order)
+                  const deliveryDays = [...new Set((order.items || []).map(i => i.notes).filter(Boolean))]
                   return (
                     <tr key={order.id} className={`hover:bg-gray-50 ${archived ? 'opacity-75' : ''}`}>
                       <td className="px-4 py-3">
@@ -409,6 +411,15 @@ export default function OrdersPage() {
                         </div>
                       </td>
                       <td className="px-4 py-3 text-gray-500 hidden sm:table-cell">{formatDate(order.created_at)}</td>
+                      <td className="px-4 py-3 hidden sm:table-cell">
+                        {deliveryDays.length > 0 ? (
+                          <div className="flex flex-wrap gap-1">
+                            {deliveryDays.map(day => (
+                              <span key={day} className="text-[10px] font-black px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 uppercase tracking-widest">{day}</span>
+                            ))}
+                          </div>
+                        ) : <span className="text-gray-300">—</span>}
+                      </td>
                       <td className="px-4 py-3">
                         <div className="flex justify-end gap-1">
                           <button
