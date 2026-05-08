@@ -108,6 +108,12 @@ export default function OrderDetailPage() {
   const statusConf = orderStatusConfig[order.status]
   const printerSettings = ((tenant?.metadata?.printer ?? {}) as { width?: string; header?: string; footer?: string; show_order_number?: boolean })
 
+  const computedSubtotal = (order.items || []).reduce((acc, item) => acc + (item.subtotal || 0), 0)
+  const effectiveSubtotal = order.subtotal > 0 ? order.subtotal : computedSubtotal
+  const effectiveTotal = order.total > 0 ? order.total : effectiveSubtotal + (order.delivery_cost || 0)
+  const deliveryDays = [...new Set((order.items || []).map(i => i.notes).filter(Boolean))]
+  const hasDeliveryDays = deliveryDays.length > 0
+
   return (
     <div className="max-w-3xl mx-auto space-y-6">
       {/* Estilos para impresión de comanda térmica */}
@@ -263,6 +269,7 @@ export default function OrderDetailPage() {
               <th className="text-center px-4 py-2 font-medium text-gray-500">Cant.</th>
               <th className="text-right px-4 py-2 font-medium text-gray-500">P. Unit.</th>
               <th className="text-right px-4 py-2 font-medium text-gray-500">Subtotal</th>
+              {hasDeliveryDays && <th className="text-center px-4 py-2 font-medium text-gray-500">Día entrega</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -272,6 +279,13 @@ export default function OrderDetailPage() {
                 <td className="px-4 py-3 text-center text-gray-600">{item.quantity}</td>
                 <td className="px-4 py-3 text-right text-gray-600">{formatPrice(item.unit_price)}</td>
                 <td className="px-4 py-3 text-right font-medium text-gray-900">{formatPrice(item.subtotal)}</td>
+                {hasDeliveryDays && (
+                  <td className="px-4 py-3 text-center">
+                    {item.notes ? (
+                      <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 uppercase tracking-widest">{item.notes}</span>
+                    ) : <span className="text-gray-300">—</span>}
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
@@ -281,7 +295,7 @@ export default function OrderDetailPage() {
         <div className="border-t border-gray-200 p-4 space-y-1 text-sm">
           <div className="flex justify-between">
             <span className="text-gray-500">Subtotal</span>
-            <span className="text-gray-900">{formatPrice(order.subtotal)}</span>
+            <span className="text-gray-900">{formatPrice(effectiveSubtotal)}</span>
           </div>
           {order.delivery_cost > 0 && (
             <div className="flex justify-between">
@@ -291,7 +305,7 @@ export default function OrderDetailPage() {
           )}
           <div className="flex justify-between pt-2 border-t border-gray-200 font-semibold text-base">
             <span className="text-gray-900">Total</span>
-            <span className="text-emerald-600">{formatPrice(order.total)}</span>
+            <span className="text-emerald-600">{formatPrice(effectiveTotal)}</span>
           </div>
         </div>
       </Card>
