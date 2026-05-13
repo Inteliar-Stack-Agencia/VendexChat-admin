@@ -20,17 +20,13 @@ export const resetCoreCache = () => {
 }
 
 async function _getStoreIdInternal(): Promise<string> {
-    // 1. Prioridad Absoluta: Selección Manual o Suplantación (Local Storage es Síncrono y Rápido)
     const impersonatedId = localStorage.getItem('vendexchat_impersonated_store')
     const selectedStoreId = localStorage.getItem('vendexchat_selected_store')
-    const activeStoreId = impersonatedId || selectedStoreId
 
-    // Si tenemos un store_id activo y ya lo sincronizamos este ciclo, devolverlo de inmediato
-    if (activeStoreId && _lastSyncedStoreId === activeStoreId) {
-        return activeStoreId
-    }
+    // 1. Impersonación de superadmin: confiar sin validar
+    if (impersonatedId && _lastSyncedStoreId === impersonatedId) return impersonatedId
 
-    // 2. Obtener usuario de Auth (Con caché en memoria para esta ráfaga de peticiones)
+    // 2. Obtener usuario de Auth (con caché en memoria)
     if (!_cachedUser) {
         const { data: { user } } = await supabase.auth.getUser()
         _cachedUser = user
@@ -39,12 +35,26 @@ async function _getStoreIdInternal(): Promise<string> {
     const user = _cachedUser
     if (!user) throw new Error('No hay sesión activa')
 
-    if (activeStoreId) {
-        // SYNC: Mantener profiles.store_id en sync con localStorage — fire-and-forget (no-bloqueante)
-        supabase.from('profiles').update({ store_id: activeStoreId }).eq('id', user.id)
-            .then(() => { _lastSyncedStoreId = activeStoreId }, (e) => console.warn('[getStoreId] Profile sync failed (non-blocking):', e))
-        _lastSyncedStoreId = activeStoreId
-        return activeStoreId
+    if (impersonatedId) {
+        supabase.from('profiles').update({ store_id: impersonatedId }).eq('id', user.id)
+            .then(() => { _lastSyncedStoreId = impersonatedId }, (e) => console.warn('[getStoreId] Profile sync failed:', e))
+        _lastSyncedStoreId = impersonatedId
+        return impersonatedId
+    }
+
+    // 3. selectedStoreId: validar que el usuario sea dueño antes de usar
+    if (selectedStoreId) {
+        if (_lastSyncedStoreId === selectedStoreId) return selectedStoreId
+        const { data: ownedStore } = await supabase.from('stores').select('id').eq('id', selectedStoreId).eq('owner_id', user.id).maybeSingle()
+        if (ownedStore) {
+            supabase.from('profiles').update({ store_id: selectedStoreId }).eq('id', user.id)
+                .then(() => { _lastSyncedStoreId = selectedStoreId }, (e) => console.warn('[getStoreId] Profile sync failed:', e))
+            _lastSyncedStoreId = selectedStoreId
+            return selectedStoreId
+        }
+        // No es dueño: limpiar localStorage corrupto y caer al fallback
+        localStorage.removeItem('vendexchat_selected_store')
+        _lastSyncedStoreId = null
     }
 
     // 3. Fallback: Obtener de perfiles (Si no hay en local storage)
