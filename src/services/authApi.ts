@@ -149,11 +149,38 @@ export const authApi = {
         if (authError) throw authError
         if (!authData.user) throw new Error('No se pudo crear el usuario')
 
+        const { data: store, error: storeError } = await supabase
+            .from('stores')
+            .insert({
+                name: data.store_name,
+                slug: data.slug,
+                email: data.email,
+                country: data.country,
+                city: data.city,
+                owner_id: authData.user.id,
+                is_active: true,
+            })
+            .select()
+            .single()
+
+        if (storeError) throw new Error(`Error al crear la tienda: ${storeError.message}`)
+
+        const { error: profileError } = await supabase
+            .from('profiles')
+            .insert({
+                id: authData.user.id,
+                role: 'client',
+                store_id: store.id,
+            })
+
+        if (profileError) throw new Error(`Error al crear el perfil: ${profileError.message}`)
+
         return {
             token: authData.session?.access_token || '',
             user: {
                 ...authData.user,
-                role: (authData.user.user_metadata as { role?: string })?.role || 'client'
+                role: 'client',
+                store_id: store.id,
             } as unknown as User
         }
     },
