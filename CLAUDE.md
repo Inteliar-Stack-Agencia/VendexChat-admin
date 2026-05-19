@@ -16,6 +16,7 @@ React + Vite, Supabase, Cloudflare Pages + Workers, MercadoPago.
 | Morfi Viandas CABA | `caba` | morfiviandas.com.ar | caba |
 | Morfi La Plata | `laplata` | morfiviandas.com.ar | laplata |
 | Morfi Empresas | `empresas` | morfiviandas.com.ar | empresas |
+| Gaucho Natural Pet | `gauchopet` | gauchonaturalpet.com.ar | NULL |
 
 ## Reglas críticas
 
@@ -77,3 +78,35 @@ UPDATE stores SET custom_domain = 'tienda.com', custom_path = 'sucursal-b' WHERE
 - Workers free: 100.000 req/día — suficiente para varios clientes
 - Pages, SSL, custom domains: siempre gratis
 - Workers Paid ($5/mes): solo si superás las 100k req/día
+
+### Problema: www vs raíz
+Si el cliente tiene `www.tienda.com` y `tienda.com`, agregar ambos como Custom Domain en el worker. Luego en Cloudflare → Rules → Redirect Rules: redirigir uno al otro (301). En Supabase usar el dominio canónico (sin www recomendado).
+
+---
+
+## Registro de nuevas tiendas
+
+`authApi.register` en `src/services/authApi.ts` crea automáticamente:
+1. Usuario en `auth.users` (signUp)
+2. Registro en `stores` (name, slug, email, country, city, owner_id, is_active=true)
+3. Registro en `profiles` (id, role='client', store_id)
+
+**Si un usuario se registró pero no tiene store/profile** (usuarios huérfanos anteriores al fix):
+```sql
+-- Crear store
+INSERT INTO stores (name, slug, email, owner_id, is_active)
+VALUES ('Nombre Tienda', 'el-slug', 'email@tienda.com', 'uuid-del-usuario', true)
+RETURNING id;
+
+-- Crear profile
+INSERT INTO profiles (id, role, store_id)
+VALUES ('uuid-del-usuario', 'client', 'uuid-del-store');
+```
+
+---
+
+## RLS — Reglas importantes
+
+- `my_store_id()` lee `profiles.store_id` del usuario autenticado. Si es NULL, el usuario no puede crear/editar nada.
+- `is_superadmin()` permite todo. El superadmin impersonando una tienda pasa el check de RLS.
+- Si un usuario puede ver el admin pero no puede crear categorías/productos: su `profiles.store_id` es NULL. Insertar el profile manualmente con el SQL de arriba.
