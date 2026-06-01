@@ -67,19 +67,17 @@ export const authApi = {
             }
         }
 
-        // 2. Buscar otras tiendas con el mismo email
-        if (user.email) {
-            const { data: emailStores } = await supabase
-                .from('stores')
-                .select('*')
-                .eq('email', user.email)
+        // 2. Buscar otras tiendas del mismo dueño (owner_id)
+        const { data: ownedStores } = await supabase
+            .from('stores')
+            .select('*')
+            .eq('owner_id', user.id)
 
-            if (emailStores) {
-                for (const s of emailStores) {
-                    if (!seenIds.has(s.id)) {
-                        allStores.push(s)
-                        seenIds.add(s.id)
-                    }
+        if (ownedStores) {
+            for (const s of ownedStores) {
+                if (!seenIds.has(s.id)) {
+                    allStores.push(s)
+                    seenIds.add(s.id)
                 }
             }
         }
