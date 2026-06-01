@@ -15,6 +15,7 @@ export default function AppLayout() {
   const isImpersonating = !!localStorage.getItem('vendexchat_impersonated_store')
 
   useEffect(() => {
+    if (loading) return // Esperar a que auth esté lista antes de cargar el tenant
     // Siempre cargar si NO es superadmin, O si es superadmin pero tiene una tienda seleccionada (o suplantada)
     if (!isSuperadmin || isImpersonating || selectedStoreId) {
       tenantApi.getMe().then(setTenant).catch((err) => {

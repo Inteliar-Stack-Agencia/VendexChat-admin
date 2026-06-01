@@ -27,9 +27,10 @@ async function _getStoreIdInternal(): Promise<string> {
     if (impersonatedId && _lastSyncedStoreId === impersonatedId) return impersonatedId
 
     // 2. Obtener usuario de Auth (con caché en memoria)
+    // Usar getSession (lee de localStorage, sin red) para evitar race conditions en page reload
     if (!_cachedUser) {
-        const { data: { user } } = await supabase.auth.getUser()
-        _cachedUser = user
+        const { data: { session } } = await supabase.auth.getSession()
+        _cachedUser = session?.user ?? null
     }
 
     const user = _cachedUser
@@ -42,17 +43,18 @@ async function _getStoreIdInternal(): Promise<string> {
         return impersonatedId
     }
 
-    // 3. selectedStoreId: validar que el usuario sea dueño antes de usar
+    // 3. selectedStoreId: verificar que el store existe y es accesible (sin filtrar por owner_id,
+    // ya que en multi-sucursal un mismo usuario puede acceder stores de distinto owner via email compartido)
     if (selectedStoreId) {
         if (_lastSyncedStoreId === selectedStoreId) return selectedStoreId
-        const { data: ownedStore } = await supabase.from('stores').select('id').eq('id', selectedStoreId).eq('owner_id', user.id).maybeSingle()
-        if (ownedStore) {
+        const { data: accessibleStore } = await supabase.from('stores').select('id').eq('id', selectedStoreId).maybeSingle()
+        if (accessibleStore) {
             supabase.from('profiles').update({ store_id: selectedStoreId }).eq('id', user.id)
                 .then(() => { _lastSyncedStoreId = selectedStoreId }, (e) => console.warn('[getStoreId] Profile sync failed:', e))
             _lastSyncedStoreId = selectedStoreId
             return selectedStoreId
         }
-        // No es dueño: limpiar localStorage corrupto y caer al fallback
+        // Store no encontrado (eliminado o sin acceso): limpiar y caer al fallback
         localStorage.removeItem('vendexchat_selected_store')
         _lastSyncedStoreId = null
     }
