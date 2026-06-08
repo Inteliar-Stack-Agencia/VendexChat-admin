@@ -33,6 +33,9 @@ export default function StatsPage() {
     } | null>(null)
     const [exporting, setExporting] = useState<string | null>(null)
     const [range, setRange] = useState<RangeOption>('30d')
+    const [companyFilter, setCompanyFilter] = useState('')
+    const [companyDateFrom, setCompanyDateFrom] = useState('')
+    const [companyDateTo, setCompanyDateTo] = useState('')
 
     const today = new Date().toISOString().split('T')[0]
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
@@ -146,7 +149,17 @@ export default function StatsPage() {
     const handleExportByCompany = async () => {
         setExporting('company')
         try {
-            const data = await statsApi.getOrdersByCompany(range, getDateRange())
+            const companyRange = (companyDateFrom || companyDateTo) ? 'custom' : 'all'
+            const companyDateRange = (companyDateFrom || companyDateTo)
+                ? { from: companyDateFrom || '2000-01-01', to: companyDateTo || today }
+                : undefined
+            let data = await statsApi.getOrdersByCompany(companyRange, companyDateRange)
+            if (companyFilter.trim()) {
+                const q = companyFilter.trim().toLowerCase()
+                data = data.filter((o: { metadata?: Record<string, unknown> }) =>
+                    ((o.metadata?.company_name as string) || '').toLowerCase().includes(q)
+                )
+            }
             const rows: Record<string, unknown>[] = []
             data.forEach((o: { metadata?: Record<string, unknown>; customer_name: string; customer_notes?: string | null; total: number; order_number: string; created_at: string; items: { quantity: number; price: number; notes: string | null; products: { name: string } | null }[] }) => {
                 const empresa = (o.metadata?.company_name as string) || '(Sin empresa)'
@@ -416,13 +429,58 @@ export default function StatsPage() {
                         onDownload={handleExportByDay}
                         loading={exporting === 'byDay'}
                     />
-                    <ReportCard
-                        title="Pedidos por Empresa"
-                        description="Agrupá los pedidos por empresa/razón social. Requiere que el campo empresa esté completado en el pedido."
-                        icon={Building2}
-                        onDownload={handleExportByCompany}
-                        loading={exporting === 'company'}
-                    />
+                    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 flex flex-col gap-4">
+                        <div className="flex items-start gap-4">
+                            <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center shrink-0">
+                                <Building2 className="w-5 h-5 text-slate-500" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <p className="font-semibold text-slate-800 text-sm">Pedidos por Empresa</p>
+                                <p className="text-xs text-slate-500 mt-0.5">Agrupá los pedidos por empresa/razón social. Podés filtrar por nombre y rango de fechas.</p>
+                            </div>
+                        </div>
+                        <div className="flex flex-col gap-2">
+                            <input
+                                type="text"
+                                placeholder="Buscar empresa (ej: Jota)..."
+                                value={companyFilter}
+                                onChange={e => setCompanyFilter(e.target.value)}
+                                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                            />
+                            <div className="flex gap-2">
+                                <div className="flex-1">
+                                    <label className="text-xs text-slate-400 mb-1 block">Desde</label>
+                                    <input
+                                        type="date"
+                                        value={companyDateFrom}
+                                        onChange={e => setCompanyDateFrom(e.target.value)}
+                                        className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                                    />
+                                </div>
+                                <div className="flex-1">
+                                    <label className="text-xs text-slate-400 mb-1 block">Hasta</label>
+                                    <input
+                                        type="date"
+                                        value={companyDateTo}
+                                        onChange={e => setCompanyDateTo(e.target.value)}
+                                        className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={handleExportByCompany}
+                            disabled={exporting === 'company'}
+                            className="w-full flex items-center justify-center gap-2"
+                        >
+                            {exporting === 'company'
+                                ? <Loader2 className="w-4 h-4 animate-spin" />
+                                : <Download className="w-4 h-4" />}
+                            Excel
+                        </Button>
+                    </div>
                 </div>
             </div>
         </div>
