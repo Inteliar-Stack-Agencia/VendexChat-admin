@@ -155,10 +155,11 @@ export default function StatsPage() {
                 : undefined
             let data = await statsApi.getOrdersByCompany(companyRange, companyDateRange)
             if (companyFilter.trim()) {
-                const q = companyFilter.trim().toLowerCase()
-                data = data.filter((o: { metadata?: Record<string, unknown> }) =>
-                    ((o.metadata?.company_name as string) || '').toLowerCase().includes(q)
-                )
+                const words = companyFilter.trim().toLowerCase().split(/\s+/).filter(Boolean)
+                data = data.filter((o: { metadata?: Record<string, unknown> }) => {
+                    const name = ((o.metadata?.company_name as string) || '').toLowerCase()
+                    return words.some(w => name.includes(w))
+                })
             }
             const rows: Record<string, unknown>[] = []
             data.forEach((o: { metadata?: Record<string, unknown>; customer_name: string; customer_notes?: string | null; total: number; order_number: string; created_at: string; items: { quantity: number; price: number; notes: string | null; products: { name: string } | null }[] }) => {
