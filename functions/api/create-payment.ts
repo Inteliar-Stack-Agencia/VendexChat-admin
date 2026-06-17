@@ -6,16 +6,16 @@ interface Env {
   ADMIN_URL?: string
 }
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+const buildCorsHeaders = (adminUrl: string) => ({
+  'Access-Control-Allow-Origin': adminUrl,
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-}
+})
 
-const json = (body: unknown, status = 200) =>
+const json = (body: unknown, cors: Record<string, string>, status = 200) =>
   new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    headers: { ...cors, 'Content-Type': 'application/json' },
   })
 
 interface PlanRow {
@@ -50,35 +50,40 @@ async function getExchangeRate(token: string): Promise<number> {
   return data.ratio
 }
 
-export const onRequestOptions: PagesFunction = async () =>
-  new Response(null, { headers: corsHeaders })
+export const onRequestOptions: PagesFunction<Env> = async ({ env }) => {
+  const adminUrl = env.ADMIN_URL || env.VITE_ADMIN_URL || 'https://admin.vendexchat.app'
+  return new Response(null, { headers: buildCorsHeaders(adminUrl) })
+}
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
-  if (!env.MP_ACCESS_TOKEN) return json({ error: 'MP_ACCESS_TOKEN no configurado' }, 500)
-  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_KEY) return json({ error: 'Supabase env vars no configurados' }, 500)
+  const adminUrl = env.ADMIN_URL || env.VITE_ADMIN_URL || 'https://admin.vendexchat.app'
+  const cors = buildCorsHeaders(adminUrl)
+
+  if (!env.MP_ACCESS_TOKEN) return json({ error: 'MP_ACCESS_TOKEN no configurado' }, cors, 500)
+  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_KEY) return json({ error: 'Supabase env vars no configurados' }, cors, 500)
 
   let body: { plan_id?: string; billing_cycle?: string; store_id?: string; user_email?: string }
   try {
     body = await request.json()
   } catch {
-    return json({ error: 'Body inválido' }, 400)
+    return json({ error: 'Body inválido' }, cors, 400)
   }
 
   const { plan_id, billing_cycle, store_id, user_email } = body
   if (!plan_id || !billing_cycle || !store_id) {
-    return json({ error: 'plan_id, billing_cycle y store_id son requeridos' }, 400)
+    return json({ error: 'plan_id, billing_cycle y store_id son requeridos' }, cors, 400)
   }
 
   let plan: PlanRow | null
   try {
     plan = await getPlanFromSupabase(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY, plan_id)
   } catch (err) {
-    return json({ error: `No se pudo leer el plan: ${(err as Error).message}` }, 502)
+    return json({ error: `No se pudo leer el plan: ${(err as Error).message}` }, cors, 502)
   }
 
-  if (!plan) return json({ error: `Plan inválido: ${plan_id}` }, 400)
+  if (!plan) return json({ error: `Plan inválido: ${plan_id}` }, cors, 400)
   if (plan.price_usd === 0 && plan.annual_price_usd === 0) {
-    return json({ error: `El plan ${plan_id} no tiene precio definido` }, 400)
+    return json({ error: `El plan ${plan_id} no tiene precio definido` }, cors, 400)
   }
 
   const priceUsd = billing_cycle === 'annual' ? plan.annual_price_usd : plan.price_usd
@@ -87,12 +92,11 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   try {
     exchangeRate = await getExchangeRate(env.MP_ACCESS_TOKEN)
   } catch (err) {
-    return json({ error: `No se pudo obtener el tipo de cambio: ${(err as Error).message}` }, 502)
+    return json({ error: `No se pudo obtener el tipo de cambio: ${(err as Error).message}` }, cors, 502)
   }
 
   const priceArs = Math.round(priceUsd * exchangeRate)
 
-  const adminUrl = env.ADMIN_URL || env.VITE_ADMIN_URL || 'https://admin.vendexchat.app'
   const notificationUrl = `${adminUrl}/api/mp-webhook`
 
   const frequency = billing_cycle === 'annual' ? 12 : 1
@@ -124,8 +128,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     })
 
     if (!mpRes.ok) {
-      const errText = await mpRes.text()
-      return json({ error: `MP Preapproval error: ${errText}` }, 502)
+      console.error('MP Preapproval error:', mpRes.status, await mpRes.text())
+      return json({ error: 'Error al crear el pago. Intentá de nuevo.' }, cors, 502)
     }
 
     const mpData = await mpRes.json() as { id: string; init_point: string; sandbox_init_point?: string }
@@ -137,8 +141,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       price_usd: priceUsd,
       price_ars: priceArs,
       exchange_rate: exchangeRate,
-    })
+    }, cors)
   } catch (err) {
-    return json({ error: (err as Error).message }, 500)
+    return json({ error: 'Error interno del servidor.' }, cors, 500)
   }
 }

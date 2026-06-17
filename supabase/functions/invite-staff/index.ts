@@ -3,9 +3,10 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+const ALLOWED_ORIGIN = Deno.env.get("ADMIN_URL") ?? "https://admin.vendexchat.app"
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 }
 
@@ -15,6 +16,41 @@ serve(async (req) => {
   }
 
   try {
+    // Verify the caller is a superadmin
+    const authHeader = req.headers.get("Authorization")
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: "No autorizado" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401,
+      })
+    }
+
+    const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+    const callerClient = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_ANON_KEY")!, {
+      global: { headers: { Authorization: authHeader } },
+    })
+
+    const { data: { user: callerUser }, error: callerError } = await callerClient.auth.getUser()
+    if (callerError || !callerUser) {
+      return new Response(JSON.stringify({ error: "No autorizado" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401,
+      })
+    }
+
+    const { data: callerProfile, error: profileError } = await adminClient
+      .from("profiles")
+      .select("role")
+      .eq("id", callerUser.id)
+      .single()
+
+    if (profileError || callerProfile?.role !== "superadmin") {
+      return new Response(JSON.stringify({ error: "Acceso denegado" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 403,
+      })
+    }
+
     const { email } = await req.json()
 
     if (!email) {
@@ -23,8 +59,6 @@ serve(async (req) => {
         status: 400,
       })
     }
-
-    const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
     const { data: { users }, error: listError } = await adminClient.auth.admin.listUsers()
     if (listError) throw listError
