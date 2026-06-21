@@ -23,6 +23,7 @@ import {
   expensesApi,
   type Expense,
   type Supplier,
+  type Partner,
   type ExpenseCategory,
   type ExpenseType,
 } from '../../services/expensesApi'
@@ -400,10 +401,243 @@ create table expenses (
 );
 alter table expenses enable row level security;
 create policy "store owner" on expenses
+  using (store_id = my_store_id());
+
+-- Socios
+create table partners (
+  id uuid primary key default gen_random_uuid(),
+  store_id uuid references stores(id) on delete cascade not null,
+  name text not null,
+  percentage numeric(5,2) not null check (percentage > 0 and percentage <= 100),
+  created_at timestamptz default now()
+);
+alter table partners enable row level security;
+create policy "store owner" on partners
   using (store_id = my_store_id());`}
             </pre>
           </details>
         </div>
+      </div>
+    </Card>
+  )
+}
+
+// ─── Partner Manager ───────────────────────────────────────────────────────────
+
+interface PartnerManagerProps {
+  partners: Partner[]
+  onAdd: (name: string, percentage: number) => Promise<void>
+  onUpdate: (id: string, name: string, percentage: number) => Promise<void>
+  onDelete: (id: string) => Promise<void>
+}
+
+function PartnerManager({ partners, onAdd, onUpdate, onDelete }: PartnerManagerProps) {
+  const [adding, setAdding] = useState(false)
+  const [editId, setEditId] = useState<string | null>(null)
+  const [name, setName] = useState('')
+  const [pct, setPct] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const totalPct = partners.reduce((s, p) => s + p.percentage, 0)
+  const remaining = 100 - totalPct
+
+  const resetForm = () => { setName(''); setPct(''); setAdding(false); setEditId(null) }
+
+  const handleSave = async () => {
+    const p = parseFloat(pct)
+    if (!name || isNaN(p) || p <= 0) return
+    setSaving(true)
+    try {
+      if (editId) {
+        await onUpdate(editId, name, p)
+      } else {
+        await onAdd(name, p)
+      }
+      resetForm()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const startEdit = (partner: Partner) => {
+    setEditId(partner.id)
+    setName(partner.name)
+    setPct(String(partner.percentage))
+    setAdding(true)
+  }
+
+  return (
+    <Card className="p-5">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <p className="font-bold text-gray-800 text-sm">Socios / Participaciones</p>
+          <p className="text-xs text-gray-400 mt-0.5">Configurá quién participa y en qué porcentaje</p>
+        </div>
+        {!adding && (
+          <Button
+            onClick={() => { resetForm(); setAdding(true) }}
+            variant="ghost"
+            className="text-xs flex items-center gap-1.5 text-indigo-600 hover:bg-indigo-50"
+          >
+            <Plus className="w-3.5 h-3.5" /> Agregar socio
+          </Button>
+        )}
+      </div>
+
+      {/* Progress bar */}
+      {partners.length > 0 && (
+        <div className="mb-4">
+          <div className="flex h-3 rounded-full overflow-hidden gap-0.5">
+            {partners.map((p, i) => {
+              const colors = [
+                'bg-indigo-500', 'bg-emerald-500', 'bg-amber-500',
+                'bg-purple-500', 'bg-pink-500', 'bg-cyan-500',
+              ]
+              return (
+                <div
+                  key={p.id}
+                  className={`${colors[i % colors.length]} transition-all`}
+                  style={{ width: `${p.percentage}%` }}
+                  title={`${p.name}: ${p.percentage}%`}
+                />
+              )
+            })}
+            {remaining > 0 && (
+              <div className="bg-gray-200 flex-1" title={`Sin asignar: ${remaining.toFixed(1)}%`} />
+            )}
+          </div>
+          <div className="flex items-center justify-between mt-1">
+            <p className="text-[10px] text-gray-400">Asignado: {totalPct.toFixed(1)}%</p>
+            {remaining > 0 && (
+              <p className="text-[10px] text-amber-500 font-semibold">Sin asignar: {remaining.toFixed(1)}%</p>
+            )}
+            {totalPct > 100 && (
+              <p className="text-[10px] text-red-500 font-semibold">⚠ Superás el 100%</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Partner list */}
+      <div className="space-y-2 mb-3">
+        {partners.map((p, i) => {
+          const colors = [
+            'bg-indigo-500', 'bg-emerald-500', 'bg-amber-500',
+            'bg-purple-500', 'bg-pink-500', 'bg-cyan-500',
+          ]
+          return (
+            <div key={p.id} className="flex items-center gap-3 py-1.5">
+              <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${colors[i % colors.length]}`} />
+              <p className="text-sm font-medium text-gray-800 flex-1">{p.name}</p>
+              <p className="text-sm font-black text-gray-700">{p.percentage}%</p>
+              <button
+                onClick={() => startEdit(p)}
+                className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-indigo-600"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+              </button>
+              <button
+                onClick={() => onDelete(p.id)}
+                className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-600"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Add/edit form */}
+      {adding && (
+        <div className="flex gap-2 items-center pt-3 border-t border-gray-100">
+          <input
+            className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+            placeholder="Nombre del socio"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            autoFocus
+          />
+          <div className="relative w-24">
+            <input
+              type="number"
+              min="0.1"
+              max="100"
+              step="0.1"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 pr-7"
+              placeholder="50"
+              value={pct}
+              onChange={(e) => setPct(e.target.value)}
+            />
+            <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold">%</span>
+          </div>
+          <Button
+            onClick={handleSave}
+            disabled={saving}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-3 py-2"
+          >
+            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : editId ? 'Guardar' : 'Agregar'}
+          </Button>
+          <button onClick={resetForm} className="p-2 rounded-lg hover:bg-gray-100 text-gray-400">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+    </Card>
+  )
+}
+
+// ─── Distribution Table ─────────────────────────────────────────────────────────
+
+function DistributionTable({ partners, netResult }: { partners: Partner[]; netResult: number }) {
+  if (partners.length === 0) return null
+  const totalPct = partners.reduce((s, p) => s + p.percentage, 0)
+
+  const colors = [
+    { dot: 'bg-indigo-500', badge: 'bg-indigo-100 text-indigo-700' },
+    { dot: 'bg-emerald-500', badge: 'bg-emerald-100 text-emerald-700' },
+    { dot: 'bg-amber-500', badge: 'bg-amber-100 text-amber-700' },
+    { dot: 'bg-purple-500', badge: 'bg-purple-100 text-purple-700' },
+    { dot: 'bg-pink-500', badge: 'bg-pink-100 text-pink-700' },
+    { dot: 'bg-cyan-500', badge: 'bg-cyan-100 text-cyan-700' },
+  ]
+
+  return (
+    <Card className="overflow-hidden">
+      <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+        <div>
+          <p className="font-bold text-gray-800 text-sm">Distribución de Utilidades</p>
+          <p className="text-xs text-gray-400">Resultado neto: {' '}
+            <span className={`font-bold ${netResult >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+              {netResult >= 0 ? '+' : ''}{formatPrice(netResult)}
+            </span>
+          </p>
+        </div>
+        {totalPct !== 100 && (
+          <span className="text-[10px] bg-amber-100 text-amber-700 font-bold px-2 py-1 rounded-full">
+            ⚠ Los % no suman 100
+          </span>
+        )}
+      </div>
+      <div className="divide-y divide-gray-50">
+        {partners.map((p, i) => {
+          const share = (netResult * p.percentage) / 100
+          const c = colors[i % colors.length]
+          return (
+            <div key={p.id} className="flex items-center gap-4 px-5 py-3.5">
+              <div className={`w-3 h-3 rounded-full shrink-0 ${c.dot}`} />
+              <p className="flex-1 font-semibold text-gray-800">{p.name}</p>
+              <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full ${c.badge}`}>
+                {p.percentage}%
+              </span>
+              <p className={`font-black text-base w-32 text-right ${share >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                {share >= 0 ? '+' : ''}{formatPrice(share)}
+              </p>
+            </div>
+          )
+        })}
       </div>
     </Card>
   )
@@ -590,6 +824,7 @@ export default function ExpensesPage() {
   const [tab, setTab] = useState<Tab>('gastos')
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
+  const [partners, setPartners] = useState<Partner[]>([])
   const [revenueOrders, setRevenueOrders] = useState<{ total: number; created_at: string }[]>([])
   const [loading, setLoading] = useState(true)
   const [dbError, setDbError] = useState(false)
@@ -627,15 +862,17 @@ export default function ExpensesPage() {
   const loadPnLData = useCallback(async () => {
     setLoading(true)
     try {
-      const [yearExpenses, revenue] = await Promise.all([
+      const [yearExpenses, revenue, partnerList] = await Promise.all([
         expensesApi.listExpenses({
           from: `${pnlYear}-01-01`,
           to: `${pnlYear}-12-31`,
         }),
         expensesApi.getMonthlyRevenue(pnlYear),
+        expensesApi.listPartners(),
       ])
       setExpenses(yearExpenses)
       setRevenueOrders(revenue)
+      setPartners(partnerList)
       setDbError(false)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
@@ -723,6 +960,28 @@ export default function ExpensesPage() {
     await expensesApi.deleteSupplier(id)
     showToast('success', 'Proveedor eliminado')
     loadData()
+  }
+
+  const handleAddPartner = async (name: string, percentage: number) => {
+    await expensesApi.createPartner({ name, percentage })
+    showToast('success', 'Socio agregado')
+    const updated = await expensesApi.listPartners()
+    setPartners(updated)
+  }
+
+  const handleUpdatePartner = async (id: string, name: string, percentage: number) => {
+    await expensesApi.updatePartner(id, { name, percentage })
+    showToast('success', 'Socio actualizado')
+    const updated = await expensesApi.listPartners()
+    setPartners(updated)
+  }
+
+  const handleDeletePartner = async (id: string) => {
+    if (!confirm('¿Eliminar este socio?')) return
+    await expensesApi.deletePartner(id)
+    showToast('success', 'Socio eliminado')
+    const updated = await expensesApi.listPartners()
+    setPartners(updated)
   }
 
   // Filtered expenses for Gastos tab
@@ -963,7 +1222,23 @@ export default function ExpensesPage() {
                   <Loader2 className="w-6 h-6 animate-spin text-indigo-400" />
                 </div>
               ) : (
-                <PnLTable rows={pnlRows} year={pnlYear} onExport={handleExportPnL} />
+                <>
+                  <PnLTable rows={pnlRows} year={pnlYear} onExport={handleExportPnL} />
+
+                  {/* Socios y distribución */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 pt-2">
+                    <PartnerManager
+                      partners={partners}
+                      onAdd={handleAddPartner}
+                      onUpdate={handleUpdatePartner}
+                      onDelete={handleDeletePartner}
+                    />
+                    <DistributionTable
+                      partners={partners}
+                      netResult={pnlRows.reduce((s, r) => s + r.result, 0)}
+                    />
+                  </div>
+                </>
               )}
             </div>
           </FeatureGuard>

@@ -38,6 +38,14 @@ export interface Expense {
   created_at: string
 }
 
+export interface Partner {
+  id: string
+  store_id: string
+  name: string
+  percentage: number
+  created_at: string
+}
+
 export const expensesApi = {
   // Gastos
   listExpenses: async (params?: { from?: string; to?: string; category?: ExpenseCategory }) => {
@@ -124,6 +132,45 @@ export const expensesApi = {
 
   deleteSupplier: async (id: string) => {
     const { error } = await supabase.from('suppliers').delete().eq('id', id)
+    if (error) throw error
+  },
+
+  // Socios
+  listPartners: async () => {
+    const storeId = await getStoreId()
+    const { data, error } = await supabase
+      .from('partners')
+      .select('*')
+      .eq('store_id', storeId)
+      .order('percentage', { ascending: false })
+    if (error) throw error
+    return (data || []) as Partner[]
+  },
+
+  createPartner: async (partner: Omit<Partner, 'id' | 'store_id' | 'created_at'>) => {
+    const storeId = await getStoreId()
+    const { data, error } = await supabase
+      .from('partners')
+      .insert({ ...partner, store_id: storeId })
+      .select()
+      .single()
+    if (error) throw error
+    return data as Partner
+  },
+
+  updatePartner: async (id: string, updates: Partial<Omit<Partner, 'id' | 'store_id' | 'created_at'>>) => {
+    const { data, error } = await supabase
+      .from('partners')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single()
+    if (error) throw error
+    return data as Partner
+  },
+
+  deletePartner: async (id: string) => {
+    const { error } = await supabase.from('partners').delete().eq('id', id)
     if (error) throw error
   },
 }
