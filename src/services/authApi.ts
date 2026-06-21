@@ -67,23 +67,6 @@ export const authApi = {
             }
         }
 
-        // 2. Buscar otras tiendas con el mismo email (multi-sucursal mismo dueño)
-        if (user.email) {
-            const { data: emailStores } = await supabase
-                .from('stores')
-                .select('*')
-                .eq('email', user.email)
-
-            if (emailStores) {
-                for (const s of emailStores) {
-                    if (!seenIds.has(s.id)) {
-                        allStores.push(s)
-                        seenIds.add(s.id)
-                    }
-                }
-            }
-        }
-
         // 3. Si es superadmin y no tiene tiendas asignadas, o quiere ver todas (opcional)
         if (profile?.role === 'superadmin') {
             const { data: moreStores } = await supabase
