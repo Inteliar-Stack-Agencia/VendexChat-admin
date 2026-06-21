@@ -8,6 +8,8 @@ export type ExpenseCategory =
   | 'personal'
   | 'transporte'
   | 'marketing'
+  | 'merma'
+  | 'consumo_interno'
   | 'otros'
 
 export interface Supplier {
