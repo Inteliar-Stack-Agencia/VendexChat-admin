@@ -49,6 +49,7 @@ const BulkPriceEditorPage = lazy(() => import('./pages/client/BulkPriceEditorPag
 const POSPage = lazy(() => import('./pages/client/POSPage'))
 const ModifiersPage = lazy(() => import('./pages/client/ModifiersPage'))
 const BotFeedbackPage = lazy(() => import('./pages/client/BotFeedbackPage'))
+const ExpensesPage = lazy(() => import('./pages/client/ExpensesPage'))
 const LegalPage = lazy(() => import('./pages/legal/LegalPage'))
 const TermsPage = lazy(() => import('./pages/legal/TermsPage'))
 const PrivacyPage = lazy(() => import('./pages/legal/PrivacyPage'))
@@ -156,6 +157,7 @@ export default function App() {
               <Route path="/bulk-prices" element={<BulkPriceEditorPage />} />
               <Route path="/pos" element={<POSPage />} />
               <Route path="/modifiers" element={<ModifiersPage />} />
+              <Route path="/expenses" element={<ExpensesPage />} />
 
               {/* Redirigir root del merchant a dashboard */}
               <Route index element={<Navigate to="/dashboard" replace />} />
