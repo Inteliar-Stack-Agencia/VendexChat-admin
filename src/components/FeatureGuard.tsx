@@ -6,7 +6,7 @@ import { Button } from './common'
 
 interface FeatureGuardProps {
     children: ReactNode
-    feature: 'analytics' | 'coupons' | 'white-label' | 'bot' | 'logistics' | 'pro-tools' | 'marketing' | 'custom-domain' | 'ai-importer' | 'ai-intelligence' | 'ai-analyst' | 'modifiers' | 'expenses'
+    feature: 'analytics' | 'coupons' | 'white-label' | 'bot' | 'logistics' | 'pro-tools' | 'marketing' | 'custom-domain' | 'ai-importer' | 'ai-intelligence' | 'ai-analyst' | 'modifiers' | 'expenses' | 'pnl'
     minPlan?: 'pro' | 'vip' | 'ultra'
     fallback?: 'blur' | 'hide' | 'message'
 }
@@ -63,7 +63,8 @@ export default function FeatureGuard({
                                             feature === 'ai-importer' ? 'carga masiva de productos con IA' :
                                                 feature === 'ai-intelligence' ? 'inteligencia IA predictiva y estratégica' :
                                                     feature === 'ai-analyst' ? 'estadísticas potenciadas con IA' :
-                                                        feature === 'custom-domain' ? 'dominio propio personalizado' : 'esta función'
+                                                        feature === 'custom-domain' ? 'dominio propio personalizado' :
+                                                            feature === 'pnl' ? 'el reporte P&L y punto de equilibrio' : 'esta función'
                             }.
                         </p>
                         <Link to="/subscription">
@@ -92,7 +93,8 @@ export default function FeatureGuard({
                                 feature === 'logistics' ? 'optimización de rutas y logística de envíos' :
                                     feature === 'ai-intelligence' ? 'inteligencia IA que predice demanda y analiza tu negocio' :
                                         feature === 'ai-analyst' ? 'estadísticas inteligentes con análisis de IA en tiempo real' :
-                                            feature === 'ai-importer' ? 'digitalización de catálogos fotos a productos vía IA' : 'herramientas profesionales'
+                                            feature === 'ai-importer' ? 'digitalización de catálogos fotos a productos vía IA' :
+                                    feature === 'pnl' ? 'el balance mensual P&L, punto de equilibrio y exportación contable' : 'herramientas profesionales'
                     } y llevar tu tienda al siguiente nivel.
                 </p>
             </div>

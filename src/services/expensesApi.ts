@@ -22,6 +22,8 @@ export interface Supplier {
   created_at: string
 }
 
+export type ExpenseType = 'fijo' | 'variable'
+
 export interface Expense {
   id: string
   store_id: string
@@ -29,6 +31,7 @@ export interface Expense {
   supplier?: Supplier | null
   description: string
   category: ExpenseCategory
+  expense_type: ExpenseType
   amount: number
   date: string
   notes: string | null
@@ -52,6 +55,21 @@ export const expensesApi = {
     const { data, error } = await query
     if (error) throw error
     return (data || []) as Expense[]
+  },
+
+  // Ingresos mensuales desde orders (para P&L)
+  getMonthlyRevenue: async (year: number) => {
+    const storeId = await getStoreId()
+    const from = `${year}-01-01T00:00:00`
+    const to = `${year}-12-31T23:59:59`
+    const { data, error } = await supabase
+      .from('orders')
+      .select('total, created_at, status')
+      .eq('store_id', storeId)
+      .gte('created_at', from)
+      .lte('created_at', to)
+    if (error) throw error
+    return (data || []).filter((o) => o.status !== 'cancelled') as { total: number; created_at: string }[]
   },
 
   createExpense: async (expense: Omit<Expense, 'id' | 'store_id' | 'created_at' | 'supplier'>) => {
