@@ -168,6 +168,11 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                   Asistente Tienda
                   <span className="ml-auto text-[8px] bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded font-black uppercase">VIP</span>
                 </NavLink>
+                <NavLink to="/balance" className={linkClass} onClick={onClose}>
+                  <BarChart3 className="w-5 h-5" />
+                  Balance & P&L
+                  <span className="ml-auto text-[8px] bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded font-black uppercase">VIP</span>
+                </NavLink>
               </div>
 
               <div className="pt-2 pb-2">
