@@ -30,6 +30,8 @@ const CATEGORIES: { value: ExpenseCategory; label: string; color: string }[] = [
   { value: 'personal', label: 'Personal', color: 'bg-purple-100 text-purple-700' },
   { value: 'transporte', label: 'Transporte', color: 'bg-yellow-100 text-yellow-700' },
   { value: 'marketing', label: 'Marketing', color: 'bg-pink-100 text-pink-700' },
+  { value: 'merma', label: 'Merma', color: 'bg-red-100 text-red-700' },
+  { value: 'consumo_interno', label: 'Consumo Interno', color: 'bg-amber-100 text-amber-700' },
   { value: 'otros', label: 'Otros', color: 'bg-gray-100 text-gray-700' },
 ]
 
@@ -61,7 +63,8 @@ function ExpenseForm({ suppliers, onSave, onClose }: ExpenseFormProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!form.description || !form.amount || !form.date) return
+    if (!form.description || !form.amount) return
+    if (form.expense_type === 'variable' && !form.date) return
     setSaving(true)
     try {
       await onSave({
@@ -69,7 +72,7 @@ function ExpenseForm({ suppliers, onSave, onClose }: ExpenseFormProps) {
         category: form.category,
         expense_type: form.expense_type,
         amount: parseFloat(form.amount),
-        date: form.date,
+        date: form.expense_type === 'fijo' ? today : form.date,
         supplier_id: form.supplier_id || null,
         notes: form.notes || null,
       })
@@ -149,16 +152,18 @@ function ExpenseForm({ suppliers, onSave, onClose }: ExpenseFormProps) {
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Fecha *</label>
-              <input
-                type="date"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
-                value={form.date}
-                onChange={(e) => setForm({ ...form, date: e.target.value })}
-                required
-              />
-            </div>
+            {form.expense_type === 'variable' && (
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Fecha *</label>
+                <input
+                  type="date"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                  value={form.date}
+                  onChange={(e) => setForm({ ...form, date: e.target.value })}
+                  required
+                />
+              </div>
+            )}
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Proveedor</label>
               <select

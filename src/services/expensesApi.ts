@@ -8,6 +8,8 @@ export type ExpenseCategory =
   | 'personal'
   | 'transporte'
   | 'marketing'
+  | 'merma'
+  | 'consumo_interno'
   | 'otros'
 
 export interface Supplier {
@@ -47,22 +49,37 @@ export interface Partner {
 }
 
 export const expensesApi = {
-  // Gastos
+  // Gastos — fijos siempre incluidos, variables filtrados por fecha
   listExpenses: async (params?: { from?: string; to?: string; category?: ExpenseCategory }) => {
     const storeId = await getStoreId()
-    let query = supabase
+
+    const baseSelect = '*, supplier:suppliers(id, name)'
+
+    // Fixed expenses: always included (they recur every month)
+    let fixedQuery = supabase
       .from('expenses')
-      .select('*, supplier:suppliers(id, name)')
+      .select(baseSelect)
       .eq('store_id', storeId)
-      .order('date', { ascending: false })
+      .eq('expense_type', 'fijo')
+    if (params?.category) fixedQuery = fixedQuery.eq('category', params.category)
 
-    if (params?.from) query = query.gte('date', params.from)
-    if (params?.to) query = query.lte('date', params.to)
-    if (params?.category) query = query.eq('category', params.category)
+    // Variable expenses: filtered by date range
+    let varQuery = supabase
+      .from('expenses')
+      .select(baseSelect)
+      .eq('store_id', storeId)
+      .eq('expense_type', 'variable')
+    if (params?.from) varQuery = varQuery.gte('date', params.from)
+    if (params?.to) varQuery = varQuery.lte('date', params.to)
+    if (params?.category) varQuery = varQuery.eq('category', params.category)
 
-    const { data, error } = await query
-    if (error) throw error
-    return (data || []) as Expense[]
+    const [fixedRes, varRes] = await Promise.all([fixedQuery, varQuery])
+    if (fixedRes.error) throw fixedRes.error
+    if (varRes.error) throw varRes.error
+
+    const combined = [...(fixedRes.data || []), ...(varRes.data || [])]
+    combined.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    return combined as Expense[]
   },
 
   // Ingresos mensuales desde orders (para P&L)

@@ -2,30 +2,55 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import {
     Search, X, Plus, Minus, Trash2, ShoppingCart, Receipt,
     CreditCard, Banknote, Smartphone, Printer, CheckCircle2,
-    Package, RefreshCw, User,
+    Package, RefreshCw, User, Pencil, Tag, BarChart2, QrCode,
 } from 'lucide-react'
 import { productsApi } from '../../services/productsApi'
 import { categoriesApi } from '../../services/categoriesApi'
 import { ordersApi } from '../../services/ordersApi'
+import { supabase } from '../../supabaseClient'
+import { getStoreId } from '../../services/coreApi'
 import { formatPrice } from '../../utils/helpers'
 import { showToast } from '../../components/common/Toast'
 import { useAuth } from '../../contexts/AuthContext'
+import FeatureGuard from '../../components/FeatureGuard'
 import type { Product, Category } from '../../types'
 
 interface CartItem {
     product: Product
     quantity: number
+    customPrice?: number
+}
+
+interface DailySummary {
+    efectivo: number
+    transferencia: number
+    tarjeta: number
+    mercadopago: number
+    total: number
+    orderCount: number
 }
 
 const PAYMENT_METHODS = [
     { id: 'efectivo', label: 'Efectivo', icon: Banknote, color: 'emerald' },
-    { id: 'transferencia', label: 'Transferencia', icon: Smartphone, color: 'blue' },
+    { id: 'mercadopago', label: 'Mercado Pago', icon: QrCode, color: 'blue' },
+    { id: 'transferencia', label: 'Transferencia', icon: Smartphone, color: 'sky' },
     { id: 'tarjeta', label: 'Tarjeta', icon: CreditCard, color: 'purple' },
 ]
 
+const PM_LABEL: Record<string, string> = {
+    efectivo: 'Efectivo',
+    mercadopago: 'Mercado Pago',
+    transferencia: 'Transferencia',
+    tarjeta: 'Tarjeta',
+}
+
 export default function POSPage() {
-    const { user } = useAuth()
+    const { user, subscription, isSuperadmin } = useAuth()
     const storeName = user?.name || 'Tienda'
+
+    const planWeight = { free: 0, pro: 1, vip: 2, ultra: 3 }
+    const currentPlan = subscription?.plan_type || 'free'
+    const isVip = isSuperadmin || (planWeight[currentPlan as keyof typeof planWeight] ?? 0) >= 2
 
     const [products, setProducts] = useState<Product[]>([])
     const [categories, setCategories] = useState<Category[]>([])
@@ -37,6 +62,8 @@ export default function POSPage() {
     const [cart, setCart] = useState<CartItem[]>([])
     const [paymentMethod, setPaymentMethod] = useState('efectivo')
     const [customerName, setCustomerName] = useState('')
+    const [discount, setDiscount] = useState<number>(0)
+    const [editingPrice, setEditingPrice] = useState<string | null>(null)
     const [processing, setProcessing] = useState(false)
 
     // Ticket
@@ -44,6 +71,11 @@ export default function POSPage() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const [lastOrder, setLastOrder] = useState<any>(null)
     const ticketRef = useRef<HTMLDivElement>(null)
+
+    // Cierre del día
+    const [showCierre, setShowCierre] = useState(false)
+    const [dailySummary, setDailySummary] = useState<DailySummary | null>(null)
+    const [loadingCierre, setLoadingCierre] = useState(false)
 
     const loadData = useCallback(async () => {
         setLoading(true)
@@ -64,13 +96,50 @@ export default function POSPage() {
 
     useEffect(() => { loadData() }, [loadData])
 
+    const loadDailySummary = async () => {
+        setLoadingCierre(true)
+        try {
+            const storeId = await getStoreId()
+            const today = new Date().toISOString().split('T')[0]
+            const { data, error } = await supabase
+                .from('orders')
+                .select('total, metadata')
+                .eq('store_id', storeId)
+                .eq('status', 'completed')
+                .gte('created_at', `${today}T00:00:00`)
+                .lte('created_at', `${today}T23:59:59`)
+            if (error) throw error
+
+            const summary: DailySummary = { efectivo: 0, transferencia: 0, tarjeta: 0, mercadopago: 0, total: 0, orderCount: 0 }
+            for (const o of data || []) {
+                const pm = (o.metadata as Record<string, string>)?.payment_method || 'efectivo'
+                const amt = Number(o.total) || 0
+                summary.total += amt
+                summary.orderCount++
+                if (pm === 'efectivo') summary.efectivo += amt
+                else if (pm === 'mercadopago') summary.mercadopago += amt
+                else if (pm === 'transferencia') summary.transferencia += amt
+                else if (pm === 'tarjeta') summary.tarjeta += amt
+                else summary.efectivo += amt
+            }
+            setDailySummary(summary)
+        } catch (err) {
+            console.error(err)
+            showToast('error', 'Error al cargar el cierre')
+        } finally {
+            setLoadingCierre(false)
+        }
+    }
+
+    const openCierre = () => {
+        setShowCierre(true)
+        loadDailySummary()
+    }
+
     // Filter products
     const filtered = products.filter(p => {
         if (selectedCategory && p.category_id !== selectedCategory) return false
-        if (search) {
-            const s = search.toLowerCase()
-            return p.name.toLowerCase().includes(s)
-        }
+        if (search) return p.name.toLowerCase().includes(search.toLowerCase())
         return true
     })
 
@@ -98,8 +167,8 @@ export default function POSPage() {
     }
 
     const updateQuantity = (productId: string, delta: number) => {
-        setCart(prev => {
-            return prev
+        setCart(prev =>
+            prev
                 .map(item => {
                     if (item.product.id !== productId) return item
                     const newQty = item.quantity + delta
@@ -111,19 +180,33 @@ export default function POSPage() {
                     return { ...item, quantity: newQty }
                 })
                 .filter(Boolean) as CartItem[]
-        })
+        )
     }
 
     const removeFromCart = (productId: string) => {
         setCart(prev => prev.filter(item => item.product.id !== productId))
+        if (editingPrice === productId) setEditingPrice(null)
+    }
+
+    const setItemCustomPrice = (productId: string, price: number) => {
+        setCart(prev => prev.map(item =>
+            item.product.id === productId
+                ? { ...item, customPrice: isNaN(price) || price < 0 ? undefined : price }
+                : item
+        ))
     }
 
     const clearCart = () => {
         setCart([])
         setCustomerName('')
+        setDiscount(0)
+        setEditingPrice(null)
     }
 
-    const cartTotal = cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0)
+    const itemPrice = (item: CartItem) => item.customPrice ?? item.product.price
+    const cartSubtotal = cart.reduce((sum, item) => sum + itemPrice(item) * item.quantity, 0)
+    const discountAmount = Math.min(discount, cartSubtotal)
+    const cartTotal = cartSubtotal - discountAmount
     const cartItemCount = cart.reduce((sum, item) => sum + item.quantity, 0)
 
     // Register sale
@@ -133,19 +216,20 @@ export default function POSPage() {
         try {
             const order = await ordersApi.create({
                 customer_name: customerName.trim() || 'Venta POS',
-                subtotal: cartTotal,
+                subtotal: cartSubtotal,
                 total: cartTotal,
                 status: 'completed',
                 metadata: {
                     source: 'pos',
                     payment_method: paymentMethod,
+                    ...(discountAmount > 0 ? { discount: discountAmount } : {}),
                 },
                 items: cart.map(item => ({
                     product_id: item.product.id,
                     product_name: item.product.name,
                     quantity: item.quantity,
-                    unit_price: item.product.price,
-                    subtotal: item.product.price * item.quantity,
+                    unit_price: itemPrice(item),
+                    subtotal: itemPrice(item) * item.quantity,
                 })),
             })
 
@@ -154,20 +238,23 @@ export default function POSPage() {
                 items: cart.map(item => ({
                     name: item.product.name,
                     quantity: item.quantity,
-                    price: item.product.price,
-                    subtotal: item.product.price * item.quantity,
+                    price: itemPrice(item),
+                    subtotal: itemPrice(item) * item.quantity,
+                    originalPrice: item.customPrice !== undefined ? item.product.price : undefined,
                 })),
                 paymentMethod,
                 customerName: customerName.trim() || 'Venta POS',
+                subtotal: cartSubtotal,
+                discountAmount,
                 total: cartTotal,
                 date: new Date(),
             })
             setShowTicket(true)
             setCart([])
             setCustomerName('')
+            setDiscount(0)
+            setEditingPrice(null)
             showToast('success', 'Venta registrada')
-
-            // Reload products to update stock
             loadData()
         } catch (err) {
             console.error('POS sale error:', err)
@@ -220,14 +307,25 @@ export default function POSPage() {
                                 <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-widest">{storeName}</p>
                             </div>
                         </div>
-                        <button
-                            onClick={loadData}
-                            disabled={loading}
-                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                            title="Actualizar productos"
-                        >
-                            <RefreshCw className={`w-4 h-4 text-gray-400 ${loading ? 'animate-spin' : ''}`} />
-                        </button>
+                        <div className="flex items-center gap-2">
+                            {isVip && (
+                                <button
+                                    onClick={openCierre}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-lg text-xs font-bold transition-colors border border-amber-200"
+                                >
+                                    <BarChart2 className="w-3.5 h-3.5" />
+                                    Cierre del día
+                                </button>
+                            )}
+                            <button
+                                onClick={loadData}
+                                disabled={loading}
+                                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                                title="Actualizar productos"
+                            >
+                                <RefreshCw className={`w-4 h-4 text-gray-400 ${loading ? 'animate-spin' : ''}`} />
+                            </button>
+                        </div>
                     </div>
 
                     {/* Search */}
@@ -381,7 +479,47 @@ export default function POSPage() {
                                     {/* Info */}
                                     <div className="flex-1 min-w-0">
                                         <p className="text-xs font-bold text-gray-800 truncate">{item.product.name}</p>
-                                        <p className="text-[11px] text-gray-500">{formatPrice(item.product.price)} c/u</p>
+
+                                        {/* Price — editable for VIP */}
+                                        {isVip && editingPrice === item.product.id ? (
+                                            <input
+                                                type="number"
+                                                autoFocus
+                                                defaultValue={itemPrice(item)}
+                                                onBlur={(e) => {
+                                                    setItemCustomPrice(item.product.id, parseFloat(e.target.value))
+                                                    setEditingPrice(null)
+                                                }}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') {
+                                                        setItemCustomPrice(item.product.id, parseFloat((e.target as HTMLInputElement).value))
+                                                        setEditingPrice(null)
+                                                    }
+                                                    if (e.key === 'Escape') setEditingPrice(null)
+                                                }}
+                                                className="w-24 text-xs border border-emerald-300 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-emerald-400"
+                                            />
+                                        ) : (
+                                            <div className="flex items-center gap-1">
+                                                <p className={`text-[11px] ${item.customPrice !== undefined ? 'text-amber-600 font-bold' : 'text-gray-500'}`}>
+                                                    {formatPrice(itemPrice(item))} c/u
+                                                    {item.customPrice !== undefined && (
+                                                        <span className="text-gray-400 line-through ml-1 font-normal">
+                                                            {formatPrice(item.product.price)}
+                                                        </span>
+                                                    )}
+                                                </p>
+                                                {isVip && (
+                                                    <button
+                                                        onClick={() => setEditingPrice(item.product.id)}
+                                                        className="text-gray-300 hover:text-amber-500 transition-colors"
+                                                        title="Editar precio"
+                                                    >
+                                                        <Pencil className="w-3 h-3" />
+                                                    </button>
+                                                )}
+                                            </div>
+                                        )}
                                     </div>
 
                                     {/* Quantity */}
@@ -404,7 +542,7 @@ export default function POSPage() {
                                     {/* Subtotal */}
                                     <div className="text-right shrink-0 w-20">
                                         <p className="text-sm font-black text-gray-900">
-                                            {formatPrice(item.product.price * item.quantity)}
+                                            {formatPrice(itemPrice(item) * item.quantity)}
                                         </p>
                                     </div>
 
@@ -441,12 +579,32 @@ export default function POSPage() {
                             </div>
                         </div>
 
+                        {/* Discount — VIP only */}
+                        {isVip && (
+                            <div>
+                                <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">
+                                    Descuento (monto fijo)
+                                </label>
+                                <div className="relative">
+                                    <Tag className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                    <input
+                                        type="number"
+                                        value={discount || ''}
+                                        onChange={(e) => setDiscount(Math.max(0, parseFloat(e.target.value) || 0))}
+                                        placeholder="0"
+                                        min={0}
+                                        className="w-full pl-10 pr-3 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-amber-500/20 focus:border-amber-300 outline-none"
+                                    />
+                                </div>
+                            </div>
+                        )}
+
                         {/* Payment method */}
                         <div>
                             <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1.5">
                                 Método de pago
                             </label>
-                            <div className="grid grid-cols-3 gap-2">
+                            <div className="grid grid-cols-2 gap-2">
                                 {PAYMENT_METHODS.map(pm => {
                                     const Icon = pm.icon
                                     const selected = paymentMethod === pm.id
@@ -454,13 +612,13 @@ export default function POSPage() {
                                         <button
                                             key={pm.id}
                                             onClick={() => setPaymentMethod(pm.id)}
-                                            className={`flex flex-col items-center gap-1 py-2.5 px-2 rounded-xl border-2 transition-all text-[10px] font-bold ${
+                                            className={`flex items-center gap-2 py-2.5 px-3 rounded-xl border-2 transition-all text-[11px] font-bold ${
                                                 selected
                                                     ? 'border-emerald-400 bg-emerald-50 text-emerald-700'
                                                     : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'
                                             }`}
                                         >
-                                            <Icon className="w-5 h-5" />
+                                            <Icon className="w-4 h-4 shrink-0" />
                                             {pm.label}
                                         </button>
                                     )
@@ -469,9 +627,23 @@ export default function POSPage() {
                         </div>
 
                         {/* Total */}
-                        <div className="flex items-center justify-between py-3 border-t border-dashed border-gray-300">
-                            <span className="text-sm font-bold text-gray-600">Total</span>
-                            <span className="text-2xl font-black text-gray-900">{formatPrice(cartTotal)}</span>
+                        <div className="py-2 border-t border-dashed border-gray-300 space-y-1">
+                            {discountAmount > 0 && (
+                                <div className="flex items-center justify-between text-xs text-gray-500">
+                                    <span>Subtotal</span>
+                                    <span>{formatPrice(cartSubtotal)}</span>
+                                </div>
+                            )}
+                            {discountAmount > 0 && (
+                                <div className="flex items-center justify-between text-xs text-amber-600 font-semibold">
+                                    <span>Descuento</span>
+                                    <span>-{formatPrice(discountAmount)}</span>
+                                </div>
+                            )}
+                            <div className="flex items-center justify-between pt-1">
+                                <span className="text-sm font-bold text-gray-600">Total</span>
+                                <span className="text-2xl font-black text-gray-900">{formatPrice(cartTotal)}</span>
+                            </div>
                         </div>
 
                         {/* Register sale */}
@@ -487,6 +659,15 @@ export default function POSPage() {
                             )}
                             {processing ? 'Registrando...' : 'Registrar Venta'}
                         </button>
+                    </div>
+                )}
+
+                {/* VIP upsell when cart has items and user is not VIP */}
+                {cart.length > 0 && !isVip && (
+                    <div className="px-4 pb-3">
+                        <FeatureGuard feature="pro-tools" minPlan="vip" fallback="blur">
+                            <div />
+                        </FeatureGuard>
                     </div>
                 )}
             </div>
@@ -528,6 +709,9 @@ export default function POSPage() {
                                         <div className="flex-1 min-w-0">
                                             <span className="font-medium text-gray-800">{item.quantity}x</span>{' '}
                                             <span className="text-gray-700">{item.name}</span>
+                                            {item.originalPrice !== undefined && (
+                                                <span className="text-amber-600 text-[9px] ml-1">(precio esp.)</span>
+                                            )}
                                         </div>
                                         <span className="font-bold text-gray-900 shrink-0 ml-2">
                                             {formatPrice(item.subtotal)}
@@ -538,6 +722,13 @@ export default function POSPage() {
 
                             <div className="border-t border-dashed border-gray-300 my-2" />
 
+                            {lastOrder.discountAmount > 0 && (
+                                <div className="flex justify-between text-xs text-amber-600 mb-1">
+                                    <span>Descuento</span>
+                                    <span>-{formatPrice(lastOrder.discountAmount)}</span>
+                                </div>
+                            )}
+
                             <div className="flex justify-between items-center">
                                 <span className="text-sm font-bold text-gray-700">TOTAL</span>
                                 <span className="text-lg font-black text-gray-900">{formatPrice(lastOrder.total)}</span>
@@ -545,7 +736,7 @@ export default function POSPage() {
 
                             <div className="mt-1 text-right">
                                 <span className="text-[10px] text-gray-500 capitalize">
-                                    Pago: {lastOrder.paymentMethod}
+                                    Pago: {PM_LABEL[lastOrder.paymentMethod] || lastOrder.paymentMethod}
                                 </span>
                             </div>
 
@@ -571,6 +762,77 @@ export default function POSPage() {
                             >
                                 Nueva Venta
                             </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ─── CIERRE DEL DÍA MODAL (VIP) ─── */}
+            {showCierre && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowCierre(false)}>
+                    <div
+                        className="bg-white rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="bg-amber-500 text-white px-6 py-4 flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <BarChart2 className="w-5 h-5" />
+                                <div>
+                                    <h3 className="font-black">Cierre del Día</h3>
+                                    <p className="text-amber-200 text-[10px]">{new Date().toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
+                                </div>
+                            </div>
+                            <button onClick={() => setShowCierre(false)} className="text-amber-200 hover:text-white">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        <div className="px-6 py-5">
+                            {loadingCierre ? (
+                                <div className="flex justify-center py-8">
+                                    <RefreshCw className="w-6 h-6 text-amber-400 animate-spin" />
+                                </div>
+                            ) : dailySummary ? (
+                                <div className="space-y-3">
+                                    <div className="grid grid-cols-2 gap-3">
+                                        {[
+                                            { key: 'efectivo', label: 'Efectivo', color: 'emerald' },
+                                            { key: 'mercadopago', label: 'Mercado Pago', color: 'blue' },
+                                            { key: 'transferencia', label: 'Transferencia', color: 'sky' },
+                                            { key: 'tarjeta', label: 'Tarjeta', color: 'purple' },
+                                        ].map(({ key, label, color }) => {
+                                            const amount = dailySummary[key as keyof DailySummary] as number
+                                            return (
+                                                <div key={key} className={`bg-${color}-50 rounded-xl p-3`}>
+                                                    <p className={`text-[10px] font-bold text-${color}-600 uppercase tracking-widest mb-0.5`}>{label}</p>
+                                                    <p className={`text-lg font-black text-${color}-700`}>{formatPrice(amount)}</p>
+                                                </div>
+                                            )
+                                        })}
+                                    </div>
+
+                                    <div className="border-t border-dashed border-gray-200 pt-3">
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <p className="text-xs text-gray-500 font-medium">{dailySummary.orderCount} ventas registradas</p>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-widest">Total del día</p>
+                                                <p className="text-2xl font-black text-gray-900">{formatPrice(dailySummary.total)}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <button
+                                        onClick={loadDailySummary}
+                                        className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-semibold text-gray-400 hover:text-gray-600 transition-colors"
+                                    >
+                                        <RefreshCw className="w-3 h-3" /> Actualizar
+                                    </button>
+                                </div>
+                            ) : (
+                                <p className="text-center text-gray-400 py-6 text-sm">Sin datos para hoy</p>
+                            )}
                         </div>
                     </div>
                 </div>
