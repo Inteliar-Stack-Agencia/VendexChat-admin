@@ -1,17 +1,17 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
   PackageCheck, Plus, Trash2, X, Loader2, RefreshCw,
-  TrendingUp, TrendingDown, ChevronDown, ChevronUp, CalendarDays,
+  TrendingUp, TrendingDown, ChevronDown, ChevronUp, CalendarDays, Link2,
 } from 'lucide-react'
 import { Card, Button } from '../../components/common'
 import FeatureGuard from '../../components/FeatureGuard'
 import { inventoryApi, type InventoryEntry, type InventoryDayInput } from '../../services/inventoryApi'
+import { productsApi } from '../../services/productsApi'
 import { formatPrice } from '../../utils/helpers'
 import { showToast } from '../../components/common/Toast'
+import type { Product } from '../../types'
 
 const today = new Date().toISOString().split('T')[0]
-
-const DEFAULT_LINES = ['Viandas', 'Panchos', 'Café', 'Bebidas']
 
 const PM_LABEL: Record<string, string> = {
   efectivo: 'Efectivo',
@@ -20,39 +20,78 @@ const PM_LABEL: Record<string, string> = {
   tarjeta: 'Tarjeta',
 }
 
+interface RowData {
+  product_line: string
+  product_id: string
+  quantity: string
+  unit_cost: string
+  cost: string // total, computed or manual
+  useProductLink: boolean
+}
+
+const emptyRow = (): RowData => ({
+  product_line: '',
+  product_id: '',
+  quantity: '',
+  unit_cost: '',
+  cost: '',
+  useProductLink: false,
+})
+
 // ─── Day Input Form ──────────────────────────────────────────────────────────
 
 interface DayFormProps {
+  products: Product[]
   onSave: (date: string, inputs: InventoryDayInput[]) => Promise<void>
   onClose: () => void
 }
 
-function DayInputForm({ onSave, onClose }: DayFormProps) {
+function DayInputForm({ products, onSave, onClose }: DayFormProps) {
   const [saving, setSaving] = useState(false)
   const [date, setDate] = useState(today)
-  const [rows, setRows] = useState<InventoryDayInput[]>(
-    DEFAULT_LINES.map((line) => ({ product_line: line, cost: 0 }))
-  )
+  const [rows, setRows] = useState<RowData[]>([emptyRow()])
 
-  const updateRow = (i: number, field: keyof InventoryDayInput, value: string | number) => {
-    setRows((prev) => prev.map((r, idx) => idx === i ? { ...r, [field]: value } : r))
+  const updateRow = (i: number, patch: Partial<RowData>) => {
+    setRows((prev) => prev.map((r, idx) => {
+      if (idx !== i) return r
+      const updated = { ...r, ...patch }
+
+      // When linking a product, prefill name
+      if (patch.product_id !== undefined) {
+        const p = products.find((p) => p.id === patch.product_id)
+        if (p) updated.product_line = p.name
+      }
+
+      // Auto-compute total when qty or unit_cost change
+      const qty = parseFloat(updated.quantity) || 0
+      const uc = parseFloat(updated.unit_cost) || 0
+      if (qty > 0 && uc > 0) updated.cost = String(qty * uc)
+
+      return updated
+    }))
   }
 
-  const addRow = () => setRows((prev) => [...prev, { product_line: '', cost: 0 }])
+  const addRow = () => setRows((prev) => [...prev, emptyRow()])
   const removeRow = (i: number) => setRows((prev) => prev.filter((_, idx) => idx !== i))
 
-  const total = rows.reduce((s, r) => s + (Number(r.cost) || 0), 0)
+  const total = rows.reduce((s, r) => s + (parseFloat(r.cost) || 0), 0)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    const valid = rows.filter((r) => r.product_line.trim() && Number(r.cost) > 0)
+    const valid = rows.filter((r) => r.product_line.trim() && parseFloat(r.cost) > 0)
     if (valid.length === 0) {
       showToast('error', 'Ingresá al menos un rubro con costo')
       return
     }
     setSaving(true)
     try {
-      await onSave(date, valid)
+      await onSave(date, valid.map((r) => ({
+        product_line: r.product_line,
+        product_id: r.product_id || null,
+        quantity: parseFloat(r.quantity) || undefined,
+        unit_cost: parseFloat(r.unit_cost) || undefined,
+        cost: parseFloat(r.cost),
+      })))
     } finally {
       setSaving(false)
     }
@@ -60,11 +99,11 @@ function DayInputForm({ onSave, onClose }: DayFormProps) {
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between p-6 border-b border-gray-100 shrink-0">
           <div>
             <h2 className="font-bold text-gray-900">Registrar Insumos del Día</h2>
-            <p className="text-xs text-gray-400 mt-0.5">Se crean gastos automáticamente en Materia Prima</p>
+            <p className="text-xs text-gray-400 mt-0.5">Vinculá al producto del POS para actualizar stock automáticamente</p>
           </div>
           <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100">
             <X className="w-5 h-5 text-gray-500" />
@@ -73,6 +112,7 @@ function DayInputForm({ onSave, onClose }: DayFormProps) {
 
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
           <div className="p-6 space-y-4 overflow-y-auto flex-1">
+            {/* Date */}
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Fecha</label>
               <input
@@ -83,47 +123,105 @@ function DayInputForm({ onSave, onClose }: DayFormProps) {
               />
             </div>
 
+            {/* Rows */}
             <div>
               <div className="flex items-center justify-between mb-2">
                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider">Rubros</label>
-                <button
-                  type="button"
-                  onClick={addRow}
-                  className="flex items-center gap-1 text-xs text-teal-600 font-semibold hover:text-teal-700"
-                >
+                <button type="button" onClick={addRow} className="flex items-center gap-1 text-xs text-teal-600 font-semibold hover:text-teal-700">
                   <Plus className="w-3 h-3" /> Agregar rubro
                 </button>
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {rows.map((row, i) => (
-                  <div key={i} className="flex gap-2 items-center">
-                    <input
-                      type="text"
-                      placeholder="Rubro (ej: Viandas)"
-                      value={row.product_line}
-                      onChange={(e) => updateRow(i, 'product_line', e.target.value)}
-                      className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-300"
-                    />
-                    <div className="relative w-36 shrink-0">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        placeholder="0"
-                        value={row.cost || ''}
-                        onChange={(e) => updateRow(i, 'cost', parseFloat(e.target.value) || 0)}
-                        className="w-full border border-gray-200 rounded-lg pl-7 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-300"
-                      />
+                  <div key={i} className="bg-gray-50 rounded-xl p-3 space-y-2">
+                    {/* Row 1: product selector or text + link toggle */}
+                    <div className="flex gap-2 items-center">
+                      {row.useProductLink ? (
+                        <select
+                          value={row.product_id}
+                          onChange={(e) => updateRow(i, { product_id: e.target.value })}
+                          className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal-300"
+                        >
+                          <option value="">Seleccioná un producto...</option>
+                          {products.map((p) => (
+                            <option key={p.id} value={p.id}>{p.name}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          type="text"
+                          placeholder="Rubro (ej: Viandas, Panchos)"
+                          value={row.product_line}
+                          onChange={(e) => updateRow(i, { product_line: e.target.value })}
+                          className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal-300"
+                        />
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => updateRow(i, { useProductLink: !row.useProductLink, product_id: '', product_line: '' })}
+                        title={row.useProductLink ? 'Escribir nombre manualmente' : 'Vincular a producto del POS'}
+                        className={`p-2 rounded-lg border transition-colors shrink-0 ${row.useProductLink ? 'border-teal-400 bg-teal-50 text-teal-600' : 'border-gray-200 text-gray-400 hover:border-teal-300 hover:text-teal-500'}`}
+                      >
+                        <Link2 className="w-4 h-4" />
+                      </button>
+                      <button type="button" onClick={() => removeRow(i)} className="p-2 text-gray-300 hover:text-red-500 transition-colors shrink-0">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => removeRow(i)}
-                      className="p-1.5 text-gray-300 hover:text-red-500 transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+
+                    {/* Row 2: qty + unit cost + total */}
+                    <div className="grid grid-cols-3 gap-2">
+                      <div>
+                        <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
+                          {row.useProductLink ? 'Cantidad (actualiza stock)' : 'Cantidad (opcional)'}
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          placeholder="0"
+                          value={row.quantity}
+                          onChange={(e) => updateRow(i, { quantity: e.target.value })}
+                          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal-300"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Costo unitario</label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            placeholder="0"
+                            value={row.unit_cost}
+                            onChange={(e) => updateRow(i, { unit_cost: e.target.value })}
+                            className="w-full border border-gray-200 rounded-lg pl-7 pr-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal-300"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Total</label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            placeholder="0"
+                            value={row.cost}
+                            onChange={(e) => updateRow(i, { cost: e.target.value })}
+                            className="w-full border border-gray-200 rounded-lg pl-7 pr-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal-300"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {row.useProductLink && row.product_id && row.quantity && (
+                      <p className="text-[10px] text-teal-600 font-semibold">
+                        ✓ Se agregarán {row.quantity} unidades al stock del producto en el POS
+                      </p>
+                    )}
                   </div>
                 ))}
               </div>
@@ -200,7 +298,6 @@ function DaySummaryCard({ date }: DaySummaryProps) {
 
       {expanded && (
         <div className="border-t border-gray-100 px-5 py-4 space-y-4">
-          {/* Revenue vs Cost */}
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-emerald-50 rounded-xl p-3">
               <div className="flex items-center gap-1.5 mb-1">
@@ -218,7 +315,6 @@ function DaySummaryCard({ date }: DaySummaryProps) {
             </div>
           </div>
 
-          {/* By payment method */}
           {summary.totalRevenue > 0 && (
             <div>
               <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Ingresos por método</p>
@@ -233,14 +329,16 @@ function DaySummaryCard({ date }: DaySummaryProps) {
             </div>
           )}
 
-          {/* Input lines */}
           {summary.entries.length > 0 && (
             <div>
               <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Insumos cargados</p>
               <div className="space-y-1.5">
                 {summary.entries.map((e, i) => (
                   <div key={i} className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600">{e.product_line}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-gray-600">{e.product_line}</span>
+                      {e.quantity && <span className="text-xs text-gray-400">x{e.quantity}</span>}
+                    </div>
                     <span className="text-sm font-semibold text-gray-800">{formatPrice(Number(e.cost))}</span>
                   </div>
                 ))}
@@ -257,11 +355,10 @@ function DaySummaryCard({ date }: DaySummaryProps) {
 
 export default function InventoryPage() {
   const [entries, setEntries] = useState<InventoryEntry[]>([])
+  const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
-
-  // Unique dates with entries
   const [days, setDays] = useState<string[]>([])
 
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
@@ -269,8 +366,12 @@ export default function InventoryPage() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const data = await inventoryApi.listEntries({ from: thirtyDaysAgo })
+      const [data, productsRes] = await Promise.all([
+        inventoryApi.listEntries({ from: thirtyDaysAgo }),
+        productsApi.list({ limit: 500 }),
+      ])
       setEntries(data)
+      setProducts(productsRes.data.filter((p) => p.is_active))
       const uniqueDays = [...new Set(data.map((e) => e.date))].sort((a, b) => b.localeCompare(a))
       setDays(uniqueDays)
     } catch {
@@ -284,16 +385,16 @@ export default function InventoryPage() {
 
   const handleSave = async (date: string, inputs: InventoryDayInput[]) => {
     await inventoryApi.registerDayInputs(date, inputs)
-    showToast('success', 'Insumos registrados y gastos creados automáticamente')
+    showToast('success', 'Insumos registrados · gastos y stock actualizados')
     setShowForm(false)
     load()
   }
 
   const handleDelete = async (entry: InventoryEntry) => {
-    if (!confirm(`¿Eliminar "${entry.product_line}"? También se eliminará el gasto asociado.`)) return
+    if (!confirm(`¿Eliminar "${entry.product_line}"? También se eliminará el gasto asociado${entry.product_id && entry.quantity ? ' y se revertirá el stock' : ''}.`)) return
     setDeletingId(entry.id)
     try {
-      await inventoryApi.deleteEntry(entry.id, entry.expense_id)
+      await inventoryApi.deleteEntry(entry.id, entry.expense_id, entry.product_id, entry.quantity)
       showToast('success', 'Registro eliminado')
       load()
     } catch {
@@ -303,7 +404,6 @@ export default function InventoryPage() {
     }
   }
 
-  // Today's entries
   const todayEntries = entries.filter((e) => e.date === today)
   const todayCost = todayEntries.reduce((s, e) => s + Number(e.cost), 0)
 
@@ -318,13 +418,10 @@ export default function InventoryPage() {
             </div>
             <div>
               <h1 className="text-xl font-black text-gray-900">Inventario</h1>
-              <p className="text-sm text-gray-400">Control diario de insumos y cierre</p>
+              <p className="text-sm text-gray-400">Control diario de insumos · stock del POS actualizado automáticamente</p>
             </div>
           </div>
-          <Button
-            onClick={() => setShowForm(true)}
-            className="bg-teal-600 hover:bg-teal-700 text-white flex items-center gap-2"
-          >
+          <Button onClick={() => setShowForm(true)} className="bg-teal-600 hover:bg-teal-700 text-white flex items-center gap-2">
             <Plus className="w-4 h-4" />
             Cargar insumos
           </Button>
@@ -348,12 +445,12 @@ export default function InventoryPage() {
             </div>
             <div>
               <p className="text-sm font-bold text-gray-600">Registrar insumos del día</p>
-              <p className="text-xs text-gray-400">Crea los gastos automáticamente</p>
+              <p className="text-xs text-gray-400">Actualiza stock del POS y crea gastos automáticamente</p>
             </div>
           </button>
         </div>
 
-        {/* History by day */}
+        {/* History */}
         <div>
           <h2 className="text-sm font-bold text-gray-500 uppercase tracking-widest mb-3">Historial (últimos 30 días)</h2>
           {loading ? (
@@ -371,21 +468,24 @@ export default function InventoryPage() {
               {days.map((day) => (
                 <div key={day}>
                   <DaySummaryCard date={day} />
-                  {/* Individual entries for deletion */}
                   <div className="mt-1 pl-2 space-y-1">
                     {entries.filter((e) => e.date === day).map((entry) => (
                       <div key={entry.id} className="flex items-center justify-between px-4 py-1.5 bg-gray-50 rounded-lg">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-xs text-gray-500 font-medium">{entry.product_line}</span>
+                          {entry.quantity && <span className="text-xs text-gray-400">x{entry.quantity}</span>}
                           <span className="text-xs font-bold text-gray-700">{formatPrice(Number(entry.cost))}</span>
+                          {entry.product_id && (
+                            <span className="text-[9px] bg-teal-100 text-teal-600 px-1.5 py-0.5 rounded font-semibold">vinculado al POS</span>
+                          )}
                           {entry.expense_id && (
-                            <span className="text-[9px] bg-teal-100 text-teal-600 px-1.5 py-0.5 rounded font-semibold">gasto creado</span>
+                            <span className="text-[9px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded font-semibold">gasto creado</span>
                           )}
                         </div>
                         <button
                           onClick={() => handleDelete(entry)}
                           disabled={deletingId === entry.id}
-                          className="p-1 text-gray-300 hover:text-red-500 transition-colors"
+                          className="p-1 text-gray-300 hover:text-red-500 transition-colors shrink-0"
                         >
                           {deletingId === entry.id
                             ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -401,7 +501,7 @@ export default function InventoryPage() {
           )}
         </div>
 
-        {showForm && <DayInputForm onSave={handleSave} onClose={() => setShowForm(false)} />}
+        {showForm && <DayInputForm products={products} onSave={handleSave} onClose={() => setShowForm(false)} />}
       </div>
     </FeatureGuard>
   )

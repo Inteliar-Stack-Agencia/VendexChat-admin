@@ -7,6 +7,7 @@ export interface InventoryEntry {
   store_id: string
   date: string
   product_line: string
+  product_id: string | null
   quantity: number | null
   cost: number
   notes: string | null
@@ -16,7 +17,9 @@ export interface InventoryEntry {
 
 export interface InventoryDayInput {
   product_line: string
+  product_id?: string | null
   quantity?: number
+  unit_cost?: number
   cost: number
   notes?: string
 }
@@ -39,7 +42,6 @@ export const inventoryApi = {
     return (data || []) as InventoryEntry[]
   },
 
-  // Register a day's inputs — each line auto-creates an expense
   registerDayInputs: async (date: string, inputs: InventoryDayInput[]) => {
     const storeId = await getStoreId()
     const results: InventoryEntry[] = []
@@ -58,12 +60,29 @@ export const inventoryApi = {
         notes: input.notes || null,
       })
 
+      // If linked to a product, add stock
+      if (input.product_id && input.quantity && input.quantity > 0) {
+        const { data: product } = await supabase
+          .from('products')
+          .select('stock, unlimited_stock')
+          .eq('id', input.product_id)
+          .single()
+
+        if (product && !product.unlimited_stock) {
+          await supabase
+            .from('products')
+            .update({ stock: (product.stock || 0) + input.quantity })
+            .eq('id', input.product_id)
+        }
+      }
+
       const { data, error } = await supabase
         .from('inventory_entries')
         .insert({
           store_id: storeId,
           date,
           product_line: input.product_line,
+          product_id: input.product_id || null,
           quantity: input.quantity || null,
           cost: input.cost,
           notes: input.notes || null,
@@ -79,7 +98,23 @@ export const inventoryApi = {
     return results
   },
 
-  deleteEntry: async (id: string, expenseId: string | null) => {
+  deleteEntry: async (id: string, expenseId: string | null, productId: string | null, quantity: number | null) => {
+    // Revert stock if linked to a product
+    if (productId && quantity && quantity > 0) {
+      const { data: product } = await supabase
+        .from('products')
+        .select('stock, unlimited_stock')
+        .eq('id', productId)
+        .single()
+
+      if (product && !product.unlimited_stock) {
+        await supabase
+          .from('products')
+          .update({ stock: Math.max(0, (product.stock || 0) - quantity) })
+          .eq('id', productId)
+      }
+    }
+
     if (expenseId) {
       await supabase.from('expenses').delete().eq('id', expenseId)
     }
@@ -93,7 +128,7 @@ export const inventoryApi = {
     const [entriesRes, ordersRes] = await Promise.all([
       supabase
         .from('inventory_entries')
-        .select('product_line, cost, quantity')
+        .select('product_line, cost, quantity, product_id')
         .eq('store_id', storeId)
         .eq('date', date),
       supabase
