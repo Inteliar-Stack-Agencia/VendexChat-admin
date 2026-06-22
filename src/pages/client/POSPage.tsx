@@ -459,16 +459,6 @@ export default function POSPage() {
 
                     {/* Categories */}
                     <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
-                        <button
-                            onClick={() => setSelectedCategory(null)}
-                            className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-bold transition-colors ${
-                                !selectedCategory
-                                    ? 'bg-emerald-600 text-white'
-                                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                            }`}
-                        >
-                            Todos
-                        </button>
                         {categories.map(cat => (
                             <button
                                 key={cat.id}
