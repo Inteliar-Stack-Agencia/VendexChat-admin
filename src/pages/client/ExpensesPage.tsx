@@ -63,7 +63,8 @@ function ExpenseForm({ suppliers, onSave, onClose }: ExpenseFormProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!form.description || !form.amount || !form.date) return
+    if (!form.description || !form.amount) return
+    if (form.expense_type === 'variable' && !form.date) return
     setSaving(true)
     try {
       await onSave({
@@ -71,7 +72,7 @@ function ExpenseForm({ suppliers, onSave, onClose }: ExpenseFormProps) {
         category: form.category,
         expense_type: form.expense_type,
         amount: parseFloat(form.amount),
-        date: form.date,
+        date: form.expense_type === 'fijo' ? today : form.date,
         supplier_id: form.supplier_id || null,
         notes: form.notes || null,
       })
@@ -151,16 +152,18 @@ function ExpenseForm({ suppliers, onSave, onClose }: ExpenseFormProps) {
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Fecha *</label>
-              <input
-                type="date"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
-                value={form.date}
-                onChange={(e) => setForm({ ...form, date: e.target.value })}
-                required
-              />
-            </div>
+            {form.expense_type === 'variable' && (
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Fecha *</label>
+                <input
+                  type="date"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                  value={form.date}
+                  onChange={(e) => setForm({ ...form, date: e.target.value })}
+                  required
+                />
+              </div>
+            )}
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Proveedor</label>
               <select
