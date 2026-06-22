@@ -2,6 +2,9 @@ import { supabase } from '../supabaseClient'
 import { getStoreId } from './coreApi'
 import { expensesApi } from './expensesApi'
 
+export type MovementType = 'ingreso' | 'egreso'
+export type EgressReason = 'merma' | 'consumo_interno' | 'devolucion' | 'otro'
+
 export interface InventoryEntry {
   id: string
   store_id: string
@@ -12,6 +15,7 @@ export interface InventoryEntry {
   cost: number
   notes: string | null
   expense_id: string | null
+  movement_type: MovementType
   created_at: string
 }
 
@@ -22,6 +26,22 @@ export interface InventoryDayInput {
   unit_cost?: number
   cost: number
   notes?: string
+}
+
+export interface InventoryEgressInput {
+  product_line: string
+  product_id?: string | null
+  quantity?: number
+  cost: number
+  reason: EgressReason
+  notes?: string
+}
+
+export const EGRESS_REASON_LABEL: Record<EgressReason, string> = {
+  merma: 'Merma',
+  consumo_interno: 'Consumo interno',
+  devolucion: 'Devolución',
+  otro: 'Otro',
 }
 
 export const inventoryApi = {
@@ -49,7 +69,6 @@ export const inventoryApi = {
     for (const input of inputs) {
       if (!input.cost || input.cost <= 0) continue
 
-      // Auto-create expense
       const expense = await expensesApi.createExpense({
         description: `Insumos ${input.product_line}`,
         category: 'materia_prima',
@@ -60,7 +79,6 @@ export const inventoryApi = {
         notes: input.notes || null,
       })
 
-      // If linked to a product, add stock
       if (input.product_id && input.quantity && input.quantity > 0) {
         const { data: product } = await supabase
           .from('products')
@@ -87,6 +105,7 @@ export const inventoryApi = {
           cost: input.cost,
           notes: input.notes || null,
           expense_id: expense.id,
+          movement_type: 'ingreso',
         })
         .select()
         .single()
@@ -98,8 +117,73 @@ export const inventoryApi = {
     return results
   },
 
-  deleteEntry: async (id: string, expenseId: string | null, productId: string | null, quantity: number | null) => {
-    // Revert stock if linked to a product
+  registerDayEgresses: async (date: string, egresses: InventoryEgressInput[]) => {
+    const storeId = await getStoreId()
+    const results: InventoryEntry[] = []
+
+    for (const egress of egresses) {
+      if (!egress.cost || egress.cost <= 0) continue
+
+      const expenseCategory = egress.reason === 'merma' ? 'merma'
+        : egress.reason === 'consumo_interno' ? 'consumo_interno'
+        : 'otros'
+
+      const expense = await expensesApi.createExpense({
+        description: `${EGRESS_REASON_LABEL[egress.reason]} ${egress.product_line}`,
+        category: expenseCategory as Parameters<typeof expensesApi.createExpense>[0]['category'],
+        expense_type: 'variable',
+        amount: egress.cost,
+        date,
+        supplier_id: null,
+        notes: egress.notes || null,
+      })
+
+      // Subtract stock if linked to a product
+      if (egress.product_id && egress.quantity && egress.quantity > 0) {
+        const { data: product } = await supabase
+          .from('products')
+          .select('stock, unlimited_stock')
+          .eq('id', egress.product_id)
+          .single()
+
+        if (product && !product.unlimited_stock) {
+          await supabase
+            .from('products')
+            .update({ stock: Math.max(0, (product.stock || 0) - egress.quantity) })
+            .eq('id', egress.product_id)
+        }
+      }
+
+      const { data, error } = await supabase
+        .from('inventory_entries')
+        .insert({
+          store_id: storeId,
+          date,
+          product_line: egress.product_line,
+          product_id: egress.product_id || null,
+          quantity: egress.quantity || null,
+          cost: egress.cost,
+          notes: egress.reason + (egress.notes ? ` · ${egress.notes}` : ''),
+          expense_id: expense.id,
+          movement_type: 'egreso',
+        })
+        .select()
+        .single()
+
+      if (error) throw error
+      results.push(data as InventoryEntry)
+    }
+
+    return results
+  },
+
+  deleteEntry: async (
+    id: string,
+    expenseId: string | null,
+    productId: string | null,
+    quantity: number | null,
+    movementType: MovementType = 'ingreso',
+  ) => {
     if (productId && quantity && quantity > 0) {
       const { data: product } = await supabase
         .from('products')
@@ -108,10 +192,11 @@ export const inventoryApi = {
         .single()
 
       if (product && !product.unlimited_stock) {
-        await supabase
-          .from('products')
-          .update({ stock: Math.max(0, (product.stock || 0) - quantity) })
-          .eq('id', productId)
+        // Revert: ingreso → subtract, egreso → add back
+        const newStock = movementType === 'egreso'
+          ? (product.stock || 0) + quantity
+          : Math.max(0, (product.stock || 0) - quantity)
+        await supabase.from('products').update({ stock: newStock }).eq('id', productId)
       }
     }
 
@@ -128,7 +213,7 @@ export const inventoryApi = {
     const [entriesRes, ordersRes] = await Promise.all([
       supabase
         .from('inventory_entries')
-        .select('product_line, cost, quantity, product_id')
+        .select('product_line, cost, quantity, product_id, movement_type')
         .eq('store_id', storeId)
         .eq('date', date),
       supabase
@@ -143,7 +228,11 @@ export const inventoryApi = {
     if (entriesRes.error) throw entriesRes.error
     if (ordersRes.error) throw ordersRes.error
 
-    const totalInputCost = (entriesRes.data || []).reduce((s, e) => s + Number(e.cost), 0)
+    const ingresos = (entriesRes.data || []).filter((e) => e.movement_type !== 'egreso')
+    const egresos = (entriesRes.data || []).filter((e) => e.movement_type === 'egreso')
+
+    const totalInputCost = ingresos.reduce((s, e) => s + Number(e.cost), 0)
+    const totalEgressCost = egresos.reduce((s, e) => s + Number(e.cost), 0)
     const totalRevenue = (ordersRes.data || []).reduce((s, o) => s + Number(o.total), 0)
     const byPayment = { efectivo: 0, mercadopago: 0, transferencia: 0, tarjeta: 0 }
 
@@ -157,8 +246,9 @@ export const inventoryApi = {
     return {
       date,
       totalInputCost,
+      totalEgressCost,
       totalRevenue,
-      margin: totalRevenue - totalInputCost,
+      margin: totalRevenue - totalInputCost - totalEgressCost,
       orderCount: (ordersRes.data || []).length,
       byPayment,
       entries: entriesRes.data || [],
