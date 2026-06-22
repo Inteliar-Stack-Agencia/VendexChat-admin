@@ -3,7 +3,10 @@ import {
   PackageCheck, Plus, Trash2, X, Loader2, RefreshCw,
   TrendingUp, TrendingDown, ChevronDown, ChevronUp, CalendarDays, Link2,
   ArrowDownCircle, ArrowUpCircle, ChevronLeft, ChevronRight, TableProperties,
+  Upload, FileSpreadsheet, Image as ImageIcon, CheckCircle2,
 } from 'lucide-react'
+import * as XLSX from 'xlsx'
+import Tesseract from 'tesseract.js'
 import { Card, Button } from '../../components/common'
 import FeatureGuard from '../../components/FeatureGuard'
 import {
@@ -18,6 +21,7 @@ import { productionApi } from '../../services/productionApi'
 import { productsApi } from '../../services/productsApi'
 import { formatPrice } from '../../utils/helpers'
 import { showToast } from '../../components/common/Toast'
+import { callAI } from '../../services/aiService'
 import type { Product } from '../../types'
 
 const today = new Date().toISOString().split('T')[0]
@@ -449,6 +453,283 @@ function DaySummaryCard({ date }: { date: string }) {
   )
 }
 
+// ─── Import Production Modal ──────────────────────────────────────────────────
+
+interface ImportRow {
+  product_name: string
+  quantity: number
+  price: number
+  matched_product_id: string
+}
+
+interface ImportModalProps {
+  products: Product[]
+  onImport: (date: string, rows: ImportRow[]) => Promise<void>
+  onClose: () => void
+}
+
+function ImportProductionModal({ products, onImport, onClose }: ImportModalProps) {
+  const [date, setDate] = useState(today)
+  const [step, setStep] = useState<'upload' | 'preview'>('upload')
+  const [rows, setRows] = useState<ImportRow[]>([])
+  const [processing, setProcessing] = useState(false)
+  const [ocrProgress, setOcrProgress] = useState(0)
+  const [saving, setSaving] = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  const parseWithAI = async (rawText: string): Promise<ImportRow[]> => {
+    const response = await callAI([
+      {
+        role: 'system',
+        content: 'Sos un asistente que extrae tablas de producción de texto. Devolvés SOLO un JSON array con objetos {product_name, quantity, price}. quantity y price son números. Si no hay precio, usá 0. No incluyas encabezados ni totales.',
+      },
+      {
+        role: 'user',
+        content: `Extraé los productos de esta planilla:\n\n${rawText}`,
+      },
+    ])
+
+    const match = response.match(/\[[\s\S]*\]/)
+    if (!match) return []
+    const parsed = JSON.parse(match[0]) as Array<{ product_name: string; quantity: number; price: number }>
+
+    return parsed.map((r) => {
+      const name = (r.product_name || '').toLowerCase().trim()
+      const matched = products.find((p) => p.name.toLowerCase().trim() === name)
+      return {
+        product_name: r.product_name || '',
+        quantity: Number(r.quantity) || 0,
+        price: Number(r.price) || 0,
+        matched_product_id: matched?.id ?? '',
+      }
+    })
+  }
+
+  const handleFile = async (file: File) => {
+    setProcessing(true)
+    setOcrProgress(0)
+    try {
+      let rawText = ''
+
+      if (file.name.match(/\.(xlsx|xls)$/i)) {
+        // Excel
+        const ab = await file.arrayBuffer()
+        const wb = XLSX.read(ab)
+        const ws = wb.Sheets[wb.SheetNames[0]]
+        rawText = XLSX.utils.sheet_to_csv(ws)
+      } else if (file.name.match(/\.csv$/i)) {
+        rawText = await file.text()
+      } else if (file.type.startsWith('image/') || file.name.match(/\.(png|jpg|jpeg|webp|bmp)$/i)) {
+        // OCR
+        const result = await Tesseract.recognize(file, 'spa', {
+          logger: (m) => {
+            if (m.status === 'recognizing text') setOcrProgress(Math.round(m.progress * 100))
+          },
+        })
+        rawText = result.data.text
+      } else {
+        showToast('error', 'Formato no soportado. Usá imagen, Excel o CSV.')
+        return
+      }
+
+      if (!rawText.trim()) {
+        showToast('error', 'No se pudo extraer texto del archivo')
+        return
+      }
+
+      const parsed = await parseWithAI(rawText)
+      if (parsed.length === 0) {
+        showToast('error', 'No se encontraron productos en el archivo')
+        return
+      }
+
+      setRows(parsed.filter((r) => r.quantity > 0))
+      setStep('preview')
+    } catch (err) {
+      console.error(err)
+      showToast('error', 'Error al procesar el archivo')
+    } finally {
+      setProcessing(false)
+    }
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    const file = e.dataTransfer.files[0]
+    if (file) handleFile(file)
+  }
+
+  const updateRow = (i: number, patch: Partial<ImportRow>) => {
+    setRows((prev) => prev.map((r, idx) => idx === i ? { ...r, ...patch } : r))
+  }
+
+  const removeRow = (i: number) => setRows((prev) => prev.filter((_, idx) => idx !== i))
+
+  const handleSave = async () => {
+    const valid = rows.filter((r) => r.product_name.trim() && r.quantity > 0)
+    if (valid.length === 0) return
+    setSaving(true)
+    try {
+      await onImport(date, valid)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between p-6 border-b border-gray-100 shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 bg-indigo-50 rounded-xl flex items-center justify-center">
+              <Upload className="w-5 h-5 text-indigo-600" />
+            </div>
+            <div>
+              <h2 className="font-bold text-gray-900">Importar Planilla de Producción</h2>
+              <p className="text-xs text-gray-400 mt-0.5">Captura de pantalla, Excel o CSV · la IA extrae los datos</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100"><X className="w-5 h-5 text-gray-500" /></button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+          {step === 'upload' && (
+            <>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Fecha</label>
+                <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+              </div>
+
+              {processing ? (
+                <div className="border-2 border-dashed border-indigo-200 rounded-2xl p-12 text-center space-y-3">
+                  <Loader2 className="w-10 h-10 text-indigo-400 animate-spin mx-auto" />
+                  <p className="text-sm font-semibold text-indigo-600">
+                    {ocrProgress > 0 ? `Leyendo imagen… ${ocrProgress}%` : 'Procesando con IA…'}
+                  </p>
+                  {ocrProgress > 0 && (
+                    <div className="w-48 mx-auto bg-gray-100 rounded-full h-2">
+                      <div className="bg-indigo-500 h-2 rounded-full transition-all" style={{ width: `${ocrProgress}%` }} />
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div
+                  onDrop={handleDrop}
+                  onDragOver={(e) => e.preventDefault()}
+                  onClick={() => fileRef.current?.click()}
+                  className="border-2 border-dashed border-gray-200 hover:border-indigo-300 rounded-2xl p-12 text-center cursor-pointer transition-colors group"
+                >
+                  <div className="flex justify-center gap-4 mb-4">
+                    <ImageIcon className="w-8 h-8 text-gray-300 group-hover:text-indigo-400 transition-colors" />
+                    <FileSpreadsheet className="w-8 h-8 text-gray-300 group-hover:text-indigo-400 transition-colors" />
+                  </div>
+                  <p className="text-sm font-bold text-gray-500 group-hover:text-indigo-600 transition-colors">
+                    Arrastrá o hacé clic para subir
+                  </p>
+                  <p className="text-xs text-gray-400 mt-1">Captura de pantalla (PNG/JPG), Excel (.xlsx) o CSV</p>
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    accept=".xlsx,.xls,.csv,image/*"
+                    className="hidden"
+                    onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f) }}
+                  />
+                </div>
+              )}
+            </>
+          )}
+
+          {step === 'preview' && (
+            <>
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Fecha</label>
+                  <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
+                    className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+                </div>
+                <button onClick={() => { setStep('upload'); setRows([]) }} className="text-xs text-indigo-500 font-semibold hover:text-indigo-700">
+                  ← Subir otro archivo
+                </button>
+              </div>
+
+              <div className="bg-indigo-50 rounded-xl px-4 py-3 flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-indigo-600 shrink-0" />
+                <p className="text-xs text-indigo-700 font-semibold">{rows.length} productos encontrados · revisá y corregí antes de guardar</p>
+              </div>
+
+              <div className="overflow-x-auto rounded-xl border border-gray-100">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-100">
+                      <th className="text-left px-3 py-2.5 font-bold text-gray-500 uppercase tracking-wider">Producto (de la planilla)</th>
+                      <th className="text-center px-3 py-2.5 font-bold text-gray-500 uppercase tracking-wider w-24">Cant.</th>
+                      <th className="text-left px-3 py-2.5 font-bold text-gray-500 uppercase tracking-wider">Vincular al POS</th>
+                      <th className="w-8" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((row, i) => (
+                      <tr key={i} className={`border-b border-gray-50 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}`}>
+                        <td className="px-3 py-2">
+                          <input
+                            type="text"
+                            value={row.product_name}
+                            onChange={(e) => updateRow(i, { product_name: e.target.value })}
+                            className="w-full border border-gray-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <input
+                            type="number"
+                            min="0"
+                            value={row.quantity}
+                            onChange={(e) => updateRow(i, { quantity: parseInt(e.target.value) || 0 })}
+                            className="w-full text-center border border-gray-200 rounded-lg px-2 py-1 text-xs font-bold focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <select
+                            value={row.matched_product_id}
+                            onChange={(e) => updateRow(i, { matched_product_id: e.target.value })}
+                            className="w-full border border-gray-200 rounded-lg px-2 py-1 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                          >
+                            <option value="">Sin vincular (solo planilla)</option>
+                            {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                          </select>
+                        </td>
+                        <td className="px-2 py-2">
+                          <button onClick={() => removeRow(i)} className="p-1 text-gray-300 hover:text-red-500">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="bg-teal-50 rounded-xl px-4 py-3 flex justify-between items-center">
+                <span className="text-sm font-semibold text-teal-700">Total unidades</span>
+                <span className="text-xl font-black text-teal-700">{rows.reduce((s, r) => s + r.quantity, 0)}</span>
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="flex gap-3 p-6 border-t border-gray-100 shrink-0">
+          <Button type="button" variant="ghost" className="flex-1" onClick={onClose}>Cancelar</Button>
+          {step === 'preview' && (
+            <Button className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white" onClick={handleSave} disabled={saving || rows.length === 0}>
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : `Guardar ${rows.length} productos`}
+            </Button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Production Grid ──────────────────────────────────────────────────────────
 
 function ProductionGrid({ products }: { products: Product[] }) {
@@ -692,6 +973,7 @@ export default function InventoryPage() {
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [showEgressForm, setShowEgressForm] = useState(false)
+  const [showImport, setShowImport] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [days, setDays] = useState<string[]>([])
 
@@ -729,6 +1011,21 @@ export default function InventoryPage() {
     showToast('success', 'Egresos registrados · stock descontado')
     setShowEgressForm(false)
     load()
+  }
+
+  const handleImport = async (date: string, rows: ImportRow[]) => {
+    for (const row of rows) {
+      if (row.matched_product_id) {
+        await productionApi.upsertEntry(date, row.matched_product_id, row.quantity)
+      }
+    }
+    const unlinked = rows.filter((r) => !r.matched_product_id)
+    if (unlinked.length > 0) {
+      showToast('info', `${rows.length - unlinked.length} guardados en planilla · ${unlinked.length} sin vincular (solo en el registro)`)
+    } else {
+      showToast('success', `${rows.length} productos guardados en la planilla`)
+    }
+    setShowImport(false)
   }
 
   const handleDelete = async (entry: InventoryEntry) => {
@@ -769,6 +1066,11 @@ export default function InventoryPage() {
               <p className="text-sm text-gray-400">Producción diaria · ingresos y egresos de stock</p>
             </div>
           </div>
+          {tab === 'produccion' && (
+            <Button onClick={() => setShowImport(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-2">
+              <Upload className="w-4 h-4" /> Importar planilla
+            </Button>
+          )}
           {tab === 'costos' && (
             <div className="flex gap-2">
               <Button onClick={() => setShowEgressForm(true)} className="bg-orange-500 hover:bg-orange-600 text-white flex items-center gap-2">
@@ -887,6 +1189,7 @@ export default function InventoryPage() {
 
         {showForm && <DayInputForm products={products} onSave={handleSaveInputs} onClose={() => setShowForm(false)} />}
         {showEgressForm && <DayEgressForm products={products} onSave={handleSaveEgresses} onClose={() => setShowEgressForm(false)} />}
+        {showImport && <ImportProductionModal products={products} onImport={handleImport} onClose={() => setShowImport(false)} />}
       </div>
     </FeatureGuard>
   )
