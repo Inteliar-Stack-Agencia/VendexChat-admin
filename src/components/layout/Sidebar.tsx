@@ -22,6 +22,7 @@ import {
   MessageSquareWarning,
   UtensilsCrossed,
   TrendingDown,
+  PackageCheck,
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -166,6 +167,11 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                 <NavLink to="/bot" className={linkClass} onClick={onClose}>
                   <Bot className="w-5 h-5" />
                   Asistente Tienda
+                  <span className="ml-auto text-[8px] bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded font-black uppercase">VIP</span>
+                </NavLink>
+                <NavLink to="/inventory" className={linkClass} onClick={onClose}>
+                  <PackageCheck className="w-5 h-5" />
+                  Inventario
                   <span className="ml-auto text-[8px] bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded font-black uppercase">VIP</span>
                 </NavLink>
                 <NavLink to="/balance" className={linkClass} onClick={onClose}>

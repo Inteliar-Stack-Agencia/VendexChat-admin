@@ -51,6 +51,7 @@ const ModifiersPage = lazy(() => import('./pages/client/ModifiersPage'))
 const BotFeedbackPage = lazy(() => import('./pages/client/BotFeedbackPage'))
 const ExpensesPage = lazy(() => import('./pages/client/ExpensesPage'))
 const BalancePage = lazy(() => import('./pages/client/BalancePage'))
+const InventoryPage = lazy(() => import('./pages/client/InventoryPage'))
 const LegalPage = lazy(() => import('./pages/legal/LegalPage'))
 const TermsPage = lazy(() => import('./pages/legal/TermsPage'))
 const PrivacyPage = lazy(() => import('./pages/legal/PrivacyPage'))
@@ -160,6 +161,7 @@ export default function App() {
               <Route path="/modifiers" element={<ModifiersPage />} />
               <Route path="/expenses" element={<ExpensesPage />} />
               <Route path="/balance" element={<BalancePage />} />
+              <Route path="/inventory" element={<InventoryPage />} />
 
               {/* Redirigir root del merchant a dashboard */}
               <Route index element={<Navigate to="/dashboard" replace />} />
