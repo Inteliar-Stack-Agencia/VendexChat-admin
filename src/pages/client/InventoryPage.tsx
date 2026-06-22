@@ -711,9 +711,9 @@ function ImportProductionModal({ products, onImport, onClose }: ImportModalProps
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-100">
-                      <th className="text-left px-3 py-2.5 font-bold text-gray-500 uppercase tracking-wider">Producto (de la planilla)</th>
+                      <th className="text-left px-3 py-2.5 font-bold text-gray-500 uppercase tracking-wider">Producto</th>
                       <th className="text-center px-3 py-2.5 font-bold text-gray-500 uppercase tracking-wider w-24">Cant.</th>
-                      <th className="text-left px-3 py-2.5 font-bold text-gray-500 uppercase tracking-wider">Vincular al POS</th>
+                      <th className="text-center px-3 py-2.5 font-bold text-gray-500 uppercase tracking-wider w-24">Vinculado</th>
                       <th className="w-8" />
                     </tr>
                   </thead>
@@ -737,15 +737,11 @@ function ImportProductionModal({ products, onImport, onClose }: ImportModalProps
                             className="w-full text-center border border-gray-200 rounded-lg px-2 py-1 text-xs font-bold focus:outline-none focus:ring-1 focus:ring-indigo-400"
                           />
                         </td>
-                        <td className="px-3 py-2">
-                          <select
-                            value={row.matched_product_id}
-                            onChange={(e) => updateRow(i, { matched_product_id: e.target.value })}
-                            className="w-full border border-gray-200 rounded-lg px-2 py-1 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400"
-                          >
-                            <option value="">Sin vincular (solo planilla)</option>
-                            {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                          </select>
+                        <td className="px-3 py-2 text-center">
+                          {row.matched_product_id
+                            ? <span className="text-[10px] font-bold text-emerald-600">✓ {products.find(p => p.id === row.matched_product_id)?.name}</span>
+                            : <span className="text-[10px] text-gray-400">Sin coincidencia</span>
+                          }
                         </td>
                         <td className="px-2 py-2">
                           <button onClick={() => removeRow(i)} className="p-1 text-gray-300 hover:text-red-500">
@@ -1011,9 +1007,251 @@ function ProductionGrid({ products }: { products: Product[] }) {
   )
 }
 
+// ─── Stock Close Grid ─────────────────────────────────────────────────────────
+
+function StockCloseGrid({ products }: { products: Product[] }) {
+  const [weekStart, setWeekStart] = useState<Date>(() => getWeekStart(new Date()))
+  const [weekData, setWeekData] = useState<Awaited<ReturnType<typeof productionApi.getWeekData>> | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [pending, setPending] = useState<Record<string, Record<string, Record<string, string>>>>({})
+  const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
+
+  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
+  const weekStartISO = toISO(weekStart)
+  const weekEndISO = toISO(weekDays[6])
+  const weekLabel = `${weekStart.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })} – ${weekDays[6].toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })}`
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    setPending({})
+    try {
+      const data = await productionApi.getWeekData(weekStartISO, weekEndISO)
+      setWeekData(data)
+    } catch {
+      showToast('error', 'Error al cargar cierre de stock')
+    } finally {
+      setLoading(false)
+    }
+  }, [weekStartISO, weekEndISO])
+
+  useEffect(() => { load() }, [load])
+
+  const getStockField = (productId: string, date: string, field: 'sobrante' | 'consumo_interno' | 'merma'): number =>
+    weekData?.stock[productId]?.[date]?.[field] ?? 0
+
+  const getPendingVal = (productId: string, date: string, field: 'sobrante' | 'consumo_interno' | 'merma'): string => {
+    if (pending[productId]?.[date]?.[field] !== undefined) return pending[productId][date][field]
+    const v = getStockField(productId, date, field)
+    return v === 0 ? '' : String(v)
+  }
+
+  const handleCellChange = (productId: string, date: string, field: 'sobrante' | 'consumo_interno' | 'merma', val: string) => {
+    setPending((prev) => ({
+      ...prev,
+      [productId]: {
+        ...(prev[productId] || {}),
+        [date]: { ...(prev[productId]?.[date] || {}), [field]: val },
+      },
+    }))
+
+    const key = `${productId}__${date}__${field}`
+    clearTimeout(saveTimers.current[key])
+    saveTimers.current[key] = setTimeout(async () => {
+      const n = parseInt(val) || 0
+      const sobrante = field === 'sobrante' ? n : (parseInt(getPendingVal(productId, date, 'sobrante')) || getStockField(productId, date, 'sobrante'))
+      const consumo = field === 'consumo_interno' ? n : (parseInt(getPendingVal(productId, date, 'consumo_interno')) || getStockField(productId, date, 'consumo_interno'))
+      const merma = field === 'merma' ? n : (parseInt(getPendingVal(productId, date, 'merma')) || getStockField(productId, date, 'merma'))
+      try {
+        await productionApi.upsertStockClose(date, productId, { sobrante, consumo_interno: consumo, merma })
+        const data = await productionApi.getWeekData(weekStartISO, weekEndISO)
+        setWeekData(data)
+      } catch {
+        showToast('error', 'Error al guardar')
+      }
+    }, 800)
+  }
+
+  const productTotals = (productId: string) => {
+    let totalSobrante = 0, totalConsumo = 0, totalMerma = 0
+    for (const day of weekDays) {
+      const d = toISO(day)
+      const s = parseInt(getPendingVal(productId, d, 'sobrante')) || getStockField(productId, d, 'sobrante')
+      const c = parseInt(getPendingVal(productId, d, 'consumo_interno')) || getStockField(productId, d, 'consumo_interno')
+      const m = parseInt(getPendingVal(productId, d, 'merma')) || getStockField(productId, d, 'merma')
+      totalSobrante += s
+      totalConsumo += c
+      totalMerma += m
+    }
+    return { totalSobrante, totalConsumo, totalMerma }
+  }
+
+  const activeProducts = products.filter((p) => p.is_active)
+
+  const grandTotals = activeProducts.reduce(
+    (acc, p) => {
+      const t = productTotals(p.id)
+      acc.sobrante += t.totalSobrante
+      acc.consumo += t.totalConsumo
+      acc.merma += t.totalMerma
+      return acc
+    },
+    { sobrante: 0, consumo: 0, merma: 0 },
+  )
+
+  return (
+    <div className="space-y-4">
+      {/* Week navigation */}
+      <div className="flex items-center justify-between">
+        <button onClick={() => setWeekStart(addDays(weekStart, -7))} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+          <ChevronLeft className="w-5 h-5 text-gray-500" />
+        </button>
+        <div className="text-center">
+          <p className="text-sm font-bold text-gray-800">{weekLabel}</p>
+          <p className="text-xs text-gray-400">Cierre semanal · sobrante diario</p>
+        </div>
+        <button onClick={() => setWeekStart(addDays(weekStart, 7))} disabled={weekStartISO >= toISO(getWeekStart(new Date()))} className="p-2 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-30">
+          <ChevronRight className="w-5 h-5 text-gray-500" />
+        </button>
+      </div>
+
+      {/* Summary banner */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className="bg-amber-50 rounded-xl p-3 text-center">
+          <p className="text-[10px] font-bold text-amber-600 uppercase tracking-widest mb-1">Sobrante total</p>
+          <p className="text-2xl font-black text-amber-700">{grandTotals.sobrante}</p>
+        </div>
+        <div className="bg-blue-50 rounded-xl p-3 text-center">
+          <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest mb-1">Consumo interno</p>
+          <p className="text-2xl font-black text-blue-700">{grandTotals.consumo}</p>
+        </div>
+        <div className="bg-red-50 rounded-xl p-3 text-center">
+          <p className="text-[10px] font-bold text-red-500 uppercase tracking-widest mb-1">Merma total</p>
+          <p className="text-2xl font-black text-red-600">{grandTotals.merma}</p>
+        </div>
+      </div>
+
+      {/* Grid */}
+      {loading ? (
+        <div className="flex justify-center py-12"><RefreshCw className="w-6 h-6 text-gray-300 animate-spin" /></div>
+      ) : (
+        <div className="overflow-x-auto rounded-2xl border border-gray-100 bg-white">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-100">
+                <th className="text-left px-4 py-3 font-bold text-gray-500 uppercase tracking-wider min-w-[180px] sticky left-0 bg-gray-50 z-10">Producto</th>
+                {weekDays.map((day) => {
+                  const iso = toISO(day)
+                  const isToday = iso === today
+                  return (
+                    <th key={iso} className={`text-center px-1 py-3 min-w-[80px] ${isToday ? 'text-teal-600' : 'text-gray-400'}`}>
+                      <div className="font-bold uppercase tracking-wider">{DAY_SHORT[day.getDay()]}</div>
+                      <div className={`text-[10px] font-normal ${isToday ? 'text-teal-400' : 'text-gray-300'}`}>{day.getDate()}/{day.getMonth() + 1}</div>
+                    </th>
+                  )
+                })}
+                <th className="text-center px-2 py-3 font-bold text-amber-600 uppercase tracking-wider min-w-[80px]">Sobrante</th>
+                <th className="text-center px-2 py-3 font-bold text-blue-500 uppercase tracking-wider min-w-[90px]">C. Interno</th>
+                <th className="text-center px-2 py-3 font-bold text-red-500 uppercase tracking-wider min-w-[80px]">Merma</th>
+              </tr>
+            </thead>
+            <tbody>
+              {activeProducts.map((product, rowIdx) => {
+                const totals = productTotals(product.id)
+                return (
+                  <tr key={product.id} className={`border-b border-gray-50 ${rowIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}`}>
+                    <td className={`px-4 py-2 font-medium text-gray-700 sticky left-0 z-10 ${rowIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}`}>
+                      {product.name}
+                    </td>
+                    {weekDays.map((day) => {
+                      const iso = toISO(day)
+                      const isToday = iso === today
+                      const sobranteVal = getPendingVal(product.id, iso, 'sobrante')
+                      const consumoVal = getPendingVal(product.id, iso, 'consumo_interno')
+                      const mermaVal = getPendingVal(product.id, iso, 'merma')
+                      return (
+                        <td key={iso} className={`px-1 py-1 ${isToday ? 'bg-teal-50/30' : ''}`}>
+                          <div className="flex flex-col items-center gap-0.5">
+                            <input
+                              type="number" min="0"
+                              value={sobranteVal}
+                              onChange={(e) => handleCellChange(product.id, iso, 'sobrante', e.target.value)}
+                              placeholder="—"
+                              title="Sobrante"
+                              className="w-14 text-center border border-amber-200 rounded-lg px-1 py-1 text-sm font-bold text-amber-700 focus:outline-none focus:ring-1 focus:ring-amber-400 bg-white"
+                            />
+                            {(consumoVal !== '' && consumoVal !== '0') && (
+                              <span className="text-[9px] text-blue-500 font-semibold">CI:{consumoVal}</span>
+                            )}
+                            {(mermaVal !== '' && mermaVal !== '0') && (
+                              <span className="text-[9px] text-red-400 font-semibold">M:{mermaVal}</span>
+                            )}
+                          </div>
+                        </td>
+                      )
+                    })}
+                    <td className="px-2 py-2 text-center font-black text-amber-600">{totals.totalSobrante || '—'}</td>
+                    <td className="px-2 py-2 text-center">
+                      <div className="flex flex-col items-center gap-1">
+                        <input
+                          type="number" min="0"
+                          value={getPendingVal(product.id, weekEndISO, 'consumo_interno')}
+                          onChange={(e) => handleCellChange(product.id, weekEndISO, 'consumo_interno', e.target.value)}
+                          placeholder="0"
+                          className="w-14 text-center border border-blue-200 rounded-lg px-1 py-1 text-xs font-bold text-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white"
+                        />
+                        {totals.totalConsumo > 0 && <span className="text-[9px] text-blue-400">{totals.totalConsumo} total</span>}
+                      </div>
+                    </td>
+                    <td className="px-2 py-2 text-center">
+                      <div className="flex flex-col items-center gap-1">
+                        <input
+                          type="number" min="0"
+                          value={getPendingVal(product.id, weekEndISO, 'merma')}
+                          onChange={(e) => handleCellChange(product.id, weekEndISO, 'merma', e.target.value)}
+                          placeholder="0"
+                          className="w-14 text-center border border-red-200 rounded-lg px-1 py-1 text-xs font-bold text-red-500 focus:outline-none focus:ring-1 focus:ring-red-400 bg-white"
+                        />
+                        {totals.totalMerma > 0 && <span className="text-[9px] text-red-400">{totals.totalMerma} total</span>}
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+            <tfoot>
+              <tr className="bg-gray-100 border-t-2 border-gray-200">
+                <td className="px-4 py-3 font-black text-gray-700 sticky left-0 bg-gray-100 z-10">TOTALES</td>
+                {weekDays.map((day) => {
+                  const iso = toISO(day)
+                  const daySobrante = activeProducts.reduce((s, p) => {
+                    const v = parseInt(getPendingVal(p.id, iso, 'sobrante')) || getStockField(p.id, iso, 'sobrante')
+                    return s + v
+                  }, 0)
+                  return (
+                    <td key={iso} className="px-1 py-3 text-center">
+                      <div className="text-xs font-black text-amber-600">{daySobrante || '—'}</div>
+                    </td>
+                  )
+                })}
+                <td className="px-2 py-3 text-center font-black text-amber-600">{grandTotals.sobrante}</td>
+                <td className="px-2 py-3 text-center font-black text-blue-600">{grandTotals.consumo}</td>
+                <td className="px-2 py-3 text-center font-black text-red-500">{grandTotals.merma}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
+
+      <p className="text-[10px] text-gray-400 text-center">
+        Sobrante: editá por día · Consumo interno y Merma: total semanal por producto · se guarda automáticamente
+      </p>
+    </div>
+  )
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
-type Tab = 'produccion' | 'costos'
+type Tab = 'produccion' | 'stock'
 
 export default function InventoryPage() {
   const [tab, setTab] = useState<Tab>('produccion')
@@ -1120,7 +1358,7 @@ export default function InventoryPage() {
               <Upload className="w-4 h-4" /> Importar planilla
             </Button>
           )}
-          {tab === 'costos' && (
+          {tab === 'stock' && (
             <div className="flex gap-2">
               <Button onClick={() => setShowEgressForm(true)} className="bg-orange-500 hover:bg-orange-600 text-white flex items-center gap-2">
                 <ArrowUpCircle className="w-4 h-4" /> Egreso
@@ -1142,99 +1380,17 @@ export default function InventoryPage() {
             Planilla de Producción
           </button>
           <button
-            onClick={() => setTab('costos')}
-            className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${tab === 'costos' ? 'bg-white text-teal-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            onClick={() => setTab('stock')}
+            className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${tab === 'stock' ? 'bg-white text-teal-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
           >
             <TrendingDown className="w-4 h-4" />
-            Costos e Insumos
+            Cierre / Stock Sobrante
           </button>
         </div>
 
         {/* Production tab */}
         {tab === 'produccion' && <ProductionGrid products={products} />}
-
-        {/* Costs tab */}
-        {tab === 'costos' && (
-          <>
-            {/* Today KPIs */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <Card className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-teal-50 rounded-xl flex items-center justify-center shrink-0">
-                  <ArrowDownCircle className="w-6 h-6 text-teal-600" />
-                </div>
-                <div>
-                  <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Ingresos hoy</p>
-                  <p className="text-2xl font-black text-gray-900">{formatPrice(todayInputCost)}</p>
-                  <p className="text-xs text-gray-400">{todayIngresos.length} rubro{todayIngresos.length !== 1 ? 's' : ''}</p>
-                </div>
-              </Card>
-              <Card className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-orange-50 rounded-xl flex items-center justify-center shrink-0">
-                  <ArrowUpCircle className="w-6 h-6 text-orange-500" />
-                </div>
-                <div>
-                  <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Egresos hoy</p>
-                  <p className="text-2xl font-black text-gray-900">{formatPrice(todayEgressCost)}</p>
-                  <p className="text-xs text-gray-400">{todayEgresos.length} rubro{todayEgresos.length !== 1 ? 's' : ''}</p>
-                </div>
-              </Card>
-              <button onClick={() => setShowForm(true)} className="flex items-center gap-4 cursor-pointer hover:bg-gray-50 transition-colors bg-white rounded-2xl p-4 border border-dashed border-gray-200 w-full text-left">
-                <div className="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center shrink-0">
-                  <Plus className="w-6 h-6 text-gray-400" />
-                </div>
-                <div>
-                  <p className="text-sm font-bold text-gray-600">Cargar movimiento</p>
-                  <p className="text-xs text-gray-400">Ingresos o egresos de stock</p>
-                </div>
-              </button>
-            </div>
-
-            {/* History */}
-            <div>
-              <h2 className="text-sm font-bold text-gray-500 uppercase tracking-widest mb-3">Historial (últimos 30 días)</h2>
-              {loading ? (
-                <div className="flex justify-center py-12"><RefreshCw className="w-6 h-6 text-gray-300 animate-spin" /></div>
-              ) : days.length === 0 ? (
-                <Card className="text-center py-12">
-                  <PackageCheck className="w-10 h-10 text-gray-200 mx-auto mb-3" />
-                  <p className="text-gray-400 font-medium text-sm">Sin registros todavía</p>
-                </Card>
-              ) : (
-                <div className="space-y-3">
-                  {days.map((day) => (
-                    <div key={day}>
-                      <DaySummaryCard date={day} />
-                      <div className="mt-1 pl-2 space-y-1">
-                        {entries.filter((e) => e.date === day).map((entry) => {
-                          const isEgreso = entry.movement_type === 'egreso'
-                          return (
-                            <div key={entry.id} className="flex items-center justify-between px-4 py-1.5 bg-gray-50 rounded-lg">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                {isEgreso ? <ArrowUpCircle className="w-3 h-3 text-orange-400 shrink-0" /> : <ArrowDownCircle className="w-3 h-3 text-teal-500 shrink-0" />}
-                                <span className="text-xs text-gray-500 font-medium">{entry.product_line}</span>
-                                {entry.quantity && <span className="text-xs text-gray-400">x{entry.quantity}</span>}
-                                <span className={`text-xs font-bold ${isEgreso ? 'text-orange-500' : 'text-gray-700'}`}>
-                                  {isEgreso ? '-' : ''}{formatPrice(Number(entry.cost))}
-                                </span>
-                                {entry.notes && <span className="text-xs text-gray-400 italic">{entry.notes}</span>}
-                                {entry.product_id && <span className="text-[9px] bg-teal-100 text-teal-600 px-1.5 py-0.5 rounded font-semibold">POS</span>}
-                                {entry.expense_id && <span className="text-[9px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded font-semibold">gasto</span>}
-                                {isEgreso && <span className="text-[9px] bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded font-semibold">egreso</span>}
-                              </div>
-                              <button onClick={() => handleDelete(entry)} disabled={deletingId === entry.id} className="p-1 text-gray-300 hover:text-red-500 shrink-0">
-                                {deletingId === entry.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-                              </button>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </>
-        )}
+        {tab === 'stock' && <StockCloseGrid products={products} />}
 
         {showForm && <DayInputForm products={products} onSave={handleSaveInputs} onClose={() => setShowForm(false)} />}
         {showEgressForm && <DayEgressForm products={products} onSave={handleSaveEgresses} onClose={() => setShowEgressForm(false)} />}

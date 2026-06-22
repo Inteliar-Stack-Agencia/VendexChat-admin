@@ -7,12 +7,17 @@ export interface ProductionEntry {
   date: string
   product_id: string
   quantity: number
+  sobrante: number
+  consumo_interno: number
+  merma: number
   created_at: string
 }
 
 export interface ProductionWeekData {
-  // production[product_id][date] = quantity
+  // production[product_id][date] = quantity produced
   production: Record<string, Record<string, number>>
+  // stock[product_id][date] = { sobrante, consumo_interno, merma }
+  stock: Record<string, Record<string, { sobrante: number; consumo_interno: number; merma: number }>>
   // sales[product_id][date] = { qty, revenue }
   sales: Record<string, Record<string, { qty: number; revenue: number }>>
 }
@@ -21,7 +26,6 @@ export const productionApi = {
   getWeekData: async (weekStart: string, weekEnd: string): Promise<ProductionWeekData> => {
     const storeId = await getStoreId()
 
-    // Run queries independently so one failure doesn't break the other
     const prodRes = await supabase
       .from('production_log')
       .select('*')
@@ -53,9 +57,18 @@ export const productionApi = {
 
     // Build production map
     const production: Record<string, Record<string, number>> = {}
-    for (const entry of prodRes.data || []) {
+    const stock: Record<string, Record<string, { sobrante: number; consumo_interno: number; merma: number }>> = {}
+
+    for (const entry of (prodRes.data || []) as ProductionEntry[]) {
       if (!production[entry.product_id]) production[entry.product_id] = {}
-      production[entry.product_id][entry.date] = entry.quantity
+      production[entry.product_id][entry.date] = entry.quantity || 0
+
+      if (!stock[entry.product_id]) stock[entry.product_id] = {}
+      stock[entry.product_id][entry.date] = {
+        sobrante: entry.sobrante || 0,
+        consumo_interno: entry.consumo_interno || 0,
+        merma: entry.merma || 0,
+      }
     }
 
     // Build sales map from order items
@@ -76,7 +89,7 @@ export const productionApi = {
       }
     }
 
-    return { production, sales }
+    return { production, stock, sales }
   },
 
   upsertEntry: async (date: string, productId: string, quantity: number) => {
@@ -85,6 +98,21 @@ export const productionApi = {
       .from('production_log')
       .upsert(
         { store_id: storeId, date, product_id: productId, quantity },
+        { onConflict: 'store_id,date,product_id' },
+      )
+    if (error) throw error
+  },
+
+  upsertStockClose: async (
+    date: string,
+    productId: string,
+    fields: { sobrante?: number; consumo_interno?: number; merma?: number },
+  ) => {
+    const storeId = await getStoreId()
+    const { error } = await supabase
+      .from('production_log')
+      .upsert(
+        { store_id: storeId, date, product_id: productId, quantity: 0, ...fields },
         { onConflict: 'store_id,date,product_id' },
       )
     if (error) throw error
