@@ -914,7 +914,8 @@ function ProductionGrid({ products }: { products: Product[] }) {
             <thead>
               <tr className="bg-gray-50 border-b border-gray-100">
                 <th className="text-left px-4 py-3 font-bold text-gray-500 uppercase tracking-wider min-w-[180px] sticky left-0 bg-gray-50 z-10">Producto</th>
-                <th className="text-center px-2 py-3 font-bold text-gray-400 uppercase tracking-wider min-w-[40px]">Precio</th>
+                <th className="text-center px-2 py-3 font-bold text-gray-400 uppercase tracking-wider min-w-[60px]">Costo</th>
+                <th className="text-center px-2 py-3 font-bold text-gray-400 uppercase tracking-wider min-w-[60px]">Venta</th>
                 {weekDays.map((day) => {
                   const iso = toISO(day)
                   const isToday = iso === today
@@ -940,7 +941,8 @@ function ProductionGrid({ products }: { products: Product[] }) {
                     <td className={`px-4 py-2 font-medium text-gray-700 sticky left-0 z-10 ${rowIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}`}>
                       {product.name}
                     </td>
-                    <td className="px-2 py-2 text-center text-gray-400 font-medium">{formatPrice(product.price)}</td>
+                    <td className="px-2 py-2 text-center text-orange-400 font-medium text-[11px]">{product.cost_price ? formatPrice(product.cost_price) : '—'}</td>
+                    <td className="px-2 py-2 text-center text-gray-400 font-medium text-[11px]">{formatPrice(product.price)}</td>
                     {weekDays.map((day) => {
                       const iso = toISO(day)
                       const sales = getSales(product.id, iso)
@@ -975,7 +977,7 @@ function ProductionGrid({ products }: { products: Product[] }) {
             <tfoot>
               <tr className="bg-gray-100 border-t-2 border-gray-200">
                 <td className="px-4 py-3 font-black text-gray-700 sticky left-0 bg-gray-100 z-10">TOTALES</td>
-                <td />
+                <td /><td />
                 {weekDays.map((day) => {
                   const iso = toISO(day)
                   const dayProd = activeProducts.reduce((s, p) => {

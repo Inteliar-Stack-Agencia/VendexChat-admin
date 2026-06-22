@@ -9,7 +9,7 @@ export const productsApi = {
         const storeId = await getStoreId()
         const limit = params?.limit || 50
 
-        let query = supabase.from('products').select('id, name, description, price, image_url, stock, unlimited_stock, is_active, category_id, sort_order, store_id, is_featured, show_in_store, created_at, categories(name)', { count: 'estimated' }).eq('store_id', storeId)
+        let query = supabase.from('products').select('id, name, description, price, cost_price, image_url, stock, unlimited_stock, is_active, category_id, sort_order, store_id, is_featured, show_in_store, created_at, categories(name)', { count: 'estimated' }).eq('store_id', storeId)
 
         if (params?.search) query = query.ilike('name', `%${params.search}%`)
         if (params?.category_id) query = query.eq('category_id', params.category_id)
@@ -97,6 +97,7 @@ export const productsApi = {
         }
 
         if (data.price !== undefined) updateData.price = typeof data.price === 'string' ? parseFloat(data.price) : data.price
+        if (data.cost_price !== undefined) updateData.cost_price = typeof data.cost_price === 'string' ? parseFloat(data.cost_price) : data.cost_price
         if (data.stock !== undefined) updateData.stock = typeof data.stock === 'string' ? parseInt(data.stock) : data.stock
 
         const { data: updatedProd, error } = await supabase.from('products').update(updateData).eq('id', id).eq('store_id', storeId).select('*, categories(name)').single()

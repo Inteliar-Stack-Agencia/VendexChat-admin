@@ -156,6 +156,7 @@ export interface Product {
   name: string
   description: string | null
   price: number
+  cost_price: number
   stock: number
   unlimited_stock: boolean
   image_url: string | null
@@ -172,6 +173,7 @@ export interface ProductFormData {
   name: string
   description: string
   price: number | string
+  cost_price: number | string
   stock: number | string
   unlimited_stock: boolean
   image_url: string

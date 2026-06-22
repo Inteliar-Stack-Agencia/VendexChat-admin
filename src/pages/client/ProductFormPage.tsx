@@ -37,6 +37,7 @@ export default function ProductFormPage() {
     name: '',
     description: '',
     price: '',
+    cost_price: '',
     stock: '0',
     unlimited_stock: false,
     image_url: '',
@@ -66,6 +67,7 @@ export default function ProductFormPage() {
             name: product.name,
             description: cleanDescription(product.description),
             price: product.price,
+            cost_price: product.cost_price ?? '',
             stock: product.stock,
             unlimited_stock: product.unlimited_stock,
             image_url: product.image_url || '',
@@ -228,7 +230,7 @@ export default function ProductFormPage() {
           <h2 className="text-sm font-semibold text-gray-500 uppercase mb-4">Precio y stock</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input
-              label="Precio"
+              label="Precio de venta"
               type="number"
               min="0"
               step="0.01"
@@ -236,6 +238,16 @@ export default function ProductFormPage() {
               value={String(form.price)}
               onChange={(e) => updateField('price', e.target.value)}
               error={errors.price}
+            />
+
+            <Input
+              label="Precio de costo"
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="0.00"
+              value={String(form.cost_price)}
+              onChange={(e) => updateField('cost_price', e.target.value)}
             />
 
             <Input
