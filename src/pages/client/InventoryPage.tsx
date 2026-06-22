@@ -342,7 +342,7 @@ export default function InventoryPage() {
               <p className="text-xs text-gray-400">{todayEntries.length} rubro{todayEntries.length !== 1 ? 's' : ''} cargado{todayEntries.length !== 1 ? 's' : ''}</p>
             </div>
           </Card>
-          <Card className="flex items-center gap-4 cursor-pointer hover:bg-gray-50 transition-colors" onClick={() => setShowForm(true)}>
+          <button onClick={() => setShowForm(true)} className="flex items-center gap-4 cursor-pointer hover:bg-gray-50 transition-colors bg-white rounded-2xl p-4 border border-gray-100 w-full text-left">
             <div className="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center shrink-0">
               <Plus className="w-6 h-6 text-gray-400" />
             </div>
@@ -350,7 +350,7 @@ export default function InventoryPage() {
               <p className="text-sm font-bold text-gray-600">Registrar insumos del día</p>
               <p className="text-xs text-gray-400">Crea los gastos automáticamente</p>
             </div>
-          </Card>
+          </button>
         </div>
 
         {/* History by day */}
