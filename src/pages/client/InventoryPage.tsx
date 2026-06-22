@@ -477,32 +477,79 @@ function ImportProductionModal({ products, onImport, onClose }: ImportModalProps
   const [saving, setSaving] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
-  const parseWithAI = async (rawText: string): Promise<ImportRow[]> => {
-    const response = await callAI([
-      {
-        role: 'system',
-        content: 'Sos un asistente que extrae tablas de producción de texto. Devolvés SOLO un JSON array con objetos {product_name, quantity, price}. quantity y price son números. Si no hay precio, usá 0. No incluyas encabezados ni totales.',
-      },
-      {
-        role: 'user',
-        content: `Extraé los productos de esta planilla:\n\n${rawText}`,
-      },
-    ])
+  const parseCSVDirect = (csv: string): ImportRow[] => {
+    const lines = csv.split('\n').map((l) => l.trim()).filter(Boolean)
+    const results: ImportRow[] = []
 
-    const match = response.match(/\[[\s\S]*\]/)
-    if (!match) return []
-    const parsed = JSON.parse(match[0]) as Array<{ product_name: string; quantity: number; price: number }>
+    for (const line of lines) {
+      // Split by comma or tab or semicolon
+      const cols = line.split(/[,;\t]/).map((c) => c.replace(/["']/g, '').trim())
+      if (cols.length < 2) continue
 
-    return parsed.map((r) => {
-      const name = (r.product_name || '').toLowerCase().trim()
-      const matched = products.find((p) => p.name.toLowerCase().trim() === name)
-      return {
-        product_name: r.product_name || '',
-        quantity: Number(r.quantity) || 0,
-        price: Number(r.price) || 0,
-        matched_product_id: matched?.id ?? '',
+      // First col = name, find a numeric col for quantity
+      const name = cols[0]
+      if (!name || name.length < 2) continue
+
+      // Skip header-like rows
+      const lname = name.toLowerCase()
+      if (['producto', 'nombre', 'item', 'opciones', 'descripcion', 'total'].some((h) => lname.includes(h))) continue
+
+      // Find first numeric column (quantity)
+      let quantity = 0
+      let price = 0
+      for (let i = 1; i < cols.length; i++) {
+        const n = parseFloat(cols[i].replace(/[$.,]/g, '').replace(',', '.'))
+        if (!isNaN(n) && n > 0) {
+          if (quantity === 0) quantity = Math.round(n) // first number = qty
+          else if (n > 100) price = n // larger number = price
+        }
       }
-    })
+
+      if (quantity <= 0) continue
+
+      const nameNorm = name.toLowerCase().trim()
+      const matched = products.find((p) => p.name.toLowerCase().trim() === nameNorm)
+      results.push({ product_name: name, quantity, price, matched_product_id: matched?.id ?? '' })
+    }
+
+    return results
+  }
+
+  const parseWithAI = async (rawText: string): Promise<ImportRow[]> => {
+    try {
+      const response = await callAI([
+        {
+          role: 'system',
+          content: 'Sos un asistente que extrae tablas de producción. Devolvés SOLO un JSON array válido con objetos {"product_name":"...","quantity":N,"price":N}. Sin texto adicional, sin markdown, sin explicación. Solo el array JSON.',
+        },
+        {
+          role: 'user',
+          content: `Extraé los productos (ignorá encabezados y totales) de esta planilla:\n\n${rawText.slice(0, 3000)}`,
+        },
+      ])
+
+      // Try to extract JSON array from response
+      const clean = response.trim()
+      const match = clean.match(/\[[\s\S]*\]/)
+      if (!match) return []
+      const parsed = JSON.parse(match[0]) as Array<{ product_name: string; quantity: number; price: number }>
+
+      return parsed
+        .filter((r) => r.product_name && Number(r.quantity) > 0)
+        .map((r) => {
+          const name = (r.product_name || '').toLowerCase().trim()
+          const matched = products.find((p) => p.name.toLowerCase().trim() === name)
+          return {
+            product_name: r.product_name || '',
+            quantity: Number(r.quantity) || 0,
+            price: Number(r.price) || 0,
+            matched_product_id: matched?.id ?? '',
+          }
+        })
+    } catch (err) {
+      console.error('AI parse failed:', err)
+      return []
+    }
   }
 
   const handleFile = async (file: File) => {
@@ -510,43 +557,45 @@ function ImportProductionModal({ products, onImport, onClose }: ImportModalProps
     setOcrProgress(0)
     try {
       let rawText = ''
+      let parsed: ImportRow[] = []
 
       if (file.name.match(/\.(xlsx|xls)$/i)) {
-        // Excel
+        // Excel → parse CSV directly first, fallback to AI
         const ab = await file.arrayBuffer()
         const wb = XLSX.read(ab)
         const ws = wb.Sheets[wb.SheetNames[0]]
         rawText = XLSX.utils.sheet_to_csv(ws)
+        parsed = parseCSVDirect(rawText)
+        if (parsed.length === 0) parsed = await parseWithAI(rawText)
       } else if (file.name.match(/\.csv$/i)) {
         rawText = await file.text()
+        parsed = parseCSVDirect(rawText)
+        if (parsed.length === 0) parsed = await parseWithAI(rawText)
       } else if (file.type.startsWith('image/') || file.name.match(/\.(png|jpg|jpeg|webp|bmp)$/i)) {
-        // OCR
+        // OCR → AI
         const result = await Tesseract.recognize(file, 'spa', {
           logger: (m) => {
             if (m.status === 'recognizing text') setOcrProgress(Math.round(m.progress * 100))
           },
         })
         rawText = result.data.text
+        if (!rawText.trim()) { showToast('error', 'No se pudo leer texto de la imagen'); return }
+        parsed = await parseWithAI(rawText)
       } else {
         showToast('error', 'Formato no soportado. Usá imagen, Excel o CSV.')
         return
       }
 
-      if (!rawText.trim()) {
-        showToast('error', 'No se pudo extraer texto del archivo')
-        return
-      }
-
-      const parsed = await parseWithAI(rawText)
       if (parsed.length === 0) {
-        showToast('error', 'No se encontraron productos en el archivo')
+        showToast('error', 'No se encontraron productos. Revisá el formato del archivo.')
         return
       }
 
       setRows(parsed.filter((r) => r.quantity > 0))
       setStep('preview')
     } catch (err) {
-      console.error(err)
+      console.error('Import error:', err)
+      showToast('error', `Error: ${err instanceof Error ? err.message : 'No se pudo procesar el archivo'}`)
       showToast('error', 'Error al procesar el archivo')
     } finally {
       setProcessing(false)
