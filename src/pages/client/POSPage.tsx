@@ -3,6 +3,7 @@ import {
     Search, X, Plus, Minus, Trash2, ShoppingCart, Receipt,
     CreditCard, Banknote, Smartphone, Printer, CheckCircle2,
     Package, RefreshCw, User, Pencil, Tag, BarChart2, QrCode,
+    Zap, PackagePlus, ChevronDown,
 } from 'lucide-react'
 import { productsApi } from '../../services/productsApi'
 import { categoriesApi } from '../../services/categoriesApi'
@@ -76,6 +77,23 @@ export default function POSPage() {
     const [showCierre, setShowCierre] = useState(false)
     const [dailySummary, setDailySummary] = useState<DailySummary | null>(null)
     const [loadingCierre, setLoadingCierre] = useState(false)
+
+    // Quick actions menu
+    const [showQuickMenu, setShowQuickMenu] = useState(false)
+    // Quick sale modal
+    const [showQuickSale, setShowQuickSale] = useState(false)
+    const [quickAmount, setQuickAmount] = useState('')
+    const [quickDesc, setQuickDesc] = useState('')
+    const [quickPM, setQuickPM] = useState('efectivo')
+    const [quickSaving, setQuickSaving] = useState(false)
+    // New POS product modal
+    const [showNewProduct, setShowNewProduct] = useState(false)
+    const [newProdName, setNewProdName] = useState('')
+    const [newProdPrice, setNewProdPrice] = useState('')
+    const [newProdCat, setNewProdCat] = useState('')
+    const [newCatName, setNewCatName] = useState('')
+    const [showNewCat, setShowNewCat] = useState(false)
+    const [savingProd, setSavingProd] = useState(false)
 
     const loadData = useCallback(async () => {
         setLoading(true)
@@ -289,6 +307,67 @@ export default function POSPage() {
         printWindow.document.close()
     }
 
+    // Quick sale (free amount, no product)
+    const handleQuickSale = async () => {
+        const amount = parseFloat(quickAmount)
+        if (!amount || amount <= 0) return
+        setQuickSaving(true)
+        try {
+            await ordersApi.create({
+                customer_name: quickDesc.trim() || 'Venta rápida',
+                subtotal: amount,
+                total: amount,
+                status: 'completed',
+                metadata: { source: 'pos', payment_method: quickPM, quick_sale: true },
+                items: [{ product_id: null, product_name: quickDesc.trim() || 'Venta rápida', quantity: 1, unit_price: amount, subtotal: amount }],
+            })
+            showToast('success', 'Venta rápida registrada')
+            setShowQuickSale(false)
+            setQuickAmount('')
+            setQuickDesc('')
+            setQuickPM('efectivo')
+        } catch {
+            showToast('error', 'Error al registrar la venta')
+        } finally {
+            setQuickSaving(false)
+        }
+    }
+
+    // Create POS-only product
+    const handleNewProduct = async () => {
+        if (!newProdName.trim() || !newProdPrice) return
+        setSavingProd(true)
+        try {
+            let categoryId = newProdCat || null
+            if (showNewCat && newCatName.trim()) {
+                const cat = await categoriesApi.create({ name: newCatName.trim() })
+                categoryId = String(cat.id)
+                await loadData()
+            }
+            const prod = await productsApi.create({
+                name: newProdName.trim(),
+                price: parseFloat(newProdPrice),
+                category_id: categoryId,
+                is_active: true,
+                unlimited_stock: true,
+                stock: 0,
+                show_in_store: false,
+            } as Parameters<typeof productsApi.create>[0])
+            showToast('success', `"${prod.name}" agregado al POS`)
+            setShowNewProduct(false)
+            setNewProdName('')
+            setNewProdPrice('')
+            setNewProdCat('')
+            setNewCatName('')
+            setShowNewCat(false)
+            loadData()
+        } catch {
+            showToast('error', 'Error al crear el producto')
+        } finally {
+            setSavingProd(false)
+        }
+    }
+
     const isOutOfStock = (p: Product) => !p.unlimited_stock && (p.stock || 0) <= 0
 
     return (
@@ -317,6 +396,38 @@ export default function POSPage() {
                                     Cierre del día
                                 </button>
                             )}
+                            {/* Quick actions menu */}
+                            <div className="relative">
+                                <button
+                                    onClick={() => setShowQuickMenu(!showQuickMenu)}
+                                    className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-colors"
+                                >
+                                    <Plus className="w-3.5 h-3.5" />
+                                    Nuevo
+                                    <ChevronDown className="w-3 h-3" />
+                                </button>
+                                {showQuickMenu && (
+                                    <>
+                                        <div className="fixed inset-0 z-10" onClick={() => setShowQuickMenu(false)} />
+                                        <div className="absolute right-0 top-full mt-1 bg-white rounded-xl shadow-xl border border-gray-100 z-20 w-48 overflow-hidden">
+                                            <button
+                                                onClick={() => { setShowQuickMenu(false); setShowQuickSale(true) }}
+                                                className="w-full flex items-center gap-2.5 px-4 py-3 text-sm font-semibold text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 transition-colors text-left"
+                                            >
+                                                <Zap className="w-4 h-4 text-emerald-500" />
+                                                Venta rápida $
+                                            </button>
+                                            <button
+                                                onClick={() => { setShowQuickMenu(false); setShowNewProduct(true) }}
+                                                className="w-full flex items-center gap-2.5 px-4 py-3 text-sm font-semibold text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition-colors text-left border-t border-gray-50"
+                                            >
+                                                <PackagePlus className="w-4 h-4 text-blue-500" />
+                                                Nuevo producto POS
+                                            </button>
+                                        </div>
+                                    </>
+                                )}
+                            </div>
                             <button
                                 onClick={loadData}
                                 disabled={loading}
@@ -833,6 +944,173 @@ export default function POSPage() {
                             ) : (
                                 <p className="text-center text-gray-400 py-6 text-sm">Sin datos para hoy</p>
                             )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ─── QUICK SALE MODAL ─── */}
+            {showQuickSale && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowQuickSale(false)}>
+                    <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl" onClick={(e) => e.stopPropagation()}>
+                        <div className="bg-emerald-600 text-white px-6 py-4 flex items-center justify-between rounded-t-2xl">
+                            <div className="flex items-center gap-2">
+                                <Zap className="w-5 h-5" />
+                                <h3 className="font-black">Venta Rápida</h3>
+                            </div>
+                            <button onClick={() => setShowQuickSale(false)}><X className="w-5 h-5 text-emerald-200 hover:text-white" /></button>
+                        </div>
+                        <div className="px-6 py-5 space-y-4">
+                            <div>
+                                <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Monto *</label>
+                                <div className="relative">
+                                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-2xl font-black text-gray-300">$</span>
+                                    <input
+                                        type="number"
+                                        autoFocus
+                                        min="0"
+                                        step="0.01"
+                                        value={quickAmount}
+                                        onChange={(e) => setQuickAmount(e.target.value)}
+                                        placeholder="0"
+                                        className="w-full pl-10 pr-4 py-3 text-2xl font-black border-2 border-gray-200 rounded-xl focus:outline-none focus:border-emerald-400"
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Descripción (opcional)</label>
+                                <input
+                                    type="text"
+                                    value={quickDesc}
+                                    onChange={(e) => setQuickDesc(e.target.value)}
+                                    placeholder="Ej: Combo pancho + gaseosa"
+                                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">Método de pago</label>
+                                <div className="grid grid-cols-2 gap-2">
+                                    {PAYMENT_METHODS.map(pm => {
+                                        const Icon = pm.icon
+                                        return (
+                                            <button
+                                                key={pm.id}
+                                                onClick={() => setQuickPM(pm.id)}
+                                                className={`flex items-center gap-2 py-2.5 px-3 rounded-xl border-2 transition-all text-[11px] font-bold ${
+                                                    quickPM === pm.id
+                                                        ? 'border-emerald-400 bg-emerald-50 text-emerald-700'
+                                                        : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                                                }`}
+                                            >
+                                                <Icon className="w-4 h-4 shrink-0" />
+                                                {pm.label}
+                                            </button>
+                                        )
+                                    })}
+                                </div>
+                            </div>
+                            <button
+                                onClick={handleQuickSale}
+                                disabled={quickSaving || !quickAmount}
+                                className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm uppercase tracking-widest rounded-2xl shadow-lg shadow-emerald-200 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                            >
+                                {quickSaving ? <RefreshCw className="w-5 h-5 animate-spin" /> : <CheckCircle2 className="w-5 h-5" />}
+                                {quickSaving ? 'Registrando...' : `Registrar ${quickAmount ? formatPrice(parseFloat(quickAmount)) : ''}`}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ─── NEW POS PRODUCT MODAL ─── */}
+            {showNewProduct && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowNewProduct(false)}>
+                    <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl" onClick={(e) => e.stopPropagation()}>
+                        <div className="bg-blue-600 text-white px-6 py-4 flex items-center justify-between rounded-t-2xl">
+                            <div className="flex items-center gap-2">
+                                <PackagePlus className="w-5 h-5" />
+                                <div>
+                                    <h3 className="font-black">Nuevo Producto POS</h3>
+                                    <p className="text-blue-200 text-[10px]">Solo visible en el admin, no en la tienda</p>
+                                </div>
+                            </div>
+                            <button onClick={() => setShowNewProduct(false)}><X className="w-5 h-5 text-blue-200 hover:text-white" /></button>
+                        </div>
+                        <div className="px-6 py-5 space-y-4">
+                            <div>
+                                <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Nombre *</label>
+                                <input
+                                    type="text"
+                                    autoFocus
+                                    value={newProdName}
+                                    onChange={(e) => setNewProdName(e.target.value)}
+                                    placeholder="Ej: Combo Pancho + Gaseosa"
+                                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Precio *</label>
+                                <div className="relative">
+                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">$</span>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        value={newProdPrice}
+                                        onChange={(e) => setNewProdPrice(e.target.value)}
+                                        placeholder="0"
+                                        className="w-full pl-8 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Categoría</label>
+                                {!showNewCat ? (
+                                    <div className="flex gap-2">
+                                        <select
+                                            value={newProdCat}
+                                            onChange={(e) => setNewProdCat(e.target.value)}
+                                            className="flex-1 border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+                                        >
+                                            <option value="">Sin categoría</option>
+                                            {categories.map((c) => <option key={c.id} value={String(c.id)}>{c.name}</option>)}
+                                        </select>
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowNewCat(true)}
+                                            className="px-3 py-2 border border-dashed border-blue-300 text-blue-500 rounded-xl text-xs font-bold hover:bg-blue-50 transition-colors"
+                                        >
+                                            + Nueva
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="text"
+                                            autoFocus
+                                            value={newCatName}
+                                            onChange={(e) => setNewCatName(e.target.value)}
+                                            placeholder="Nombre de la categoría"
+                                            className="flex-1 border border-blue-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => { setShowNewCat(false); setNewCatName('') }}
+                                            className="px-3 py-2 border border-gray-200 text-gray-400 rounded-xl text-xs hover:bg-gray-50"
+                                        >
+                                            Cancelar
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                            <button
+                                onClick={handleNewProduct}
+                                disabled={savingProd || !newProdName.trim() || !newProdPrice}
+                                className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-black text-sm uppercase tracking-widest rounded-2xl shadow-lg shadow-blue-200 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                            >
+                                {savingProd ? <RefreshCw className="w-5 h-5 animate-spin" /> : <PackagePlus className="w-5 h-5" />}
+                                {savingProd ? 'Creando...' : 'Crear y agregar al POS'}
+                            </button>
                         </div>
                     </div>
                 </div>
