@@ -21,24 +21,35 @@ export const productionApi = {
   getWeekData: async (weekStart: string, weekEnd: string): Promise<ProductionWeekData> => {
     const storeId = await getStoreId()
 
-    const [prodRes, ordersRes] = await Promise.all([
-      supabase
-        .from('production_log')
-        .select('*')
-        .eq('store_id', storeId)
-        .gte('date', weekStart)
-        .lte('date', weekEnd),
-      supabase
+    // Run queries independently so one failure doesn't break the other
+    const prodRes = await supabase
+      .from('production_log')
+      .select('*')
+      .eq('store_id', storeId)
+      .gte('date', weekStart)
+      .lte('date', weekEnd)
+
+    if (prodRes.error) throw prodRes.error
+
+    // Try to get sales from orders — fail silently if orders schema differs
+    let salesData: Array<{ created_at: string; items: unknown; total: number }> = []
+    try {
+      const ordersRes = await supabase
         .from('orders')
         .select('created_at, items, total')
         .eq('store_id', storeId)
         .eq('status', 'completed')
         .gte('created_at', `${weekStart}T00:00:00`)
-        .lte('created_at', `${weekEnd}T23:59:59`),
-    ])
+        .lte('created_at', `${weekEnd}T23:59:59`)
 
-    if (prodRes.error) throw prodRes.error
-    if (ordersRes.error) throw ordersRes.error
+      if (!ordersRes.error) {
+        salesData = (ordersRes.data || []) as typeof salesData
+      } else {
+        console.warn('production: orders query failed silently', ordersRes.error.message)
+      }
+    } catch (e) {
+      console.warn('production: orders fetch failed silently', e)
+    }
 
     // Build production map
     const production: Record<string, Record<string, number>> = {}
@@ -49,7 +60,7 @@ export const productionApi = {
 
     // Build sales map from order items
     const sales: Record<string, Record<string, { qty: number; revenue: number }>> = {}
-    for (const order of ordersRes.data || []) {
+    for (const order of salesData) {
       const date = order.created_at.split('T')[0]
       const items = (order.items || []) as Array<{
         product_id: string
