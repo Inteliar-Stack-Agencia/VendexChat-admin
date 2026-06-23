@@ -952,46 +952,60 @@ function ProductionGrid({ products }: { products: Product[] }) {
               </tr>
             </thead>
             <tbody>
-              {activeProducts.map((product, rowIdx) => {
-                const totals = productTotals(product.id)
-                const stockColor = totals.stockFinal < 0 ? 'text-red-500' : totals.stockFinal === 0 ? 'text-emerald-600' : 'text-amber-500'
-                return (
-                  <tr key={product.id} className={`border-b border-gray-50 ${rowIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}`}>
-                    <td className={`px-4 py-2 font-medium text-gray-700 sticky left-0 z-10 ${rowIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}`}>
-                      {product.name}
-                    </td>
-                    <td className="px-2 py-2 text-center text-orange-400 font-medium text-[11px]">{product.cost_price ? formatPrice(product.cost_price) : '—'}</td>
-                    <td className="px-2 py-2 text-center text-gray-400 font-medium text-[11px]">{formatPrice(product.price)}</td>
-                    {weekDays.map((day) => {
-                      const iso = toISO(day)
-                      const sales = getSales(product.id, iso)
-                      const prodVal = getPendingVal(product.id, iso)
-                      const isToday = iso === today
+              {(() => {
+                // Group by category
+                const groups: Record<string, { name: string; products: typeof activeProducts }> = {}
+                for (const p of activeProducts) {
+                  const key = p.category_id || '__none__'
+                  const catName = p.category_name || 'Sin categoría'
+                  if (!groups[key]) groups[key] = { name: catName, products: [] }
+                  groups[key].products.push(p)
+                }
+                let rowIdx = 0
+                return Object.entries(groups).map(([catKey, group]) => (
+                  <>
+                    <tr key={`cat-${catKey}`} className="bg-gray-100 border-t border-gray-200">
+                      <td colSpan={11 + weekDays.length} className="px-4 py-1.5 text-[10px] font-black text-gray-500 uppercase tracking-widest sticky left-0">
+                        {group.name}
+                      </td>
+                    </tr>
+                    {group.products.map((product) => {
+                      const totals = productTotals(product.id)
+                      const stockColor = totals.stockFinal < 0 ? 'text-red-500' : totals.stockFinal === 0 ? 'text-emerald-600' : 'text-amber-500'
+                      const bg = rowIdx++ % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'
                       return (
-                        <td key={iso} className={`px-1 py-1 ${isToday ? 'bg-teal-50/30' : ''}`}>
-                          <div className="flex flex-col items-center gap-0.5">
-                            <input
-                              type="number"
-                              min="0"
-                              value={prodVal}
-                              onChange={(e) => handleCellChange(product.id, iso, e.target.value)}
-                              placeholder="—"
-                              className="w-14 text-center border border-gray-200 rounded-lg px-1 py-1 text-sm font-bold text-teal-700 focus:outline-none focus:ring-1 focus:ring-teal-400 focus:border-teal-400 bg-white"
-                            />
-                            {sales.qty > 0 && (
-                              <span className="text-[10px] text-emerald-600 font-semibold">-{sales.qty} vtas</span>
-                            )}
-                          </div>
-                        </td>
+                        <tr key={product.id} className={`border-b border-gray-50 ${bg}`}>
+                          <td className={`px-4 py-2 font-medium text-gray-700 sticky left-0 z-10 ${bg}`}>{product.name}</td>
+                          <td className="px-2 py-2 text-center text-orange-400 font-medium text-[11px]">{product.cost_price ? formatPrice(product.cost_price) : '—'}</td>
+                          <td className="px-2 py-2 text-center text-gray-400 font-medium text-[11px]">{formatPrice(product.price)}</td>
+                          {weekDays.map((day) => {
+                            const iso = toISO(day)
+                            const sales = getSales(product.id, iso)
+                            const prodVal = getPendingVal(product.id, iso)
+                            const isToday = iso === today
+                            return (
+                              <td key={iso} className={`px-1 py-1 ${isToday ? 'bg-teal-50/30' : ''}`}>
+                                <div className="flex flex-col items-center gap-0.5">
+                                  <input
+                                    type="number" min="0" value={prodVal} placeholder="—"
+                                    onChange={(e) => handleCellChange(product.id, iso, e.target.value)}
+                                    className="w-14 text-center border border-gray-200 rounded-lg px-1 py-1 text-sm font-bold text-teal-700 focus:outline-none focus:ring-1 focus:ring-teal-400 focus:border-teal-400 bg-white"
+                                  />
+                                  {sales.qty > 0 && <span className="text-[10px] text-emerald-600 font-semibold">-{sales.qty} vtas</span>}
+                                </div>
+                              </td>
+                            )
+                          })}
+                          <td className="px-2 py-2 text-center font-black text-teal-600">{totals.produced || '—'}</td>
+                          <td className="px-2 py-2 text-center font-black text-emerald-600">{totals.sold || '—'}</td>
+                          <td className={`px-2 py-2 text-center font-black ${stockColor}`}>{totals.stockFinal}</td>
+                          <td className="px-2 py-2 text-center font-bold text-indigo-600">{totals.revenue > 0 ? formatPrice(totals.revenue) : '—'}</td>
+                        </tr>
                       )
                     })}
-                    <td className="px-2 py-2 text-center font-black text-teal-600">{totals.produced || '—'}</td>
-                    <td className="px-2 py-2 text-center font-black text-emerald-600">{totals.sold || '—'}</td>
-                    <td className={`px-2 py-2 text-center font-black ${stockColor}`}>{totals.stockFinal}</td>
-                    <td className="px-2 py-2 text-center font-bold text-indigo-600">{totals.revenue > 0 ? formatPrice(totals.revenue) : '—'}</td>
-                  </tr>
-                )
-              })}
+                  </>
+                ))
+              })()}
             </tbody>
             <tfoot>
               <tr className="bg-gray-100 border-t-2 border-gray-200">
