@@ -35,6 +35,12 @@ export const categoriesApi = {
         return newCat as Category
     },
 
+    toggleActive: async (id: string | number, is_active: boolean) => {
+        const storeId = await getStoreId()
+        const { error } = await supabase.from('categories').update({ is_active }).eq('id', id).eq('store_id', storeId)
+        if (error) throw error
+    },
+
     update: async (id: string | number, data: { name?: string; sort_order?: number }) => {
         const storeId = await getStoreId()
         const { data: updatedCat, error } = await supabase.from('categories').update(data).eq('id', id).eq('store_id', storeId).select().single()
