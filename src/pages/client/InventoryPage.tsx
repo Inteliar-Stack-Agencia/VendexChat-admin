@@ -759,7 +759,7 @@ function ImportProductionModal({ products, onImport, onClose }: ImportModalProps
                             className={`w-full border rounded-lg px-2 py-1 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400 ${row.matched_product_id ? 'border-emerald-300 text-emerald-700 font-semibold' : 'border-gray-200 text-gray-400'}`}
                           >
                             <option value="">Sin vincular</option>
-                            {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                            {[...products].sort((a, b) => a.name.localeCompare(b.name, 'es')).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                           </select>
                         </td>
                         <td className="px-2 py-2">
