@@ -190,6 +190,7 @@ export interface Category {
   store_id: string
   name: string
   sort_order: number
+  is_active: boolean
   product_count?: number
   created_at: string
 }

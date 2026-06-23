@@ -1,5 +1,5 @@
 import { useState, useEffect, FormEvent } from 'react'
-import { Plus, Pencil, Trash2, FolderOpen, ArrowUp, ArrowDown } from 'lucide-react'
+import { Plus, Pencil, Trash2, FolderOpen, ArrowUp, ArrowDown, Eye, EyeOff } from 'lucide-react'
 import { Card, Button, Input, Modal, EmptyState, ConfirmDialog } from '../../components/common'
 import { showToast } from '../../components/common/Toast'
 import { categoriesApi } from '../../services/api'
@@ -121,6 +121,18 @@ export default function CategoriesPage() {
     }
   }
 
+  const handleToggleActive = async (cat: Category) => {
+    const newVal = !cat.is_active
+    setCategories((prev) => prev.map((c) => c.id === cat.id ? { ...c, is_active: newVal } : c))
+    try {
+      await categoriesApi.toggleActive(cat.id, newVal)
+      showToast('success', newVal ? 'Categoría visible' : 'Categoría oculta')
+    } catch {
+      setCategories((prev) => prev.map((c) => c.id === cat.id ? { ...c, is_active: !newVal } : c))
+      showToast('error', 'Error al actualizar visibilidad')
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -179,7 +191,7 @@ export default function CategoriesPage() {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {categories.map((cat, idx) => (
-                <tr key={cat.id} className="group hover:bg-gray-50/50 transition-colors">
+                <tr key={cat.id} className={`group hover:bg-gray-50/50 transition-colors ${!cat.is_active ? 'opacity-50' : ''}`}>
                   <td className="px-4 py-3">
                     <div className="flex flex-col items-center gap-1 group-hover:opacity-100 transition-opacity">
                       <button
@@ -198,10 +210,20 @@ export default function CategoriesPage() {
                       </button>
                     </div>
                   </td>
-                  <td className="px-4 py-3 font-black text-gray-900 tracking-tight leading-none mb-1">{cat.name}</td>
+                  <td className="px-4 py-3">
+                    <span className="font-black text-gray-900 tracking-tight leading-none">{cat.name}</span>
+                    {!cat.is_active && <span className="ml-2 text-[10px] font-bold text-gray-400 uppercase">(oculta)</span>}
+                  </td>
                   <td className="px-4 py-3 text-gray-600 font-bold text-[10px] uppercase hidden sm:table-cell">{cat.product_count ?? 0}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-2">
+                      <button
+                        onClick={() => handleToggleActive(cat)}
+                        className={`p-1.5 rounded-lg transition-colors ${cat.is_active ? 'hover:bg-gray-100 text-gray-400 hover:text-gray-600' : 'bg-amber-50 text-amber-500 hover:bg-amber-100'}`}
+                        title={cat.is_active ? 'Ocultar categoría' : 'Mostrar categoría'}
+                      >
+                        {cat.is_active ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                      </button>
                       <button
                         onClick={() => openEdit(cat)}
                         className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700"
