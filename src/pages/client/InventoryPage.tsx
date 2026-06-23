@@ -1190,68 +1190,74 @@ function StockCloseGrid({ products }: { products: Product[] }) {
               </tr>
             </thead>
             <tbody>
-              {activeProducts.map((product, rowIdx) => {
-                const totals = productTotals(product.id)
-                return (
-                  <tr key={product.id} className={`border-b border-gray-50 ${rowIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}`}>
-                    <td className={`px-4 py-2 font-medium text-gray-700 sticky left-0 z-10 ${rowIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}`}>
-                      {product.name}
-                    </td>
-                    {weekDays.map((day) => {
-                      const iso = toISO(day)
-                      const isToday = iso === today
-                      const sobranteVal = getPendingVal(product.id, iso, 'sobrante')
-                      const consumoVal = getPendingVal(product.id, iso, 'consumo_interno')
-                      const mermaVal = getPendingVal(product.id, iso, 'merma')
+              {(() => {
+                const groups: Record<string, { name: string; products: typeof activeProducts }> = {}
+                for (const p of activeProducts) {
+                  const key = p.category_id || '__none__'
+                  const catName = p.category_name || 'Sin categoría'
+                  if (!groups[key]) groups[key] = { name: catName, products: [] }
+                  groups[key].products.push(p)
+                }
+                let rowIdx = 0
+                return Object.entries(groups).map(([catKey, group]) => (
+                  <>
+                    <tr key={`cat-${catKey}`} className="bg-gray-100 border-t border-gray-200">
+                      <td colSpan={10 + weekDays.length} className="px-4 py-1.5 text-[10px] font-black text-gray-500 uppercase tracking-widest sticky left-0">
+                        {group.name}
+                      </td>
+                    </tr>
+                    {group.products.map((product) => {
+                      const totals = productTotals(product.id)
+                      const bg = rowIdx++ % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'
                       return (
-                        <td key={iso} className={`px-1 py-1 ${isToday ? 'bg-teal-50/30' : ''}`}>
-                          <div className="flex flex-col items-center gap-0.5">
-                            <input
-                              type="number" min="0"
-                              value={sobranteVal}
-                              onChange={(e) => handleCellChange(product.id, iso, 'sobrante', e.target.value)}
-                              placeholder="—"
-                              title="Sobrante"
-                              className="w-14 text-center border border-amber-200 rounded-lg px-1 py-1 text-sm font-bold text-amber-700 focus:outline-none focus:ring-1 focus:ring-amber-400 bg-white"
-                            />
-                            {(consumoVal !== '' && consumoVal !== '0') && (
-                              <span className="text-[9px] text-blue-500 font-semibold">CI:{consumoVal}</span>
-                            )}
-                            {(mermaVal !== '' && mermaVal !== '0') && (
-                              <span className="text-[9px] text-red-400 font-semibold">M:{mermaVal}</span>
-                            )}
-                          </div>
-                        </td>
-                      )
-                    })}
-                    <td className="px-2 py-2 text-center font-black text-amber-600">{totals.totalSobrante || '—'}</td>
-                    <td className="px-2 py-2 text-center">
-                      <div className="flex flex-col items-center gap-1">
-                        <input
-                          type="number" min="0"
-                          value={getPendingVal(product.id, weekEndISO, 'consumo_interno')}
-                          onChange={(e) => handleCellChange(product.id, weekEndISO, 'consumo_interno', e.target.value)}
-                          placeholder="0"
-                          className="w-14 text-center border border-blue-200 rounded-lg px-1 py-1 text-xs font-bold text-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white"
-                        />
-                        {totals.totalConsumo > 0 && <span className="text-[9px] text-blue-400">{totals.totalConsumo} total</span>}
+                        <tr key={product.id} className={`border-b border-gray-50 ${bg}`}>
+                          <td className={`px-4 py-2 font-medium text-gray-700 sticky left-0 z-10 ${bg}`}>{product.name}</td>
+                          {weekDays.map((day) => {
+                            const iso = toISO(day)
+                            const isToday = iso === today
+                            const sobranteVal = getPendingVal(product.id, iso, 'sobrante')
+                            const consumoVal = getPendingVal(product.id, iso, 'consumo_interno')
+                            const mermaVal = getPendingVal(product.id, iso, 'merma')
+                            return (
+                              <td key={iso} className={`px-1 py-1 ${isToday ? 'bg-teal-50/30' : ''}`}>
+                                <div className="flex flex-col items-center gap-0.5">
+                                  <input type="number" min="0" value={sobranteVal} placeholder="—" title="Sobrante"
+                                    onChange={(e) => handleCellChange(product.id, iso, 'sobrante', e.target.value)}
+                                    className="w-14 text-center border border-amber-200 rounded-lg px-1 py-1 text-sm font-bold text-amber-700 focus:outline-none focus:ring-1 focus:ring-amber-400 bg-white"
+                                  />
+                                  {(consumoVal !== '' && consumoVal !== '0') && <span className="text-[9px] text-blue-500 font-semibold">CI:{consumoVal}</span>}
+                                  {(mermaVal !== '' && mermaVal !== '0') && <span className="text-[9px] text-red-400 font-semibold">M:{mermaVal}</span>}
+                                </div>
+                              </td>
+                            )
+                          })}
+                          <td className="px-2 py-2 text-center font-black text-amber-600">{totals.totalSobrante || '—'}</td>
+                          <td className="px-2 py-2 text-center">
+                            <div className="flex flex-col items-center gap-1">
+                              <input type="number" min="0" placeholder="0"
+                                value={getPendingVal(product.id, weekEndISO, 'consumo_interno')}
+                                onChange={(e) => handleCellChange(product.id, weekEndISO, 'consumo_interno', e.target.value)}
+                                className="w-14 text-center border border-blue-200 rounded-lg px-1 py-1 text-xs font-bold text-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white"
+                              />
+                              {totals.totalConsumo > 0 && <span className="text-[9px] text-blue-400">{totals.totalConsumo} total</span>}
+                            </div>
+                          </td>
+                          <td className="px-2 py-2 text-center">
+                            <div className="flex flex-col items-center gap-1">
+                              <input type="number" min="0" placeholder="0"
+                                value={getPendingVal(product.id, weekEndISO, 'merma')}
+                                onChange={(e) => handleCellChange(product.id, weekEndISO, 'merma', e.target.value)}
+                                className="w-14 text-center border border-red-200 rounded-lg px-1 py-1 text-xs font-bold text-red-500 focus:outline-none focus:ring-1 focus:ring-red-400 bg-white"
+                              />
+                              {totals.totalMerma > 0 && <span className="text-[9px] text-red-400">{totals.totalMerma} total</span>}
                       </div>
                     </td>
-                    <td className="px-2 py-2 text-center">
-                      <div className="flex flex-col items-center gap-1">
-                        <input
-                          type="number" min="0"
-                          value={getPendingVal(product.id, weekEndISO, 'merma')}
-                          onChange={(e) => handleCellChange(product.id, weekEndISO, 'merma', e.target.value)}
-                          placeholder="0"
-                          className="w-14 text-center border border-red-200 rounded-lg px-1 py-1 text-xs font-bold text-red-500 focus:outline-none focus:ring-1 focus:ring-red-400 bg-white"
-                        />
-                        {totals.totalMerma > 0 && <span className="text-[9px] text-red-400">{totals.totalMerma} total</span>}
-                      </div>
-                    </td>
-                  </tr>
-                )
-              })}
+                          </tr>
+                        )
+                      })}
+                    </>
+                  ))
+                })()}
             </tbody>
             <tfoot>
               <tr className="bg-gray-100 border-t-2 border-gray-200">
