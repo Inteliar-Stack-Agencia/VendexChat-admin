@@ -462,6 +462,25 @@ interface ImportRow {
   matched_product_id: string
 }
 
+// Normalize string for fuzzy matching
+function normStr(s: string) {
+  return s.toLowerCase().trim()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9 ]/g, ' ')
+    .replace(/\s+/g, ' ')
+}
+
+function findMatch(name: string, products: Product[]): string {
+  const norm = normStr(name)
+  // Exact normalized match
+  const exact = products.find(p => normStr(p.name) === norm)
+  if (exact) return exact.id
+  // Partial match: product name contains the search or vice versa
+  const partial = products.find(p => normStr(p.name).includes(norm) || norm.includes(normStr(p.name)))
+  if (partial) return partial.id
+  return ''
+}
+
 interface ImportModalProps {
   products: Product[]
   onImport: (date: string, rows: ImportRow[]) => Promise<void>
@@ -507,9 +526,7 @@ function ImportProductionModal({ products, onImport, onClose }: ImportModalProps
 
       if (quantity <= 0) continue
 
-      const nameNorm = name.toLowerCase().trim()
-      const matched = products.find((p) => p.name.toLowerCase().trim() === nameNorm)
-      results.push({ product_name: name, quantity, price, matched_product_id: matched?.id ?? '' })
+      results.push({ product_name: name, quantity, price, matched_product_id: findMatch(name, products) })
     }
 
     return results
@@ -537,13 +554,11 @@ function ImportProductionModal({ products, onImport, onClose }: ImportModalProps
       return parsed
         .filter((r) => r.product_name && Number(r.quantity) > 0)
         .map((r) => {
-          const name = (r.product_name || '').toLowerCase().trim()
-          const matched = products.find((p) => p.name.toLowerCase().trim() === name)
           return {
             product_name: r.product_name || '',
             quantity: Number(r.quantity) || 0,
             price: Number(r.price) || 0,
-            matched_product_id: matched?.id ?? '',
+            matched_product_id: findMatch(r.product_name || '', products),
           }
         })
     } catch (err) {
@@ -713,7 +728,7 @@ function ImportProductionModal({ products, onImport, onClose }: ImportModalProps
                     <tr className="bg-gray-50 border-b border-gray-100">
                       <th className="text-left px-3 py-2.5 font-bold text-gray-500 uppercase tracking-wider">Producto</th>
                       <th className="text-center px-3 py-2.5 font-bold text-gray-500 uppercase tracking-wider w-24">Cant.</th>
-                      <th className="text-center px-3 py-2.5 font-bold text-gray-500 uppercase tracking-wider w-24">Vinculado</th>
+                      <th className="text-left px-3 py-2.5 font-bold text-gray-500 uppercase tracking-wider">Producto en planilla</th>
                       <th className="w-8" />
                     </tr>
                   </thead>
@@ -737,11 +752,15 @@ function ImportProductionModal({ products, onImport, onClose }: ImportModalProps
                             className="w-full text-center border border-gray-200 rounded-lg px-2 py-1 text-xs font-bold focus:outline-none focus:ring-1 focus:ring-indigo-400"
                           />
                         </td>
-                        <td className="px-3 py-2 text-center">
-                          {row.matched_product_id
-                            ? <span className="text-[10px] font-bold text-emerald-600">✓ {products.find(p => p.id === row.matched_product_id)?.name}</span>
-                            : <span className="text-[10px] text-gray-400">Sin coincidencia</span>
-                          }
+                        <td className="px-3 py-2">
+                          <select
+                            value={row.matched_product_id}
+                            onChange={(e) => updateRow(i, { matched_product_id: e.target.value })}
+                            className={`w-full border rounded-lg px-2 py-1 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400 ${row.matched_product_id ? 'border-emerald-300 text-emerald-700 font-semibold' : 'border-gray-200 text-gray-400'}`}
+                          >
+                            <option value="">Sin vincular</option>
+                            {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                          </select>
                         </td>
                         <td className="px-2 py-2">
                           <button onClick={() => removeRow(i)} className="p-1 text-gray-300 hover:text-red-500">
