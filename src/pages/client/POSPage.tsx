@@ -404,31 +404,13 @@ export default function POSPage() {
                                 <Zap className="w-3.5 h-3.5" />
                                 Venta rápida $
                             </button>
-                            {/* Quick actions menu */}
-                            <div className="relative">
-                                <button
-                                    onClick={() => setShowQuickMenu(!showQuickMenu)}
-                                    className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-xs font-bold transition-colors"
-                                >
-                                    <Plus className="w-3.5 h-3.5" />
-                                    Nuevo
-                                    <ChevronDown className="w-3 h-3" />
-                                </button>
-                                {showQuickMenu && (
-                                    <>
-                                        <div className="fixed inset-0 z-10" onClick={() => setShowQuickMenu(false)} />
-                                        <div className="absolute right-0 top-full mt-1 bg-white rounded-xl shadow-xl border border-gray-100 z-20 w-48 overflow-hidden">
-                                            <button
-                                                onClick={() => { setShowQuickMenu(false); setShowNewProduct(true) }}
-                                                className="w-full flex items-center gap-2.5 px-4 py-3 text-sm font-semibold text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition-colors text-left"
-                                            >
-                                                <PackagePlus className="w-4 h-4 text-blue-500" />
-                                                Nuevo producto POS
-                                            </button>
-                                        </div>
-                                    </>
-                                )}
-                            </div>
+                            <button
+                                onClick={() => setShowNewProduct(true)}
+                                className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-xs font-bold transition-colors"
+                            >
+                                <Plus className="w-3.5 h-3.5" />
+                                Nuevo producto
+                            </button>
                             <button
                                 onClick={loadData}
                                 disabled={loading}
