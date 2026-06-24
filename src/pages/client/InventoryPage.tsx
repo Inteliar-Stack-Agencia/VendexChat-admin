@@ -935,14 +935,14 @@ function ProductionGrid({ products }: { products: Product[] }) {
     <div className="space-y-4">
       {/* Week navigation */}
       <div className="flex items-center justify-between">
-        <button onClick={() => setWeekStart(addDays(weekStart, -7))} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+        <button onClick={() => setWeekStart(addDays(weekStart, -7))} disabled={weekStartISO <= toISO(getWeekStart(new Date(new Date().getFullYear(), 5, 1)))} className="p-2 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-30">
           <ChevronLeft className="w-5 h-5 text-gray-500" />
         </button>
         <div className="text-center">
           <p className="text-sm font-bold text-gray-800">{weekLabel}</p>
           <p className="text-xs text-gray-400">Semana de producción</p>
         </div>
-        <button onClick={() => setWeekStart(addDays(weekStart, 7))} disabled={weekStartISO >= toISO(getWeekStart(new Date()))} className="p-2 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-30">
+        <button onClick={() => setWeekStart(addDays(weekStart, 7))} disabled={weekStartISO >= toISO(getWeekStart(new Date(new Date().getFullYear(), 11, 25)))} className="p-2 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-30">
           <ChevronRight className="w-5 h-5 text-gray-500" />
         </button>
       </div>
@@ -1165,14 +1165,14 @@ function StockCloseGrid({ products }: { products: Product[] }) {
     <div className="space-y-4">
       {/* Week navigation */}
       <div className="flex items-center justify-between">
-        <button onClick={() => setWeekStart(addDays(weekStart, -7))} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+        <button onClick={() => setWeekStart(addDays(weekStart, -7))} disabled={weekStartISO <= toISO(getWeekStart(new Date(new Date().getFullYear(), 5, 1)))} className="p-2 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-30">
           <ChevronLeft className="w-5 h-5 text-gray-500" />
         </button>
         <div className="text-center">
           <p className="text-sm font-bold text-gray-800">{weekLabel}</p>
           <p className="text-xs text-gray-400">Cierre semanal · sobrante diario</p>
         </div>
-        <button onClick={() => setWeekStart(addDays(weekStart, 7))} disabled={weekStartISO >= toISO(getWeekStart(new Date()))} className="p-2 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-30">
+        <button onClick={() => setWeekStart(addDays(weekStart, 7))} disabled={weekStartISO >= toISO(getWeekStart(new Date(new Date().getFullYear(), 11, 25)))} className="p-2 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-30">
           <ChevronRight className="w-5 h-5 text-gray-500" />
         </button>
       </div>
@@ -1401,14 +1401,14 @@ function POSSalesGrid({ products }: { products: Product[] }) {
     <div className="space-y-4">
       {/* Week navigator */}
       <div className="flex items-center justify-between">
-        <button onClick={() => setWeekStart(d => addDays(d, -7))} className="p-2 rounded-lg hover:bg-gray-100">
+        <button onClick={() => setWeekStart(d => addDays(d, -7))} disabled={weekStartISO <= toISO(getWeekStart(new Date(new Date().getFullYear(), 5, 1)))} className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-30">
           <ChevronLeft className="w-5 h-5 text-gray-600" />
         </button>
         <div className="flex items-center gap-2">
           <CalendarDays className="w-4 h-4 text-teal-600" />
           <span className="text-sm font-bold text-gray-700">{weekLabel}</span>
         </div>
-        <button onClick={() => setWeekStart(d => addDays(d, 7))} className="p-2 rounded-lg hover:bg-gray-100">
+        <button onClick={() => setWeekStart(d => addDays(d, 7))} disabled={weekStartISO >= toISO(getWeekStart(new Date(new Date().getFullYear(), 11, 25)))} className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-30">
           <ChevronRight className="w-5 h-5 text-gray-600" />
         </button>
       </div>
