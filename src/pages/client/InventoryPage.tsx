@@ -882,30 +882,34 @@ function ProductionGrid({ products }: { products: Product[] }) {
   }
 
   // Totals per product
-  const productTotals = (productId: string) => {
+  const productTotals = (product: Product) => {
     let produced = 0, sold = 0, revenue = 0
     for (const day of weekDays) {
       const d = toISO(day)
-      const pv = pending[productId]?.[d]
-      produced += pv !== undefined ? (parseInt(pv) || 0) : getProduction(productId, d)
-      const s = getSales(productId, d)
+      const pv = pending[product.id]?.[d]
+      produced += pv !== undefined ? (parseInt(pv) || 0) : getProduction(product.id, d)
+      const s = getSales(product.id, d)
       sold += s.qty
       revenue += s.revenue
     }
     const stockFinal = produced - sold
-    return { produced, sold, revenue, stockFinal }
+    const costTotal = produced * (Number(product.cost_price) || 0)
+    const margin = revenue - costTotal
+    return { produced, sold, revenue, stockFinal, costTotal, margin }
   }
 
   // Grand totals
   const grandTotals = products.reduce(
     (acc, p) => {
-      const t = productTotals(p.id)
+      const t = productTotals(p)
       acc.produced += t.produced
       acc.sold += t.sold
       acc.revenue += t.revenue
+      acc.costTotal += t.costTotal
+      acc.margin += t.margin
       return acc
     },
-    { produced: 0, sold: 0, revenue: 0 },
+    { produced: 0, sold: 0, revenue: 0, costTotal: 0, margin: 0 },
   )
 
   const activeProducts = products.filter((p) => p.is_active)
@@ -927,18 +931,26 @@ function ProductionGrid({ products }: { products: Product[] }) {
       </div>
 
       {/* Grand totals banner */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
         <div className="bg-teal-50 rounded-xl p-3 text-center">
-          <p className="text-[10px] font-bold text-teal-500 uppercase tracking-widest mb-1">Total producido</p>
-          <p className="text-2xl font-black text-teal-700">{grandTotals.produced}</p>
+          <p className="text-[9px] font-bold text-teal-500 uppercase tracking-widest mb-1">Producido</p>
+          <p className="text-xl font-black text-teal-700">{grandTotals.produced}</p>
         </div>
         <div className="bg-emerald-50 rounded-xl p-3 text-center">
-          <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest mb-1">Total vendido</p>
-          <p className="text-2xl font-black text-emerald-700">{grandTotals.sold}</p>
+          <p className="text-[9px] font-bold text-emerald-600 uppercase tracking-widest mb-1">Vendido</p>
+          <p className="text-xl font-black text-emerald-700">{grandTotals.sold}</p>
         </div>
         <div className="bg-indigo-50 rounded-xl p-3 text-center">
-          <p className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest mb-1">Recaudación</p>
-          <p className="text-xl font-black text-indigo-700">{formatPrice(grandTotals.revenue)}</p>
+          <p className="text-[9px] font-bold text-indigo-500 uppercase tracking-widest mb-1">Ingresos</p>
+          <p className="text-lg font-black text-indigo-700">{formatPrice(grandTotals.revenue)}</p>
+        </div>
+        <div className="bg-orange-50 rounded-xl p-3 text-center">
+          <p className="text-[9px] font-bold text-orange-500 uppercase tracking-widest mb-1">Costo prod.</p>
+          <p className="text-lg font-black text-orange-700">{formatPrice(grandTotals.costTotal)}</p>
+        </div>
+        <div className={`rounded-xl p-3 text-center ${grandTotals.margin >= 0 ? 'bg-green-50' : 'bg-red-50'}`}>
+          <p className={`text-[9px] font-bold uppercase tracking-widest mb-1 ${grandTotals.margin >= 0 ? 'text-green-600' : 'text-red-500'}`}>Margen</p>
+          <p className={`text-lg font-black ${grandTotals.margin >= 0 ? 'text-green-700' : 'text-red-600'}`}>{formatPrice(grandTotals.margin)}</p>
         </div>
       </div>
 
@@ -966,7 +978,9 @@ function ProductionGrid({ products }: { products: Product[] }) {
                 <th className="text-center px-2 py-3 font-bold text-teal-500 uppercase tracking-wider min-w-[70px]">Prod.</th>
                 <th className="text-center px-2 py-3 font-bold text-emerald-600 uppercase tracking-wider min-w-[70px]">Vendido</th>
                 <th className="text-center px-2 py-3 font-bold text-gray-500 uppercase tracking-wider min-w-[70px]">Stock fin.</th>
-                <th className="text-center px-2 py-3 font-bold text-indigo-500 uppercase tracking-wider min-w-[90px]">$$$$$</th>
+                <th className="text-center px-2 py-3 font-bold text-indigo-500 uppercase tracking-wider min-w-[90px]">Ingresos</th>
+                <th className="text-center px-2 py-3 font-bold text-orange-500 uppercase tracking-wider min-w-[90px]">Costo</th>
+                <th className="text-center px-2 py-3 font-bold text-green-600 uppercase tracking-wider min-w-[90px]">Margen</th>
               </tr>
             </thead>
             <tbody>
@@ -983,13 +997,14 @@ function ProductionGrid({ products }: { products: Product[] }) {
                 return Object.entries(groups).map(([catKey, group]) => (
                   <>
                     <tr key={`cat-${catKey}`} className="bg-gray-100 border-t border-gray-200">
-                      <td colSpan={11 + weekDays.length} className="px-4 py-1.5 text-[10px] font-black text-gray-500 uppercase tracking-widest sticky left-0">
+                      <td colSpan={13 + weekDays.length} className="px-4 py-1.5 text-[10px] font-black text-gray-500 uppercase tracking-widest sticky left-0">
                         {group.name}
                       </td>
                     </tr>
                     {group.products.map((product) => {
-                      const totals = productTotals(product.id)
+                      const totals = productTotals(product)
                       const stockColor = totals.stockFinal < 0 ? 'text-red-500' : totals.stockFinal === 0 ? 'text-emerald-600' : 'text-amber-500'
+                      const marginColor = totals.margin > 0 ? 'text-green-600' : totals.margin < 0 ? 'text-red-500' : 'text-gray-400'
                       const bg = rowIdx++ % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'
                       return (
                         <tr key={product.id} className={`border-b border-gray-50 ${bg}`}>
@@ -1018,6 +1033,8 @@ function ProductionGrid({ products }: { products: Product[] }) {
                           <td className="px-2 py-2 text-center font-black text-emerald-600">{totals.sold || '—'}</td>
                           <td className={`px-2 py-2 text-center font-black ${stockColor}`}>{totals.stockFinal}</td>
                           <td className="px-2 py-2 text-center font-bold text-indigo-600">{totals.revenue > 0 ? formatPrice(totals.revenue) : '—'}</td>
+                          <td className="px-2 py-2 text-center font-bold text-orange-500">{totals.costTotal > 0 ? formatPrice(totals.costTotal) : '—'}</td>
+                          <td className={`px-2 py-2 text-center font-bold ${marginColor}`}>{totals.costTotal > 0 || totals.revenue > 0 ? formatPrice(totals.margin) : '—'}</td>
                         </tr>
                       )
                     })}
@@ -1047,6 +1064,8 @@ function ProductionGrid({ products }: { products: Product[] }) {
                 <td className="px-2 py-3 text-center font-black text-emerald-600">{grandTotals.sold}</td>
                 <td className="px-2 py-3 text-center font-black text-gray-700">{grandTotals.produced - grandTotals.sold}</td>
                 <td className="px-2 py-3 text-center font-black text-indigo-600">{formatPrice(grandTotals.revenue)}</td>
+                <td className="px-2 py-3 text-center font-black text-orange-600">{formatPrice(grandTotals.costTotal)}</td>
+                <td className={`px-2 py-3 text-center font-black ${grandTotals.margin >= 0 ? 'text-green-700' : 'text-red-600'}`}>{formatPrice(grandTotals.margin)}</td>
               </tr>
             </tfoot>
           </table>
