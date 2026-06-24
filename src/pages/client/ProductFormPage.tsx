@@ -45,6 +45,7 @@ export default function ProductFormPage() {
     is_active: true,
     is_featured: false,
     show_in_store: true,
+    track_pos_sales: false,
   })
 
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -75,6 +76,7 @@ export default function ProductFormPage() {
             is_active: product.is_active,
             is_featured: product.is_featured,
             show_in_store: product.show_in_store ?? true,
+            track_pos_sales: product.track_pos_sales ?? false,
           })
           if (product.image_url) setImagePreview(product.image_url)
         })
@@ -348,6 +350,18 @@ export default function ProductFormPage() {
               <span className="text-sm text-gray-700">
                 Mostrar en tienda online
                 {!form.show_in_store && <span className="ml-1 text-xs text-amber-600 font-semibold">(solo visible en POS)</span>}
+              </span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={form.track_pos_sales}
+                onChange={(e) => updateField('track_pos_sales', e.target.checked)}
+                className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+              />
+              <span className="text-sm text-gray-700">
+                Registrar ventas en POS
+                {form.track_pos_sales && <span className="ml-1 text-xs text-blue-600 font-semibold">(aparece en pestaña Ventas POS)</span>}
               </span>
             </label>
           </div>

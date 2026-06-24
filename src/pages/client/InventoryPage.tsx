@@ -129,6 +129,9 @@ function DayInputForm({ products, onSave, onClose }: DayFormProps) {
         unit_cost: parseFloat(r.unit_cost) || undefined,
         cost: parseFloat(r.cost),
       })))
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Error al guardar'
+      showToast('error', msg)
     } finally { setSaving(false) }
   }
 
@@ -275,6 +278,9 @@ function DayEgressForm({ products, onSave, onClose }: EgressFormProps) {
         reason: r.reason,
         notes: r.notes || undefined,
       })))
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Error al guardar'
+      showToast('error', msg)
     } finally { setSaving(false) }
   }
 
@@ -496,6 +502,30 @@ function ImportProductionModal({ products, onImport, onClose }: ImportModalProps
   const [saving, setSaving] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
+  const downloadTemplate = () => {
+    // Build rows: category header rows + product rows
+    const sheetRows: (string | number)[][] = [
+      ['Categoria', 'Producto', 'Cantidad', 'Costo unitario'],
+    ]
+    const groups: Record<string, Product[]> = {}
+    for (const p of products) {
+      const cat = p.category_name || 'Sin categoría'
+      if (!groups[cat]) groups[cat] = []
+      groups[cat].push(p)
+    }
+    for (const [cat, prods] of Object.entries(groups)) {
+      sheetRows.push([cat, '', '', ''])
+      for (const p of prods) {
+        sheetRows.push(['', p.name, 0, p.cost_price ? Number(p.cost_price) : ''])
+      }
+    }
+    const ws = XLSX.utils.aoa_to_sheet(sheetRows)
+    ws['!cols'] = [{ wch: 20 }, { wch: 35 }, { wch: 12 }, { wch: 16 }]
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Producción')
+    XLSX.writeFile(wb, `plantilla-produccion-${date}.xlsx`)
+  }
+
   const parseCSVDirect = (csv: string): ImportRow[] => {
     const lines = csv.split('\n').map((l) => l.trim()).filter(Boolean)
     const results: ImportRow[] = []
@@ -664,6 +694,15 @@ function ImportProductionModal({ products, onImport, onClose }: ImportModalProps
                 <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
               </div>
+
+              <button
+                type="button"
+                onClick={downloadTemplate}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 border border-indigo-200 rounded-xl text-sm font-semibold text-indigo-600 hover:bg-indigo-50 transition-colors"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                Descargar plantilla Excel con mis productos
+              </button>
 
               {processing ? (
                 <div className="border-2 border-dashed border-indigo-200 rounded-2xl p-12 text-center space-y-3">
@@ -876,30 +915,34 @@ function ProductionGrid({ products }: { products: Product[] }) {
   }
 
   // Totals per product
-  const productTotals = (productId: string) => {
+  const productTotals = (product: Product) => {
     let produced = 0, sold = 0, revenue = 0
     for (const day of weekDays) {
       const d = toISO(day)
-      const pv = pending[productId]?.[d]
-      produced += pv !== undefined ? (parseInt(pv) || 0) : getProduction(productId, d)
-      const s = getSales(productId, d)
+      const pv = pending[product.id]?.[d]
+      produced += pv !== undefined ? (parseInt(pv) || 0) : getProduction(product.id, d)
+      const s = getSales(product.id, d)
       sold += s.qty
       revenue += s.revenue
     }
     const stockFinal = produced - sold
-    return { produced, sold, revenue, stockFinal }
+    const costTotal = produced * (Number(product.cost_price) || 0)
+    const margin = revenue - costTotal
+    return { produced, sold, revenue, stockFinal, costTotal, margin }
   }
 
   // Grand totals
   const grandTotals = products.reduce(
     (acc, p) => {
-      const t = productTotals(p.id)
+      const t = productTotals(p)
       acc.produced += t.produced
       acc.sold += t.sold
       acc.revenue += t.revenue
+      acc.costTotal += t.costTotal
+      acc.margin += t.margin
       return acc
     },
-    { produced: 0, sold: 0, revenue: 0 },
+    { produced: 0, sold: 0, revenue: 0, costTotal: 0, margin: 0 },
   )
 
   const activeProducts = products.filter((p) => p.is_active)
@@ -921,18 +964,26 @@ function ProductionGrid({ products }: { products: Product[] }) {
       </div>
 
       {/* Grand totals banner */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
         <div className="bg-teal-50 rounded-xl p-3 text-center">
-          <p className="text-[10px] font-bold text-teal-500 uppercase tracking-widest mb-1">Total producido</p>
-          <p className="text-2xl font-black text-teal-700">{grandTotals.produced}</p>
+          <p className="text-[9px] font-bold text-teal-500 uppercase tracking-widest mb-1">Producido</p>
+          <p className="text-xl font-black text-teal-700">{grandTotals.produced}</p>
         </div>
         <div className="bg-emerald-50 rounded-xl p-3 text-center">
-          <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest mb-1">Total vendido</p>
-          <p className="text-2xl font-black text-emerald-700">{grandTotals.sold}</p>
+          <p className="text-[9px] font-bold text-emerald-600 uppercase tracking-widest mb-1">Vendido</p>
+          <p className="text-xl font-black text-emerald-700">{grandTotals.sold}</p>
         </div>
         <div className="bg-indigo-50 rounded-xl p-3 text-center">
-          <p className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest mb-1">Recaudación</p>
-          <p className="text-xl font-black text-indigo-700">{formatPrice(grandTotals.revenue)}</p>
+          <p className="text-[9px] font-bold text-indigo-500 uppercase tracking-widest mb-1">Ingresos</p>
+          <p className="text-lg font-black text-indigo-700">{formatPrice(grandTotals.revenue)}</p>
+        </div>
+        <div className="bg-orange-50 rounded-xl p-3 text-center">
+          <p className="text-[9px] font-bold text-orange-500 uppercase tracking-widest mb-1">Costo prod.</p>
+          <p className="text-lg font-black text-orange-700">{formatPrice(grandTotals.costTotal)}</p>
+        </div>
+        <div className={`rounded-xl p-3 text-center ${grandTotals.margin >= 0 ? 'bg-green-50' : 'bg-red-50'}`}>
+          <p className={`text-[9px] font-bold uppercase tracking-widest mb-1 ${grandTotals.margin >= 0 ? 'text-green-600' : 'text-red-500'}`}>Margen</p>
+          <p className={`text-lg font-black ${grandTotals.margin >= 0 ? 'text-green-700' : 'text-red-600'}`}>{formatPrice(grandTotals.margin)}</p>
         </div>
       </div>
 
@@ -960,7 +1011,9 @@ function ProductionGrid({ products }: { products: Product[] }) {
                 <th className="text-center px-2 py-3 font-bold text-teal-500 uppercase tracking-wider min-w-[70px]">Prod.</th>
                 <th className="text-center px-2 py-3 font-bold text-emerald-600 uppercase tracking-wider min-w-[70px]">Vendido</th>
                 <th className="text-center px-2 py-3 font-bold text-gray-500 uppercase tracking-wider min-w-[70px]">Stock fin.</th>
-                <th className="text-center px-2 py-3 font-bold text-indigo-500 uppercase tracking-wider min-w-[90px]">$$$$$</th>
+                <th className="text-center px-2 py-3 font-bold text-indigo-500 uppercase tracking-wider min-w-[90px]">Ingresos</th>
+                <th className="text-center px-2 py-3 font-bold text-orange-500 uppercase tracking-wider min-w-[90px]">Costo</th>
+                <th className="text-center px-2 py-3 font-bold text-green-600 uppercase tracking-wider min-w-[90px]">Margen</th>
               </tr>
             </thead>
             <tbody>
@@ -977,13 +1030,14 @@ function ProductionGrid({ products }: { products: Product[] }) {
                 return Object.entries(groups).map(([catKey, group]) => (
                   <>
                     <tr key={`cat-${catKey}`} className="bg-gray-100 border-t border-gray-200">
-                      <td colSpan={11 + weekDays.length} className="px-4 py-1.5 text-[10px] font-black text-gray-500 uppercase tracking-widest sticky left-0">
+                      <td colSpan={13 + weekDays.length} className="px-4 py-1.5 text-[10px] font-black text-gray-500 uppercase tracking-widest sticky left-0">
                         {group.name}
                       </td>
                     </tr>
                     {group.products.map((product) => {
-                      const totals = productTotals(product.id)
+                      const totals = productTotals(product)
                       const stockColor = totals.stockFinal < 0 ? 'text-red-500' : totals.stockFinal === 0 ? 'text-emerald-600' : 'text-amber-500'
+                      const marginColor = totals.margin > 0 ? 'text-green-600' : totals.margin < 0 ? 'text-red-500' : 'text-gray-400'
                       const bg = rowIdx++ % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'
                       return (
                         <tr key={product.id} className={`border-b border-gray-50 ${bg}`}>
@@ -1012,6 +1066,8 @@ function ProductionGrid({ products }: { products: Product[] }) {
                           <td className="px-2 py-2 text-center font-black text-emerald-600">{totals.sold || '—'}</td>
                           <td className={`px-2 py-2 text-center font-black ${stockColor}`}>{totals.stockFinal}</td>
                           <td className="px-2 py-2 text-center font-bold text-indigo-600">{totals.revenue > 0 ? formatPrice(totals.revenue) : '—'}</td>
+                          <td className="px-2 py-2 text-center font-bold text-orange-500">{totals.costTotal > 0 ? formatPrice(totals.costTotal) : '—'}</td>
+                          <td className={`px-2 py-2 text-center font-bold ${marginColor}`}>{totals.costTotal > 0 || totals.revenue > 0 ? formatPrice(totals.margin) : '—'}</td>
                         </tr>
                       )
                     })}
@@ -1041,6 +1097,8 @@ function ProductionGrid({ products }: { products: Product[] }) {
                 <td className="px-2 py-3 text-center font-black text-emerald-600">{grandTotals.sold}</td>
                 <td className="px-2 py-3 text-center font-black text-gray-700">{grandTotals.produced - grandTotals.sold}</td>
                 <td className="px-2 py-3 text-center font-black text-indigo-600">{formatPrice(grandTotals.revenue)}</td>
+                <td className="px-2 py-3 text-center font-black text-orange-600">{formatPrice(grandTotals.costTotal)}</td>
+                <td className={`px-2 py-3 text-center font-black ${grandTotals.margin >= 0 ? 'text-green-700' : 'text-red-600'}`}>{formatPrice(grandTotals.margin)}</td>
               </tr>
             </tfoot>
           </table>
@@ -1302,9 +1360,167 @@ function StockCloseGrid({ products }: { products: Product[] }) {
   )
 }
 
+// ─── POS Sales Grid ───────────────────────────────────────────────────────────
+
+function POSSalesGrid({ products }: { products: Product[] }) {
+  const [weekStart, setWeekStart] = useState<Date>(() => getWeekStart(new Date()))
+  const [weekData, setWeekData] = useState<Awaited<ReturnType<typeof productionApi.getWeekData>> | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
+  const weekStartISO = toISO(weekStart)
+  const weekEndISO = toISO(weekDays[6])
+  const weekLabel = `${weekStart.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })} – ${weekDays[6].toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })}`
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const data = await productionApi.getWeekData(weekStartISO, weekEndISO)
+      setWeekData(data)
+    } catch {
+      showToast('error', 'Error al cargar ventas POS')
+    } finally {
+      setLoading(false)
+    }
+  }, [weekStartISO, weekEndISO])
+
+  useEffect(() => { load() }, [load])
+
+  const trackedProducts = products.filter(p => p.track_pos_sales)
+
+  // Group by category
+  const categories = [...new Set(trackedProducts.map(p => p.category_name || 'Sin categoría'))]
+  type CategoryGroup = { name: string; products: Product[] }
+  const grouped: CategoryGroup[] = categories.map(name => ({
+    name,
+    products: trackedProducts.filter(p => (p.category_name || 'Sin categoría') === name),
+  }))
+
+  const getSalesQty = (productId: string, date: string) =>
+    weekData?.sales[productId]?.[date]?.qty ?? 0
+
+  const getSalesRevenue = (productId: string, date: string) =>
+    weekData?.sales[productId]?.[date]?.revenue ?? 0
+
+  const weekSalesQty = (productId: string) =>
+    weekDays.reduce((s, d) => s + getSalesQty(productId, toISO(d)), 0)
+
+  const weekSalesRevenue = (productId: string) =>
+    weekDays.reduce((s, d) => s + getSalesRevenue(productId, toISO(d)), 0)
+
+  const totalQty = trackedProducts.reduce((s, p) => s + weekSalesQty(p.id), 0)
+  const totalRevenue = trackedProducts.reduce((s, p) => s + weekSalesRevenue(p.id), 0)
+
+  return (
+    <div className="space-y-4">
+      {/* Week navigator */}
+      <div className="flex items-center justify-between">
+        <button onClick={() => setWeekStart(d => addDays(d, -7))} className="p-2 rounded-lg hover:bg-gray-100">
+          <ChevronLeft className="w-5 h-5 text-gray-600" />
+        </button>
+        <div className="flex items-center gap-2">
+          <CalendarDays className="w-4 h-4 text-teal-600" />
+          <span className="text-sm font-bold text-gray-700">{weekLabel}</span>
+        </div>
+        <button onClick={() => setWeekStart(d => addDays(d, 7))} className="p-2 rounded-lg hover:bg-gray-100">
+          <ChevronRight className="w-5 h-5 text-gray-600" />
+        </button>
+      </div>
+
+      {/* Summary banners */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-3 text-center">
+          <div className="text-lg font-black text-indigo-700">{totalQty}</div>
+          <div className="text-xs text-indigo-500 font-semibold">Unidades vendidas</div>
+        </div>
+        <div className="bg-green-50 border border-green-200 rounded-xl p-3 text-center">
+          <div className="text-lg font-black text-green-700">{formatPrice(totalRevenue)}</div>
+          <div className="text-xs text-green-500 font-semibold">Ingresos POS</div>
+        </div>
+      </div>
+
+      {trackedProducts.length === 0 ? (
+        <div className="text-center py-12 text-gray-400">
+          <TrendingUp className="w-10 h-10 mx-auto mb-3 opacity-30" />
+          <p className="font-semibold">Sin productos marcados para ventas POS</p>
+          <p className="text-xs mt-1">Activá "Registrar ventas en POS" en la edición de cada producto</p>
+        </div>
+      ) : loading ? (
+        <div className="text-center py-10 text-gray-400 text-sm">Cargando...</div>
+      ) : (
+        <div className="overflow-x-auto rounded-xl border border-gray-200">
+          <table className="min-w-full text-sm">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-200">
+                <th className="px-3 py-2 text-left text-xs font-black text-gray-500 uppercase tracking-wider min-w-[140px]">Producto</th>
+                {weekDays.map(d => (
+                  <th key={toISO(d)} className="px-2 py-2 text-center text-xs font-black text-gray-500 uppercase tracking-wider min-w-[60px]">
+                    <div>{DAY_SHORT[d.getDay()]}</div>
+                    <div className="text-[10px] font-normal text-gray-400">{d.getDate()}</div>
+                  </th>
+                ))}
+                <th className="px-2 py-2 text-center text-xs font-black text-indigo-600 uppercase tracking-wider">Cant.</th>
+                <th className="px-2 py-2 text-center text-xs font-black text-green-600 uppercase tracking-wider">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {grouped.map(group => (
+                <>
+                  <tr key={`cat-${group.name}`} className="bg-gray-100">
+                    <td colSpan={9 + 2} className="px-3 py-1.5 text-[10px] font-black text-gray-500 uppercase tracking-widest">
+                      {group.name}
+                    </td>
+                  </tr>
+                  {group.products.map((product, i) => {
+                    const wQty = weekSalesQty(product.id)
+                    const wRev = weekSalesRevenue(product.id)
+                    return (
+                      <tr key={product.id} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}>
+                        <td className="px-3 py-2 font-medium text-gray-800">{product.name}</td>
+                        {weekDays.map(d => {
+                          const qty = getSalesQty(product.id, toISO(d))
+                          return (
+                            <td key={toISO(d)} className="px-2 py-2 text-center text-xs text-gray-600">
+                              {qty > 0 ? <span className="font-bold text-indigo-700">{qty}</span> : <span className="text-gray-300">—</span>}
+                            </td>
+                          )
+                        })}
+                        <td className="px-2 py-2 text-center font-black text-indigo-700">{wQty || '—'}</td>
+                        <td className="px-2 py-2 text-center font-black text-green-700">{wRev > 0 ? formatPrice(wRev) : '—'}</td>
+                      </tr>
+                    )
+                  })}
+                </>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="bg-gray-100 border-t-2 border-gray-300">
+                <td className="px-3 py-3 text-xs font-black text-gray-600 uppercase">Total semana</td>
+                {weekDays.map(d => {
+                  const dayQty = trackedProducts.reduce((s, p) => s + getSalesQty(p.id, toISO(d)), 0)
+                  return (
+                    <td key={toISO(d)} className="px-2 py-3 text-center font-black text-indigo-700 text-xs">
+                      {dayQty || '—'}
+                    </td>
+                  )
+                })}
+                <td className="px-2 py-3 text-center font-black text-indigo-700">{totalQty}</td>
+                <td className="px-2 py-3 text-center font-black text-green-700">{formatPrice(totalRevenue)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
+      <p className="text-[10px] text-gray-400 text-center">
+        Ventas registradas desde el POS · solo productos con "Registrar ventas en POS" activado
+      </p>
+    </div>
+  )
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
-type Tab = 'produccion' | 'stock'
+type Tab = 'produccion' | 'stock' | 'ventas'
 
 export default function InventoryPage() {
   const [tab, setTab] = useState<Tab>('produccion')
@@ -1425,29 +1641,37 @@ export default function InventoryPage() {
               </Button>
             </div>
           )}
+          {tab === 'ventas' && <div />}
         </div>
 
         {/* Tabs */}
         <div className="flex bg-gray-100 rounded-xl p-1 gap-1">
           <button
             onClick={() => setTab('produccion')}
-            className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${tab === 'produccion' ? 'bg-white text-teal-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-bold transition-all ${tab === 'produccion' ? 'bg-white text-teal-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
           >
             <TableProperties className="w-4 h-4" />
-            Planilla de Producción
+            Producción
           </button>
           <button
             onClick={() => setTab('stock')}
-            className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${tab === 'stock' ? 'bg-white text-teal-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-bold transition-all ${tab === 'stock' ? 'bg-white text-teal-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
           >
             <TrendingDown className="w-4 h-4" />
-            Cierre / Stock Sobrante
+            Cierre / Stock
+          </button>
+          <button
+            onClick={() => setTab('ventas')}
+            className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-bold transition-all ${tab === 'ventas' ? 'bg-white text-teal-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+          >
+            <TrendingUp className="w-4 h-4" />
+            Ventas POS
           </button>
         </div>
 
-        {/* Production tab */}
         {tab === 'produccion' && <ProductionGrid products={products} />}
         {tab === 'stock' && <StockCloseGrid products={products} />}
+        {tab === 'ventas' && <POSSalesGrid products={products} />}
 
         {showForm && <DayInputForm products={products} onSave={handleSaveInputs} onClose={() => setShowForm(false)} />}
         {showEgressForm && <DayEgressForm products={products} onSave={handleSaveEgresses} onClose={() => setShowEgressForm(false)} />}
