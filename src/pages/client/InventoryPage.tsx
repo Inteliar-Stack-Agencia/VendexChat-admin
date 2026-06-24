@@ -1592,6 +1592,30 @@ export default function InventoryPage() {
     }
   }
 
+  const downloadProductionTemplate = () => {
+    const today2 = new Date().toISOString().split('T')[0]
+    const sheetRows: (string | number)[][] = [
+      ['Categoria', 'Producto', 'Cantidad', 'Costo unitario'],
+    ]
+    const groups: Record<string, Product[]> = {}
+    for (const p of products) {
+      const cat = p.category_name || 'Sin categoría'
+      if (!groups[cat]) groups[cat] = []
+      groups[cat].push(p)
+    }
+    for (const [cat, prods] of Object.entries(groups)) {
+      sheetRows.push([cat, '', '', ''])
+      for (const p of prods) {
+        sheetRows.push(['', p.name, 0, p.cost_price ? Number(p.cost_price) : ''])
+      }
+    }
+    const ws = XLSX.utils.aoa_to_sheet(sheetRows)
+    ws['!cols'] = [{ wch: 20 }, { wch: 35 }, { wch: 12 }, { wch: 16 }]
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Producción')
+    XLSX.writeFile(wb, `plantilla-produccion-${today2}.xlsx`)
+  }
+
   const todayEntries = entries.filter((e) => e.date === today)
   const todayIngresos = todayEntries.filter((e) => e.movement_type !== 'egreso')
   const todayEgresos = todayEntries.filter((e) => e.movement_type === 'egreso')
@@ -1613,9 +1637,14 @@ export default function InventoryPage() {
             </div>
           </div>
           {tab === 'produccion' && (
-            <Button onClick={() => setShowImport(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-2">
-              <Upload className="w-4 h-4" /> Importar planilla
-            </Button>
+            <div className="flex gap-2">
+              <Button onClick={downloadProductionTemplate} className="bg-white border border-indigo-200 text-indigo-600 hover:bg-indigo-50 flex items-center gap-2">
+                <FileSpreadsheet className="w-4 h-4" /> Plantilla Excel
+              </Button>
+              <Button onClick={() => setShowImport(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-2">
+                <Upload className="w-4 h-4" /> Importar planilla
+              </Button>
+            </div>
           )}
           {tab === 'stock' && (
             <div className="flex gap-2">
