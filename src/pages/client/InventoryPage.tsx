@@ -855,11 +855,13 @@ function ProductionGrid({ products }: { products: Product[] }) {
   const [pending, setPending] = useState<Record<string, Record<string, string>>>({})
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
 
-  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
+  const allWeekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
+  // Only Mon–Fri (getDay: 1=Mon … 5=Fri)
+  const weekDays = allWeekDays.filter(d => d.getDay() >= 1 && d.getDay() <= 5)
   const weekStartISO = toISO(weekStart)
-  const weekEndISO = toISO(weekDays[6])
+  const weekEndISO = toISO(allWeekDays[6])
 
-  const weekLabel = `${weekStart.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })} – ${weekDays[6].toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })}`
+  const weekLabel = `${weekStart.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })} – ${allWeekDays[4].toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })}`
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -914,36 +916,18 @@ function ProductionGrid({ products }: { products: Product[] }) {
     }, 800)
   }
 
-  // Totals per product
-  const productTotals = (product: Product) => {
-    let produced = 0, sold = 0, revenue = 0
+  // Totals per product (production only — analysis moved to Cierre tab)
+  const productTotals = (productId: string) => {
+    let produced = 0
     for (const day of weekDays) {
       const d = toISO(day)
-      const pv = pending[product.id]?.[d]
-      produced += pv !== undefined ? (parseInt(pv) || 0) : getProduction(product.id, d)
-      const s = getSales(product.id, d)
-      sold += s.qty
-      revenue += s.revenue
+      const pv = pending[productId]?.[d]
+      produced += pv !== undefined ? (parseInt(pv) || 0) : getProduction(productId, d)
     }
-    const stockFinal = produced - sold
-    const costTotal = produced * (Number(product.cost_price) || 0)
-    const margin = revenue - costTotal
-    return { produced, sold, revenue, stockFinal, costTotal, margin }
+    return { produced }
   }
 
-  // Grand totals
-  const grandTotals = products.reduce(
-    (acc, p) => {
-      const t = productTotals(p)
-      acc.produced += t.produced
-      acc.sold += t.sold
-      acc.revenue += t.revenue
-      acc.costTotal += t.costTotal
-      acc.margin += t.margin
-      return acc
-    },
-    { produced: 0, sold: 0, revenue: 0, costTotal: 0, margin: 0 },
-  )
+  const grandProduced = products.reduce((s, p) => s + productTotals(p.id).produced, 0)
 
   const activeProducts = products.filter((p) => p.is_active)
 
@@ -964,27 +948,9 @@ function ProductionGrid({ products }: { products: Product[] }) {
       </div>
 
       {/* Grand totals banner */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-        <div className="bg-teal-50 rounded-xl p-3 text-center">
-          <p className="text-[9px] font-bold text-teal-500 uppercase tracking-widest mb-1">Producido</p>
-          <p className="text-xl font-black text-teal-700">{grandTotals.produced}</p>
-        </div>
-        <div className="bg-emerald-50 rounded-xl p-3 text-center">
-          <p className="text-[9px] font-bold text-emerald-600 uppercase tracking-widest mb-1">Vendido</p>
-          <p className="text-xl font-black text-emerald-700">{grandTotals.sold}</p>
-        </div>
-        <div className="bg-indigo-50 rounded-xl p-3 text-center">
-          <p className="text-[9px] font-bold text-indigo-500 uppercase tracking-widest mb-1">Ingresos</p>
-          <p className="text-lg font-black text-indigo-700">{formatPrice(grandTotals.revenue)}</p>
-        </div>
-        <div className="bg-orange-50 rounded-xl p-3 text-center">
-          <p className="text-[9px] font-bold text-orange-500 uppercase tracking-widest mb-1">Costo prod.</p>
-          <p className="text-lg font-black text-orange-700">{formatPrice(grandTotals.costTotal)}</p>
-        </div>
-        <div className={`rounded-xl p-3 text-center ${grandTotals.margin >= 0 ? 'bg-green-50' : 'bg-red-50'}`}>
-          <p className={`text-[9px] font-bold uppercase tracking-widest mb-1 ${grandTotals.margin >= 0 ? 'text-green-600' : 'text-red-500'}`}>Margen</p>
-          <p className={`text-lg font-black ${grandTotals.margin >= 0 ? 'text-green-700' : 'text-red-600'}`}>{formatPrice(grandTotals.margin)}</p>
-        </div>
+      <div className="bg-teal-50 rounded-xl p-3 text-center">
+        <p className="text-[9px] font-bold text-teal-500 uppercase tracking-widest mb-1">Total producido semana</p>
+        <p className="text-2xl font-black text-teal-700">{grandProduced}</p>
       </div>
 
       {/* Grid */}
@@ -1008,12 +974,7 @@ function ProductionGrid({ products }: { products: Product[] }) {
                     </th>
                   )
                 })}
-                <th className="text-center px-2 py-3 font-bold text-teal-500 uppercase tracking-wider min-w-[70px]">Prod.</th>
-                <th className="text-center px-2 py-3 font-bold text-emerald-600 uppercase tracking-wider min-w-[70px]">Vendido</th>
-                <th className="text-center px-2 py-3 font-bold text-gray-500 uppercase tracking-wider min-w-[70px]">Stock fin.</th>
-                <th className="text-center px-2 py-3 font-bold text-indigo-500 uppercase tracking-wider min-w-[90px]">Ingresos</th>
-                <th className="text-center px-2 py-3 font-bold text-orange-500 uppercase tracking-wider min-w-[90px]">Costo</th>
-                <th className="text-center px-2 py-3 font-bold text-green-600 uppercase tracking-wider min-w-[90px]">Margen</th>
+                <th className="text-center px-2 py-3 font-bold text-teal-500 uppercase tracking-wider min-w-[70px]">Total</th>
               </tr>
             </thead>
             <tbody>
@@ -1030,14 +991,12 @@ function ProductionGrid({ products }: { products: Product[] }) {
                 return Object.entries(groups).map(([catKey, group]) => (
                   <>
                     <tr key={`cat-${catKey}`} className="bg-gray-100 border-t border-gray-200">
-                      <td colSpan={13 + weekDays.length} className="px-4 py-1.5 text-[10px] font-black text-gray-500 uppercase tracking-widest sticky left-0">
+                      <td colSpan={4 + weekDays.length} className="px-4 py-1.5 text-[10px] font-black text-gray-500 uppercase tracking-widest sticky left-0">
                         {group.name}
                       </td>
                     </tr>
                     {group.products.map((product) => {
-                      const totals = productTotals(product)
-                      const stockColor = totals.stockFinal < 0 ? 'text-red-500' : totals.stockFinal === 0 ? 'text-emerald-600' : 'text-amber-500'
-                      const marginColor = totals.margin > 0 ? 'text-green-600' : totals.margin < 0 ? 'text-red-500' : 'text-gray-400'
+                      const { produced } = productTotals(product.id)
                       const bg = rowIdx++ % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'
                       return (
                         <tr key={product.id} className={`border-b border-gray-50 ${bg}`}>
@@ -1046,28 +1005,19 @@ function ProductionGrid({ products }: { products: Product[] }) {
                           <td className="px-2 py-2 text-center text-gray-400 font-medium text-[11px]">{formatPrice(product.price)}</td>
                           {weekDays.map((day) => {
                             const iso = toISO(day)
-                            const sales = getSales(product.id, iso)
                             const prodVal = getPendingVal(product.id, iso)
                             const isToday = iso === today
                             return (
                               <td key={iso} className={`px-1 py-1 ${isToday ? 'bg-teal-50/30' : ''}`}>
-                                <div className="flex flex-col items-center gap-0.5">
-                                  <input
-                                    type="number" min="0" value={prodVal} placeholder="—"
-                                    onChange={(e) => handleCellChange(product.id, iso, e.target.value)}
-                                    className="w-14 text-center border border-gray-200 rounded-lg px-1 py-1 text-sm font-bold text-teal-700 focus:outline-none focus:ring-1 focus:ring-teal-400 focus:border-teal-400 bg-white"
-                                  />
-                                  {sales.qty > 0 && <span className="text-[10px] text-emerald-600 font-semibold">-{sales.qty} vtas</span>}
-                                </div>
+                                <input
+                                  type="number" min="0" value={prodVal} placeholder="—"
+                                  onChange={(e) => handleCellChange(product.id, iso, e.target.value)}
+                                  className="w-14 text-center border border-gray-200 rounded-lg px-1 py-1 text-sm font-bold text-teal-700 focus:outline-none focus:ring-1 focus:ring-teal-400 focus:border-teal-400 bg-white"
+                                />
                               </td>
                             )
                           })}
-                          <td className="px-2 py-2 text-center font-black text-teal-600">{totals.produced || '—'}</td>
-                          <td className="px-2 py-2 text-center font-black text-emerald-600">{totals.sold || '—'}</td>
-                          <td className={`px-2 py-2 text-center font-black ${stockColor}`}>{totals.stockFinal}</td>
-                          <td className="px-2 py-2 text-center font-bold text-indigo-600">{totals.revenue > 0 ? formatPrice(totals.revenue) : '—'}</td>
-                          <td className="px-2 py-2 text-center font-bold text-orange-500">{totals.costTotal > 0 ? formatPrice(totals.costTotal) : '—'}</td>
-                          <td className={`px-2 py-2 text-center font-bold ${marginColor}`}>{totals.costTotal > 0 || totals.revenue > 0 ? formatPrice(totals.margin) : '—'}</td>
+                          <td className="px-2 py-2 text-center font-black text-teal-600">{produced || '—'}</td>
                         </tr>
                       )
                     })}
@@ -1085,20 +1035,13 @@ function ProductionGrid({ products }: { products: Product[] }) {
                     const pv = pending[p.id]?.[iso]
                     return s + (pv !== undefined ? (parseInt(pv) || 0) : getProduction(p.id, iso))
                   }, 0)
-                  const daySold = activeProducts.reduce((s, p) => s + getSales(p.id, iso).qty, 0)
                   return (
                     <td key={iso} className="px-1 py-3 text-center">
                       <div className="text-xs font-black text-teal-600">{dayProd || '—'}</div>
-                      {daySold > 0 && <div className="text-[10px] text-emerald-600 font-semibold">-{daySold}</div>}
                     </td>
                   )
                 })}
-                <td className="px-2 py-3 text-center font-black text-teal-600">{grandTotals.produced}</td>
-                <td className="px-2 py-3 text-center font-black text-emerald-600">{grandTotals.sold}</td>
-                <td className="px-2 py-3 text-center font-black text-gray-700">{grandTotals.produced - grandTotals.sold}</td>
-                <td className="px-2 py-3 text-center font-black text-indigo-600">{formatPrice(grandTotals.revenue)}</td>
-                <td className="px-2 py-3 text-center font-black text-orange-600">{formatPrice(grandTotals.costTotal)}</td>
-                <td className={`px-2 py-3 text-center font-black ${grandTotals.margin >= 0 ? 'text-green-700' : 'text-red-600'}`}>{formatPrice(grandTotals.margin)}</td>
+                <td className="px-2 py-3 text-center font-black text-teal-600">{grandProduced}</td>
               </tr>
             </tfoot>
           </table>
@@ -1121,10 +1064,11 @@ function StockCloseGrid({ products }: { products: Product[] }) {
   const [pending, setPending] = useState<Record<string, Record<string, Record<string, string>>>>({})
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
 
-  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
+  const allWeekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
+  const weekDays = allWeekDays.filter(d => d.getDay() >= 1 && d.getDay() <= 5)
   const weekStartISO = toISO(weekStart)
-  const weekEndISO = toISO(weekDays[6])
-  const weekLabel = `${weekStart.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })} – ${weekDays[6].toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })}`
+  const weekEndISO = toISO(allWeekDays[6])
+  const weekLabel = `${weekStart.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })} – ${allWeekDays[4].toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })}`
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -1176,31 +1120,45 @@ function StockCloseGrid({ products }: { products: Product[] }) {
     }, 800)
   }
 
-  const productTotals = (productId: string) => {
-    let totalSobrante = 0, totalConsumo = 0, totalMerma = 0
+  const getProduction = (productId: string, date: string): number =>
+    weekData?.production[productId]?.[date] ?? 0
+
+  const productTotals = (product: Product) => {
+    let totalSobrante = 0, totalConsumo = 0, totalMerma = 0, totalProduced = 0
     for (const day of weekDays) {
       const d = toISO(day)
-      const s = parseInt(getPendingVal(productId, d, 'sobrante')) || getStockField(productId, d, 'sobrante')
-      const c = parseInt(getPendingVal(productId, d, 'consumo_interno')) || getStockField(productId, d, 'consumo_interno')
-      const m = parseInt(getPendingVal(productId, d, 'merma')) || getStockField(productId, d, 'merma')
+      const s = parseInt(getPendingVal(product.id, d, 'sobrante')) || getStockField(product.id, d, 'sobrante')
+      const c = parseInt(getPendingVal(product.id, d, 'consumo_interno')) || getStockField(product.id, d, 'consumo_interno')
+      const m = parseInt(getPendingVal(product.id, d, 'merma')) || getStockField(product.id, d, 'merma')
       totalSobrante += s
       totalConsumo += c
       totalMerma += m
+      totalProduced += getProduction(product.id, d)
     }
-    return { totalSobrante, totalConsumo, totalMerma }
+    // Vendido real = Producido − Sobrante − CI − Merma
+    const vendidoReal = Math.max(0, totalProduced - totalSobrante - totalConsumo - totalMerma)
+    const ingresos = vendidoReal * Number(product.price || 0)
+    const costo = totalProduced * (Number(product.cost_price) || 0)
+    const margen = ingresos - costo
+    return { totalSobrante, totalConsumo, totalMerma, totalProduced, vendidoReal, ingresos, costo, margen }
   }
 
   const activeProducts = products.filter((p) => p.is_active)
 
   const grandTotals = activeProducts.reduce(
     (acc, p) => {
-      const t = productTotals(p.id)
+      const t = productTotals(p)
       acc.sobrante += t.totalSobrante
       acc.consumo += t.totalConsumo
       acc.merma += t.totalMerma
+      acc.produced += t.totalProduced
+      acc.vendido += t.vendidoReal
+      acc.ingresos += t.ingresos
+      acc.costo += t.costo
+      acc.margen += t.margen
       return acc
     },
-    { sobrante: 0, consumo: 0, merma: 0 },
+    { sobrante: 0, consumo: 0, merma: 0, produced: 0, vendido: 0, ingresos: 0, costo: 0, margen: 0 },
   )
 
   return (
@@ -1219,19 +1177,37 @@ function StockCloseGrid({ products }: { products: Product[] }) {
         </button>
       </div>
 
-      {/* Summary banner */}
-      <div className="grid grid-cols-3 gap-3">
-        <div className="bg-amber-50 rounded-xl p-3 text-center">
-          <p className="text-[10px] font-bold text-amber-600 uppercase tracking-widest mb-1">Sobrante total</p>
-          <p className="text-2xl font-black text-amber-700">{grandTotals.sobrante}</p>
+      {/* Summary banners */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <div className="bg-teal-50 rounded-xl p-3 text-center">
+          <p className="text-[9px] font-bold text-teal-500 uppercase tracking-widest mb-1">Producido</p>
+          <p className="text-xl font-black text-teal-700">{grandTotals.produced}</p>
         </div>
-        <div className="bg-blue-50 rounded-xl p-3 text-center">
-          <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest mb-1">Consumo interno</p>
-          <p className="text-2xl font-black text-blue-700">{grandTotals.consumo}</p>
+        <div className="bg-emerald-50 rounded-xl p-3 text-center">
+          <p className="text-[9px] font-bold text-emerald-600 uppercase tracking-widest mb-1">Vendido real</p>
+          <p className="text-xl font-black text-emerald-700">{grandTotals.vendido}</p>
         </div>
-        <div className="bg-red-50 rounded-xl p-3 text-center">
-          <p className="text-[10px] font-bold text-red-500 uppercase tracking-widest mb-1">Merma total</p>
-          <p className="text-2xl font-black text-red-600">{grandTotals.merma}</p>
+        <div className="bg-indigo-50 rounded-xl p-3 text-center">
+          <p className="text-[9px] font-bold text-indigo-500 uppercase tracking-widest mb-1">Ingresos</p>
+          <p className="text-lg font-black text-indigo-700">{formatPrice(grandTotals.ingresos)}</p>
+        </div>
+        <div className={`rounded-xl p-3 text-center ${grandTotals.margen >= 0 ? 'bg-green-50' : 'bg-red-50'}`}>
+          <p className={`text-[9px] font-bold uppercase tracking-widest mb-1 ${grandTotals.margen >= 0 ? 'text-green-600' : 'text-red-500'}`}>Margen</p>
+          <p className={`text-lg font-black ${grandTotals.margen >= 0 ? 'text-green-700' : 'text-red-600'}`}>{formatPrice(grandTotals.margen)}</p>
+        </div>
+      </div>
+      <div className="grid grid-cols-3 gap-2">
+        <div className="bg-amber-50 rounded-xl p-2 text-center">
+          <p className="text-[9px] font-bold text-amber-600 uppercase tracking-widest mb-0.5">Sobrante</p>
+          <p className="text-lg font-black text-amber-700">{grandTotals.sobrante}</p>
+        </div>
+        <div className="bg-blue-50 rounded-xl p-2 text-center">
+          <p className="text-[9px] font-bold text-blue-500 uppercase tracking-widest mb-0.5">C. Interno</p>
+          <p className="text-lg font-black text-blue-700">{grandTotals.consumo}</p>
+        </div>
+        <div className="bg-red-50 rounded-xl p-2 text-center">
+          <p className="text-[9px] font-bold text-red-500 uppercase tracking-widest mb-0.5">Merma</p>
+          <p className="text-lg font-black text-red-600">{grandTotals.merma}</p>
         </div>
       </div>
 
@@ -1254,9 +1230,14 @@ function StockCloseGrid({ products }: { products: Product[] }) {
                     </th>
                   )
                 })}
-                <th className="text-center px-2 py-3 font-bold text-amber-600 uppercase tracking-wider min-w-[80px]">Sobrante</th>
-                <th className="text-center px-2 py-3 font-bold text-blue-500 uppercase tracking-wider min-w-[90px]">C. Interno</th>
-                <th className="text-center px-2 py-3 font-bold text-red-500 uppercase tracking-wider min-w-[80px]">Merma</th>
+                <th className="text-center px-2 py-3 font-bold text-teal-500 uppercase tracking-wider min-w-[70px]">Prod.</th>
+                <th className="text-center px-2 py-3 font-bold text-amber-600 uppercase tracking-wider min-w-[70px]">Sobrante</th>
+                <th className="text-center px-2 py-3 font-bold text-blue-500 uppercase tracking-wider min-w-[80px]">C. Interno</th>
+                <th className="text-center px-2 py-3 font-bold text-red-500 uppercase tracking-wider min-w-[70px]">Merma</th>
+                <th className="text-center px-2 py-3 font-bold text-emerald-600 uppercase tracking-wider min-w-[70px]">Vendido</th>
+                <th className="text-center px-2 py-3 font-bold text-indigo-500 uppercase tracking-wider min-w-[90px]">Ingresos</th>
+                <th className="text-center px-2 py-3 font-bold text-orange-500 uppercase tracking-wider min-w-[80px]">Costo</th>
+                <th className="text-center px-2 py-3 font-bold text-green-600 uppercase tracking-wider min-w-[80px]">Margen</th>
               </tr>
             </thead>
             <tbody>
@@ -1272,12 +1253,13 @@ function StockCloseGrid({ products }: { products: Product[] }) {
                 return Object.entries(groups).map(([catKey, group]) => (
                   <>
                     <tr key={`cat-${catKey}`} className="bg-gray-100 border-t border-gray-200">
-                      <td colSpan={10 + weekDays.length} className="px-4 py-1.5 text-[10px] font-black text-gray-500 uppercase tracking-widest sticky left-0">
+                      <td colSpan={9 + weekDays.length} className="px-4 py-1.5 text-[10px] font-black text-gray-500 uppercase tracking-widest sticky left-0">
                         {group.name}
                       </td>
                     </tr>
                     {group.products.map((product) => {
-                      const totals = productTotals(product.id)
+                      const totals = productTotals(product)
+                      const marginColor = totals.margen > 0 ? 'text-green-600' : totals.margen < 0 ? 'text-red-500' : 'text-gray-400'
                       const bg = rowIdx++ % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'
                       return (
                         <tr key={product.id} className={`border-b border-gray-50 ${bg}`}>
@@ -1301,28 +1283,27 @@ function StockCloseGrid({ products }: { products: Product[] }) {
                               </td>
                             )
                           })}
+                          <td className="px-2 py-2 text-center font-black text-teal-600">{totals.totalProduced || '—'}</td>
                           <td className="px-2 py-2 text-center font-black text-amber-600">{totals.totalSobrante || '—'}</td>
                           <td className="px-2 py-2 text-center">
-                            <div className="flex flex-col items-center gap-1">
-                              <input type="number" min="0" placeholder="0"
-                                value={getPendingVal(product.id, weekEndISO, 'consumo_interno')}
-                                onChange={(e) => handleCellChange(product.id, weekEndISO, 'consumo_interno', e.target.value)}
-                                className="w-14 text-center border border-blue-200 rounded-lg px-1 py-1 text-xs font-bold text-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white"
-                              />
-                              {totals.totalConsumo > 0 && <span className="text-[9px] text-blue-400">{totals.totalConsumo} total</span>}
-                            </div>
+                            <input type="number" min="0" placeholder="0"
+                              value={getPendingVal(product.id, weekEndISO, 'consumo_interno')}
+                              onChange={(e) => handleCellChange(product.id, weekEndISO, 'consumo_interno', e.target.value)}
+                              className="w-14 text-center border border-blue-200 rounded-lg px-1 py-1 text-xs font-bold text-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white"
+                            />
                           </td>
                           <td className="px-2 py-2 text-center">
-                            <div className="flex flex-col items-center gap-1">
-                              <input type="number" min="0" placeholder="0"
-                                value={getPendingVal(product.id, weekEndISO, 'merma')}
-                                onChange={(e) => handleCellChange(product.id, weekEndISO, 'merma', e.target.value)}
-                                className="w-14 text-center border border-red-200 rounded-lg px-1 py-1 text-xs font-bold text-red-500 focus:outline-none focus:ring-1 focus:ring-red-400 bg-white"
-                              />
-                              {totals.totalMerma > 0 && <span className="text-[9px] text-red-400">{totals.totalMerma} total</span>}
-                      </div>
-                    </td>
-                          </tr>
+                            <input type="number" min="0" placeholder="0"
+                              value={getPendingVal(product.id, weekEndISO, 'merma')}
+                              onChange={(e) => handleCellChange(product.id, weekEndISO, 'merma', e.target.value)}
+                              className="w-14 text-center border border-red-200 rounded-lg px-1 py-1 text-xs font-bold text-red-500 focus:outline-none focus:ring-1 focus:ring-red-400 bg-white"
+                            />
+                          </td>
+                          <td className="px-2 py-2 text-center font-black text-emerald-600">{totals.vendidoReal || '—'}</td>
+                          <td className="px-2 py-2 text-center font-bold text-indigo-600">{totals.ingresos > 0 ? formatPrice(totals.ingresos) : '—'}</td>
+                          <td className="px-2 py-2 text-center font-bold text-orange-500">{totals.costo > 0 ? formatPrice(totals.costo) : '—'}</td>
+                          <td className={`px-2 py-2 text-center font-bold ${marginColor}`}>{(totals.costo > 0 || totals.ingresos > 0) ? formatPrice(totals.margen) : '—'}</td>
+                        </tr>
                         )
                       })}
                     </>
@@ -1344,9 +1325,14 @@ function StockCloseGrid({ products }: { products: Product[] }) {
                     </td>
                   )
                 })}
+                <td className="px-2 py-3 text-center font-black text-teal-600">{grandTotals.produced}</td>
                 <td className="px-2 py-3 text-center font-black text-amber-600">{grandTotals.sobrante}</td>
                 <td className="px-2 py-3 text-center font-black text-blue-600">{grandTotals.consumo}</td>
                 <td className="px-2 py-3 text-center font-black text-red-500">{grandTotals.merma}</td>
+                <td className="px-2 py-3 text-center font-black text-emerald-600">{grandTotals.vendido}</td>
+                <td className="px-2 py-3 text-center font-black text-indigo-600">{formatPrice(grandTotals.ingresos)}</td>
+                <td className="px-2 py-3 text-center font-black text-orange-600">{formatPrice(grandTotals.costo)}</td>
+                <td className={`px-2 py-3 text-center font-black ${grandTotals.margen >= 0 ? 'text-green-700' : 'text-red-600'}`}>{formatPrice(grandTotals.margen)}</td>
               </tr>
             </tfoot>
           </table>
