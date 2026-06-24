@@ -502,6 +502,30 @@ function ImportProductionModal({ products, onImport, onClose }: ImportModalProps
   const [saving, setSaving] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
+  const downloadTemplate = () => {
+    // Build rows: category header rows + product rows
+    const sheetRows: (string | number)[][] = [
+      ['Categoria', 'Producto', 'Cantidad', 'Costo unitario'],
+    ]
+    const groups: Record<string, Product[]> = {}
+    for (const p of products) {
+      const cat = p.category_name || 'Sin categoría'
+      if (!groups[cat]) groups[cat] = []
+      groups[cat].push(p)
+    }
+    for (const [cat, prods] of Object.entries(groups)) {
+      sheetRows.push([cat, '', '', ''])
+      for (const p of prods) {
+        sheetRows.push(['', p.name, 0, p.cost_price ? Number(p.cost_price) : ''])
+      }
+    }
+    const ws = XLSX.utils.aoa_to_sheet(sheetRows)
+    ws['!cols'] = [{ wch: 20 }, { wch: 35 }, { wch: 12 }, { wch: 16 }]
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Producción')
+    XLSX.writeFile(wb, `plantilla-produccion-${date}.xlsx`)
+  }
+
   const parseCSVDirect = (csv: string): ImportRow[] => {
     const lines = csv.split('\n').map((l) => l.trim()).filter(Boolean)
     const results: ImportRow[] = []
@@ -670,6 +694,15 @@ function ImportProductionModal({ products, onImport, onClose }: ImportModalProps
                 <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
               </div>
+
+              <button
+                type="button"
+                onClick={downloadTemplate}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 border border-indigo-200 rounded-xl text-sm font-semibold text-indigo-600 hover:bg-indigo-50 transition-colors"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                Descargar plantilla Excel con mis productos
+              </button>
 
               {processing ? (
                 <div className="border-2 border-dashed border-indigo-200 rounded-2xl p-12 text-center space-y-3">
