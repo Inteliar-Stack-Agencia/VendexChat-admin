@@ -129,6 +129,9 @@ function DayInputForm({ products, onSave, onClose }: DayFormProps) {
         unit_cost: parseFloat(r.unit_cost) || undefined,
         cost: parseFloat(r.cost),
       })))
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Error al guardar'
+      showToast('error', msg)
     } finally { setSaving(false) }
   }
 
@@ -275,6 +278,9 @@ function DayEgressForm({ products, onSave, onClose }: EgressFormProps) {
         reason: r.reason,
         notes: r.notes || undefined,
       })))
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Error al guardar'
+      showToast('error', msg)
     } finally { setSaving(false) }
   }
 
