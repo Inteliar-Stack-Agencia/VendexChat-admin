@@ -727,7 +727,8 @@ function ImportProductionModal({ products, onImport, onClose }: ImportModalProps
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-100">
                       <th className="text-left px-3 py-2.5 font-bold text-gray-500 uppercase tracking-wider">Producto</th>
-                      <th className="text-center px-3 py-2.5 font-bold text-gray-500 uppercase tracking-wider w-24">Cant.</th>
+                      <th className="text-center px-3 py-2.5 font-bold text-gray-500 uppercase tracking-wider w-20">Cant.</th>
+                      <th className="text-center px-3 py-2.5 font-bold text-gray-500 uppercase tracking-wider w-28">Precio costo</th>
                       <th className="text-left px-3 py-2.5 font-bold text-gray-500 uppercase tracking-wider">Producto en planilla</th>
                       <th className="w-8" />
                     </tr>
@@ -745,12 +746,23 @@ function ImportProductionModal({ products, onImport, onClose }: ImportModalProps
                         </td>
                         <td className="px-3 py-2">
                           <input
-                            type="number"
-                            min="0"
+                            type="number" min="0"
                             value={row.quantity}
                             onChange={(e) => updateRow(i, { quantity: parseInt(e.target.value) || 0 })}
                             className="w-full text-center border border-gray-200 rounded-lg px-2 py-1 text-xs font-bold focus:outline-none focus:ring-1 focus:ring-indigo-400"
                           />
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="relative">
+                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs">$</span>
+                            <input
+                              type="number" min="0" step="0.01"
+                              value={row.price || ''}
+                              placeholder="0"
+                              onChange={(e) => updateRow(i, { price: parseFloat(e.target.value) || 0 })}
+                              className="w-full text-center border border-orange-200 rounded-lg pl-5 pr-2 py-1 text-xs font-bold text-orange-600 focus:outline-none focus:ring-1 focus:ring-orange-400"
+                            />
+                          </div>
                         </td>
                         <td className="px-3 py-2">
                           <select
@@ -1345,6 +1357,10 @@ export default function InventoryPage() {
     for (const row of rows) {
       if (row.matched_product_id) {
         await productionApi.upsertEntry(date, row.matched_product_id, row.quantity)
+        // Update cost_price if provided
+        if (row.price > 0) {
+          await productsApi.update(row.matched_product_id, { cost_price: row.price })
+        }
       }
     }
     const unlinked = rows.filter((r) => !r.matched_product_id)
