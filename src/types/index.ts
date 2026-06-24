@@ -165,6 +165,7 @@ export interface Product {
   is_active: boolean
   is_featured: boolean
   show_in_store: boolean
+  track_pos_sales: boolean
   sort_order: number
   created_at: string
 }
@@ -181,6 +182,7 @@ export interface ProductFormData {
   is_active: boolean
   is_featured: boolean
   show_in_store: boolean
+  track_pos_sales: boolean
   sort_order?: number
 }
 
