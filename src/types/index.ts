@@ -174,7 +174,8 @@ export interface ProductFormData {
   name: string
   description: string
   price: number | string
-  cost_price: number | string
+  offer_price?: number | string | null
+  cost_price?: number | string | null
   stock: number | string
   unlimited_stock: boolean
   image_url: string

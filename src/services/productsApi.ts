@@ -69,8 +69,8 @@ export const productsApi = {
             stock: Number(data.stock) || 0,
             category_id: data.category_id || null,
             sort_order: nextOrder,
-            // Sanitizar cualquier campo numérico extra que venga vacío
-            ...(('cost_price' in data) && { cost_price: data.cost_price === '' || data.cost_price == null ? null : Number(data.cost_price) }),
+            cost_price: (data.cost_price === '' || data.cost_price == null) ? null : Number(data.cost_price),
+            offer_price: (data.offer_price === '' || data.offer_price == null) ? null : Number(data.offer_price),
         }).select('*, categories(name)').single()
 
         if (error) {
@@ -98,8 +98,9 @@ export const productsApi = {
             if (data.description !== undefined) updateData.description = normalized.description
         }
 
-        if (data.price !== undefined) updateData.price = typeof data.price === 'string' ? parseFloat(data.price) : data.price
-        if (data.cost_price !== undefined) updateData.cost_price = typeof data.cost_price === 'string' ? parseFloat(data.cost_price) : data.cost_price
+        if (data.price !== undefined) updateData.price = typeof data.price === 'string' ? parseFloat(data.price) || 0 : data.price
+        if (data.cost_price !== undefined) updateData.cost_price = (data.cost_price === '' || data.cost_price == null) ? null : Number(data.cost_price)
+        if (data.offer_price !== undefined) updateData.offer_price = (data.offer_price === '' || data.offer_price == null) ? null : Number(data.offer_price)
         if (data.stock !== undefined) updateData.stock = typeof data.stock === 'string' ? parseInt(data.stock) : data.stock
 
         const { data: updatedProd, error } = await supabase.from('products').update(updateData).eq('id', id).eq('store_id', storeId).select('*, categories(name)').single()
