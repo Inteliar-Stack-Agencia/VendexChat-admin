@@ -65,10 +65,12 @@ export const productsApi = {
             name,
             description,
             store_id: storeId,
-            price: Number(data.price),
-            stock: Number(data.stock),
+            price: Number(data.price) || 0,
+            stock: Number(data.stock) || 0,
             category_id: data.category_id || null,
-            sort_order: nextOrder
+            sort_order: nextOrder,
+            // Sanitizar cualquier campo numérico extra que venga vacío
+            ...(('cost_price' in data) && { cost_price: data.cost_price === '' || data.cost_price == null ? null : Number(data.cost_price) }),
         }).select('*, categories(name)').single()
 
         if (error) {
