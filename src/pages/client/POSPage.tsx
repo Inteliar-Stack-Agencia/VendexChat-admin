@@ -319,7 +319,7 @@ export default function POSPage() {
                 total: amount,
                 status: 'completed',
                 metadata: { source: 'pos', payment_method: quickPM, quick_sale: true },
-                items: [{ product_id: '', product_name: quickDesc.trim() || 'Venta rápida', quantity: 1, unit_price: amount, subtotal: amount }],
+                items: [{ product_id: null, product_name: quickDesc.trim() || 'Venta rápida', quantity: 1, unit_price: amount, subtotal: amount }],
             })
             showToast('success', 'Venta rápida registrada')
             setShowQuickSale(false)

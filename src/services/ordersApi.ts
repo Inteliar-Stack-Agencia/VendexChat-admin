@@ -91,7 +91,7 @@ export const ordersApi = {
         total: number
         status?: OrderStatus
         metadata?: Record<string, unknown>
-        items: { product_id: string; product_name: string; quantity: number; unit_price: number; subtotal: number }[]
+        items: { product_id: string | null; product_name: string; quantity: number; unit_price: number; subtotal: number }[]
     }) => {
         const storeId = await getStoreId()
 
@@ -134,7 +134,7 @@ export const ordersApi = {
         }
 
         // Update stock: batch fetch all products, then update only those with limited stock
-        const productIds = items.map(i => i.product_id)
+        const productIds = items.map(i => i.product_id).filter((id): id is string => !!id)
         const { data: products } = await supabase
             .from('products')
             .select('id, stock, unlimited_stock')
