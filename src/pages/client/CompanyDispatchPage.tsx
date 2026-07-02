@@ -184,7 +184,7 @@ function DispatchModal({
   const [importing, setImporting] = useState(false)
   const [importFrom, setImportFrom] = useState(() => getWeekBounds(0).from)
   const [importTo, setImportTo] = useState(() => getWeekBounds(0).to)
-  const [orderResults, setOrderResults] = useState<{ id: string; customer_name: string; created_at: string; items: { product_id: string; product_name: string; quantity: number }[] }[]>([])
+  const [orderResults, setOrderResults] = useState<{ id: string; customer_name: string; created_at: string; items: { product_id: string; product_name: string; quantity: number; unit_price: number }[] }[]>([])
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set())
 
   const selectedClient = clients.find(c => c.id === clientId)
@@ -220,7 +220,7 @@ function DispatchModal({
       const storeId = await getStoreId()
       const { data, error } = await supabase
         .from('orders')
-        .select('id, customer_name, created_at, order_items(product_id, product_name, quantity)')
+        .select('id, customer_name, created_at, order_items(product_id, product_name, quantity, unit_price)')
         .eq('store_id', storeId)
         .eq('status', 'completed')
         .gte('created_at', importFrom + 'T00:00:00')
@@ -250,14 +250,19 @@ function DispatchModal({
 
     // Group by customer_name
     const byPerson: Record<string, { name: string; items: Record<string, { product_id: string; product_name: string; quantity: number; unit_price: number }> }> = {}
+    // Build catPriceMap once for this client
+    const catPriceMap: Record<string, number> = {}
+    for (const p of selectedClient?.prices || []) catPriceMap[p.category_id] = p.price
+
     for (const order of selected) {
       const person = order.customer_name || 'Sin nombre'
       if (!byPerson[person]) byPerson[person] = { name: person, items: {} }
       for (const item of order.items || []) {
         if (!item.product_id) continue
-        // Find agreed price for this product via its category
-        const prod = items.find(it => it.product_id === item.product_id)
-        const unitPrice = prod ? parseFloat(prod.unit_price) : 0
+        // Use order's unit_price, override with category agreed price if set
+        const prod = products.find(p => p.id === item.product_id)
+        const agreedPrice = prod?.category_id ? catPriceMap[prod.category_id] : undefined
+        const unitPrice = agreedPrice ?? item.unit_price ?? 0
         if (!byPerson[person].items[item.product_id]) {
           byPerson[person].items[item.product_id] = { product_id: item.product_id, product_name: item.product_name, quantity: 0, unit_price: unitPrice }
         }
