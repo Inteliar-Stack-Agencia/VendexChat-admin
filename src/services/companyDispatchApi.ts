@@ -17,7 +17,7 @@ export interface CompanyClient {
 export interface CompanyClientPrice {
   id: string
   client_id: string
-  product_id: string
+  category_id: string
   price: number
 }
 
@@ -91,14 +91,13 @@ export const companyDispatchApi = {
     if (error) throw error
   },
 
-  // Save all prices for a client (upsert)
-  saveClientPrices: async (clientId: string, prices: { product_id: string; price: number }[]) => {
-    // Delete existing and re-insert
+  // Save all prices for a client (by category)
+  saveClientPrices: async (clientId: string, prices: { category_id: string; price: number }[]) => {
     await supabase.from('company_client_prices').delete().eq('client_id', clientId)
     if (prices.length === 0) return
     const { error } = await supabase
       .from('company_client_prices')
-      .insert(prices.map(p => ({ client_id: clientId, product_id: p.product_id, price: p.price })))
+      .insert(prices.map(p => ({ client_id: clientId, category_id: p.category_id, price: p.price })))
     if (error) throw error
   },
 

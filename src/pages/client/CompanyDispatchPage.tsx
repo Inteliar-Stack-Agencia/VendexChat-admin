@@ -5,10 +5,11 @@ import { Card, Button } from '../../components/common'
 import { showToast } from '../../components/common/Toast'
 import { companyDispatchApi, type CompanyClient, type CompanyDispatch } from '../../services/companyDispatchApi'
 import { productsApi } from '../../services/productsApi'
+import { categoriesApi } from '../../services/categoriesApi'
 import { supabase } from '../../supabaseClient'
 import { getStoreId } from '../../services/coreApi'
 import { formatPrice } from '../../utils/helpers'
-import type { Product } from '../../types'
+import type { Product, Category } from '../../types'
 
 const today = new Date().toISOString().split('T')[0]
 
@@ -34,12 +35,12 @@ function getWeekBounds(offset = 0): { from: string; to: string; label: string } 
 
 function ClientModal({
   client,
-  products,
+  categories,
   onSave,
   onClose,
 }: {
   client?: CompanyClient
-  products: Product[]
+  categories: Category[]
   onSave: () => void
   onClose: () => void
 }) {
@@ -50,7 +51,7 @@ function ClientModal({
   const [notes, setNotes] = useState(client?.notes || '')
   const [prices, setPrices] = useState<Record<string, string>>(() => {
     const init: Record<string, string> = {}
-    for (const p of client?.prices || []) init[p.product_id] = String(p.price)
+    for (const p of client?.prices || []) init[p.category_id] = String(p.price)
     return init
   })
   const [saving, setSaving] = useState(false)
@@ -68,7 +69,7 @@ function ClientModal({
       }
       const priceEntries = Object.entries(prices)
         .filter(([, v]) => v !== '' && parseFloat(v) > 0)
-        .map(([product_id, price]) => ({ product_id, price: parseFloat(price) }))
+        .map(([category_id, price]) => ({ category_id, price: parseFloat(price) }))
       await companyDispatchApi.saveClientPrices(id!, priceEntries)
       showToast('success', client ? 'Cliente actualizado' : 'Cliente creado')
       onSave()
@@ -80,7 +81,7 @@ function ClientModal({
     }
   }
 
-  const activeProducts = products.filter(p => p.is_active)
+  const activeCategories = categories.filter(c => c.is_active)
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
@@ -92,7 +93,7 @@ function ClientModal({
             </div>
             <div>
               <h2 className="font-bold text-gray-900">{client ? 'Editar empresa' : 'Nueva empresa'}</h2>
-              <p className="text-xs text-gray-400 mt-0.5">Datos y precios acordados por producto</p>
+              <p className="text-xs text-gray-400 mt-0.5">Datos y precios acordados por categoría</p>
             </div>
           </div>
           <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100"><X className="w-5 h-5 text-gray-400" /></button>
@@ -128,20 +129,20 @@ function ClientModal({
           </div>
 
           <div>
-            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Precios acordados por producto</p>
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Precios acordados por categoría</p>
+            <p className="text-[11px] text-gray-400 mb-3">Todos los productos de esa categoría tendrán ese precio para esta empresa.</p>
             <div className="space-y-2">
-              {activeProducts.map(p => (
-                <div key={p.id} className="flex items-center gap-3 bg-gray-50 rounded-xl px-3 py-2">
-                  <span className="flex-1 text-sm text-gray-700 font-medium truncate">{p.name}</span>
-                  <span className="text-xs text-gray-400 shrink-0">Precio normal: {formatPrice(p.price)}</span>
+              {activeCategories.map(cat => (
+                <div key={cat.id} className="flex items-center gap-3 bg-gray-50 rounded-xl px-3 py-2.5">
+                  <span className="flex-1 text-sm text-gray-800 font-semibold">{cat.name}</span>
                   <div className="relative shrink-0">
                     <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs">$</span>
                     <input
                       type="number" min="0" step="100"
-                      value={prices[p.id] || ''}
-                      placeholder="—"
-                      onChange={e => setPrices(prev => ({ ...prev, [p.id]: e.target.value }))}
-                      className="w-28 pl-6 pr-2 py-1.5 text-xs font-bold text-indigo-600 border border-indigo-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-400 bg-white text-right"
+                      value={prices[cat.id] || ''}
+                      placeholder="Sin precio especial"
+                      onChange={e => setPrices(prev => ({ ...prev, [cat.id]: e.target.value }))}
+                      className="w-40 pl-6 pr-2 py-1.5 text-xs font-bold text-indigo-600 border border-indigo-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-400 bg-white text-right"
                     />
                   </div>
                 </div>
@@ -188,29 +189,23 @@ function DispatchModal({
 
   const selectedClient = clients.find(c => c.id === clientId)
 
-  // When client changes, auto-fill items from their price agreements
+  // When client changes, auto-fill items resolving price by category
   useEffect(() => {
     if (!selectedClient) return
-    const priceMap: Record<string, number> = {}
-    for (const p of selectedClient.prices || []) priceMap[p.product_id] = p.price
+    // price map: category_id → price
+    const catPriceMap: Record<string, number> = {}
+    for (const p of selectedClient.prices || []) catPriceMap[p.category_id] = p.price
 
     const activeProducts = products.filter(p => p.is_active)
-    const withPrices = activeProducts.filter(p => priceMap[p.id])
-    if (withPrices.length > 0) {
-      setItems(withPrices.map(p => ({
-        product_id: p.id,
-        product_name: p.name,
-        quantity: '',
-        unit_price: String(priceMap[p.id]),
-      })))
-    } else {
-      setItems(activeProducts.map(p => ({
-        product_id: p.id,
-        product_name: p.name,
-        quantity: '',
-        unit_price: String(p.price),
-      })))
-    }
+    // Show only products whose category has an agreed price; if none configured, show all
+    const withPrices = activeProducts.filter(p => p.category_id && catPriceMap[p.category_id])
+    const displayList = withPrices.length > 0 ? withPrices : activeProducts
+    setItems(displayList.map(p => ({
+      product_id: p.id,
+      product_name: p.name,
+      quantity: '',
+      unit_price: String(p.category_id && catPriceMap[p.category_id] ? catPriceMap[p.category_id] : p.price),
+    })))
   }, [clientId, selectedClient, products])
 
   const updateItem = (i: number, patch: Partial<typeof items[0]>) =>
@@ -478,12 +473,20 @@ function QuickEntryTab({ clients, products, onSaved }: { clients: CompanyClient[
 
   const selectedClient = clients.find(c => c.id === clientId)
 
-  // Build agreed-price map for the selected client
-  const priceMap = useMemo(() => {
+  // Build category-price map for the selected client, then resolve per product
+  const catPriceMap = useMemo(() => {
     const map: Record<string, number> = {}
-    for (const p of selectedClient?.prices || []) map[p.product_id] = p.price
+    for (const p of selectedClient?.prices || []) map[p.category_id] = p.price
     return map
   }, [selectedClient])
+
+  const priceMap = useMemo(() => {
+    const map: Record<string, number> = {}
+    for (const p of products) {
+      if (p.category_id && catPriceMap[p.category_id]) map[p.id] = catPriceMap[p.category_id]
+    }
+    return map
+  }, [catPriceMap, products])
 
   // When client changes, reset quantities
   useEffect(() => { setQtys({}) }, [clientId])
@@ -633,6 +636,7 @@ export default function CompanyDispatchPage() {
   const [clients, setClients] = useState<CompanyClient[]>([])
   const [dispatches, setDispatches] = useState<CompanyDispatch[]>([])
   const [products, setProducts] = useState<Product[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
   const [showClientModal, setShowClientModal] = useState(false)
   const [editingClient, setEditingClient] = useState<CompanyClient | undefined>()
@@ -646,14 +650,16 @@ export default function CompanyDispatchPage() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [c, d, p] = await Promise.all([
+      const [c, d, p, cats] = await Promise.all([
         companyDispatchApi.listClients(),
         companyDispatchApi.listDispatches(),
         productsApi.list({ limit: 500 }),
+        categoriesApi.list(),
       ])
       setClients(c)
       setDispatches(d)
       setProducts(p.data)
+      setCategories(cats)
     } catch (err) {
       showToast('error', 'Error al cargar')
     } finally {
@@ -961,10 +967,10 @@ export default function CompanyDispatchPage() {
                         {(c.prices || []).length > 0 && (
                           <div className="flex flex-wrap gap-1 mt-2">
                             {(c.prices || []).map(p => {
-                              const prod = products.find(pr => pr.id === p.product_id)
-                              return prod ? (
+                              const cat = categories.find(cat => cat.id === p.category_id)
+                              return cat ? (
                                 <span key={p.id} className="text-[10px] bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full font-semibold">
-                                  {prod.name}: {formatPrice(p.price)}
+                                  {cat.name}: {formatPrice(p.price)}
                                 </span>
                               ) : null
                             })}
@@ -993,7 +999,7 @@ export default function CompanyDispatchPage() {
       {showClientModal && (
         <ClientModal
           client={editingClient}
-          products={products}
+          categories={categories}
           onSave={load}
           onClose={() => { setShowClientModal(false); setEditingClient(undefined) }}
         />
