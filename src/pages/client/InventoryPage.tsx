@@ -1181,8 +1181,10 @@ function StockCloseGrid({ products }: { products: Product[] }) {
   const [weekStart, setWeekStart] = useState<Date>(() => getWeekStart(new Date()))
   const [weekData, setWeekData] = useState<Awaited<ReturnType<typeof productionApi.getWeekData>> | null>(null)
   const [loading, setLoading] = useState(true)
-  const [pending, setPending] = useState<Record<string, Record<string, Record<string, string>>>>({})
-  const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
+  // weekly close: one row per product — pending[productId][field]
+  const [pending, setPending] = useState<Record<string, { sobrante: string; consumo_interno: string; merma: string }>>({})
+  const [saving, setSaving] = useState(false)
+  const [editMode, setEditMode] = useState(false)
 
   const allWeekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
   const weekDays = allWeekDays.filter(d => d.getDay() >= 1 && d.getDay() <= 5)
@@ -1193,6 +1195,7 @@ function StockCloseGrid({ products }: { products: Product[] }) {
   const load = useCallback(async () => {
     setLoading(true)
     setPending({})
+    setEditMode(false)
     try {
       const data = await productionApi.getWeekData(weekStartISO, weekEndISO)
       setWeekData(data)
@@ -1205,62 +1208,38 @@ function StockCloseGrid({ products }: { products: Product[] }) {
 
   useEffect(() => { load() }, [load])
 
-  const getStockField = (productId: string, date: string, field: 'sobrante' | 'consumo_interno' | 'merma'): number =>
-    weekData?.stock[productId]?.[date]?.[field] ?? 0
-
-  const getPendingVal = (productId: string, date: string, field: 'sobrante' | 'consumo_interno' | 'merma'): string => {
-    if (pending[productId]?.[date]?.[field] !== undefined) return pending[productId][date][field]
-    const v = getStockField(productId, date, field)
-    return v === 0 ? '' : String(v)
+  // Sum a stock field across all days of the week for a product (from saved data)
+  const getSavedWeekField = (productId: string, field: 'sobrante' | 'consumo_interno' | 'merma'): number => {
+    let total = 0
+    for (const day of weekDays) {
+      total += weekData?.stock[productId]?.[toISO(day)]?.[field] ?? 0
+    }
+    return total
   }
 
-  const handleCellChange = (productId: string, date: string, field: 'sobrante' | 'consumo_interno' | 'merma', val: string) => {
-    setPending((prev) => ({
-      ...prev,
-      [productId]: {
-        ...(prev[productId] || {}),
-        [date]: { ...(prev[productId]?.[date] || {}), [field]: val },
-      },
-    }))
-
-    const key = `${productId}__${date}__${field}`
-    clearTimeout(saveTimers.current[key])
-    saveTimers.current[key] = setTimeout(async () => {
-      const n = parseInt(val) || 0
-      const sobrante = field === 'sobrante' ? n : (parseInt(getPendingVal(productId, date, 'sobrante')) || getStockField(productId, date, 'sobrante'))
-      const consumo = field === 'consumo_interno' ? n : (parseInt(getPendingVal(productId, date, 'consumo_interno')) || getStockField(productId, date, 'consumo_interno'))
-      const merma = field === 'merma' ? n : (parseInt(getPendingVal(productId, date, 'merma')) || getStockField(productId, date, 'merma'))
-      try {
-        await productionApi.upsertStockClose(date, productId, { sobrante, consumo_interno: consumo, merma })
-        const data = await productionApi.getWeekData(weekStartISO, weekEndISO)
-        setWeekData(data)
-      } catch {
-        showToast('error', 'Error al guardar')
-      }
-    }, 800)
+  const getTotalProduced = (productId: string): number => {
+    let total = 0
+    for (const day of weekDays) total += weekData?.production[productId]?.[toISO(day)] ?? 0
+    return total
   }
 
-  const getProduction = (productId: string, date: string): number =>
-    weekData?.production[productId]?.[date] ?? 0
+  const getField = (productId: string, field: 'sobrante' | 'consumo_interno' | 'merma'): number => {
+    const pv = pending[productId]?.[field]
+    if (pv !== undefined) return parseInt(pv) || 0
+    return getSavedWeekField(productId, field)
+  }
 
   const productTotals = (product: Product) => {
-    let totalSobrante = 0, totalConsumo = 0, totalMerma = 0, totalProduced = 0
-    for (const day of weekDays) {
-      const d = toISO(day)
-      const s = parseInt(getPendingVal(product.id, d, 'sobrante')) || getStockField(product.id, d, 'sobrante')
-      const c = parseInt(getPendingVal(product.id, d, 'consumo_interno')) || getStockField(product.id, d, 'consumo_interno')
-      const m = parseInt(getPendingVal(product.id, d, 'merma')) || getStockField(product.id, d, 'merma')
-      totalSobrante += s
-      totalConsumo += c
-      totalMerma += m
-      totalProduced += getProduction(product.id, d)
-    }
-    // Vendido real = Producido − Sobrante − CI − Merma
-    const vendidoReal = Math.max(0, totalProduced - totalSobrante - totalConsumo - totalMerma)
+    const totalProduced = getTotalProduced(product.id)
+    const sobrante = getField(product.id, 'sobrante')
+    const consumo = getField(product.id, 'consumo_interno')
+    const merma = getField(product.id, 'merma')
+    const vendidoReal = Math.max(0, totalProduced - sobrante - consumo - merma)
+    const weekCost = weekData?.costs[product.id] ?? (product.cost_price != null ? Number(product.cost_price) : null)
     const ingresos = vendidoReal * Number(product.price || 0)
-    const costo = totalProduced * (Number(product.cost_price) || 0)
+    const costo = totalProduced * (weekCost ?? 0)
     const margen = ingresos - costo
-    return { totalSobrante, totalConsumo, totalMerma, totalProduced, vendidoReal, ingresos, costo, margen }
+    return { totalProduced, sobrante, consumo, merma, vendidoReal, ingresos, costo, margen }
   }
 
   const activeProducts = products.filter((p) => p.is_active)
@@ -1268,21 +1247,86 @@ function StockCloseGrid({ products }: { products: Product[] }) {
   const grandTotals = activeProducts.reduce(
     (acc, p) => {
       const t = productTotals(p)
-      acc.sobrante += t.totalSobrante
-      acc.consumo += t.totalConsumo
-      acc.merma += t.totalMerma
-      acc.produced += t.totalProduced
-      acc.vendido += t.vendidoReal
-      acc.ingresos += t.ingresos
-      acc.costo += t.costo
-      acc.margen += t.margen
+      acc.sobrante += t.sobrante; acc.consumo += t.consumo; acc.merma += t.merma
+      acc.produced += t.totalProduced; acc.vendido += t.vendidoReal
+      acc.ingresos += t.ingresos; acc.costo += t.costo; acc.margen += t.margen
       return acc
     },
     { sobrante: 0, consumo: 0, merma: 0, produced: 0, vendido: 0, ingresos: 0, costo: 0, margen: 0 },
   )
 
+  const enterEditMode = () => {
+    const init: typeof pending = {}
+    for (const p of activeProducts) {
+      init[p.id] = {
+        sobrante: String(getSavedWeekField(p.id, 'sobrante') || ''),
+        consumo_interno: String(getSavedWeekField(p.id, 'consumo_interno') || ''),
+        merma: String(getSavedWeekField(p.id, 'merma') || ''),
+      }
+    }
+    setPending(init)
+    setEditMode(true)
+  }
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      // Save totals to the last day of the week (weekEndISO used as the anchor)
+      const saveDate = toISO(weekDays[weekDays.length - 1]) // Friday
+      await Promise.all(
+        activeProducts.map(async (p) => {
+          const sobrante = parseInt(pending[p.id]?.sobrante || '0') || 0
+          const consumo = parseInt(pending[p.id]?.consumo_interno || '0') || 0
+          const merma = parseInt(pending[p.id]?.merma || '0') || 0
+          if (sobrante > 0 || consumo > 0 || merma > 0) {
+            await productionApi.upsertStockClose(saveDate, p.id, { sobrante, consumo_interno: consumo, merma })
+          }
+        })
+      )
+      showToast('success', 'Cierre de semana guardado')
+      setEditMode(false)
+      await load()
+    } catch {
+      showToast('error', 'Error al guardar cierre')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const updateField = (productId: string, field: 'sobrante' | 'consumo_interno' | 'merma', val: string) => {
+    setPending((prev) => ({ ...prev, [productId]: { ...(prev[productId] || { sobrante: '', consumo_interno: '', merma: '' }), [field]: val } }))
+  }
+
   return (
     <div className="space-y-4">
+      {/* Edit / Save bar */}
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs text-gray-400">
+          {editMode ? 'Ingresá sobrante, consumo interno y merma total de la semana' : 'Cierre semanal · un registro por semana por producto'}
+        </p>
+        <div className="flex items-center gap-2 shrink-0">
+          {editMode ? (
+            <>
+              <button onClick={() => { setEditMode(false); setPending({}) }}
+                className="px-4 py-2 text-sm font-semibold text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors">
+                Cancelar
+              </button>
+              <button onClick={handleSave} disabled={saving}
+                className="flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-white bg-teal-600 hover:bg-teal-700 rounded-xl transition-colors disabled:opacity-60 shadow-sm">
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                Guardar cierre
+              </button>
+            </>
+          ) : (
+            <button onClick={enterEditMode}
+              className="flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-white bg-amber-500 hover:bg-amber-600 rounded-xl transition-colors shadow-sm">
+              <TableProperties className="w-4 h-4" />
+              Registrar cierre
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* Week navigation */}
       <div className="flex items-center justify-between">
         <button onClick={() => setWeekStart(addDays(weekStart, -7))} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
@@ -1290,7 +1334,7 @@ function StockCloseGrid({ products }: { products: Product[] }) {
         </button>
         <div className="text-center">
           <p className="text-sm font-bold text-gray-800">{weekLabel}</p>
-          <p className="text-xs text-gray-400">Cierre semanal · sobrante diario</p>
+          <p className="text-xs text-gray-400">Cierre semanal</p>
         </div>
         <button onClick={() => setWeekStart(addDays(weekStart, 7))} disabled={weekStartISO >= toISO(getWeekStart(new Date()))} className="p-2 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-30">
           <ChevronRight className="w-5 h-5 text-gray-500" />
@@ -1335,23 +1379,13 @@ function StockCloseGrid({ products }: { products: Product[] }) {
       {loading ? (
         <div className="flex justify-center py-12"><RefreshCw className="w-6 h-6 text-gray-300 animate-spin" /></div>
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-gray-100 bg-white">
+        <div className={`overflow-x-auto rounded-2xl border bg-white transition-colors ${editMode ? 'border-amber-200 ring-2 ring-amber-100' : 'border-gray-100'}`}>
           <table className="w-full text-xs">
             <thead>
-              <tr className="bg-gray-50 border-b border-gray-100">
-                <th className="text-left px-4 py-3 font-bold text-gray-500 uppercase tracking-wider min-w-[180px] sticky left-0 bg-gray-50 z-10">Producto</th>
-                {weekDays.map((day) => {
-                  const iso = toISO(day)
-                  const isToday = iso === today
-                  return (
-                    <th key={iso} className={`text-center px-1 py-3 min-w-[80px] ${isToday ? 'text-teal-600' : 'text-gray-400'}`}>
-                      <div className="font-bold uppercase tracking-wider">{DAY_SHORT[day.getDay()]}</div>
-                      <div className={`text-[10px] font-normal ${isToday ? 'text-teal-400' : 'text-gray-300'}`}>{day.getDate()}/{day.getMonth() + 1}</div>
-                    </th>
-                  )
-                })}
+              <tr className={`border-b ${editMode ? 'bg-amber-50 border-amber-100' : 'bg-gray-50 border-gray-100'}`}>
+                <th className={`text-left px-4 py-3 font-bold text-gray-500 uppercase tracking-wider min-w-[200px] sticky left-0 z-10 ${editMode ? 'bg-amber-50' : 'bg-gray-50'}`}>Producto</th>
                 <th className="text-center px-2 py-3 font-bold text-teal-500 uppercase tracking-wider min-w-[70px]">Prod.</th>
-                <th className="text-center px-2 py-3 font-bold text-amber-600 uppercase tracking-wider min-w-[70px]">Sobrante</th>
+                <th className="text-center px-2 py-3 font-bold text-amber-600 uppercase tracking-wider min-w-[80px]">Sobrante</th>
                 <th className="text-center px-2 py-3 font-bold text-blue-500 uppercase tracking-wider min-w-[80px]">C. Interno</th>
                 <th className="text-center px-2 py-3 font-bold text-red-500 uppercase tracking-wider min-w-[70px]">Merma</th>
                 <th className="text-center px-2 py-3 font-bold text-emerald-600 uppercase tracking-wider min-w-[70px]">Vendido</th>
@@ -1370,85 +1404,65 @@ function StockCloseGrid({ products }: { products: Product[] }) {
                   groups[key].products.push(p)
                 }
                 const sortedGroups = Object.entries(groups).sort(([, a], [, b]) => a.name.localeCompare(b.name, 'es'))
-                for (const [, group] of sortedGroups) {
-                  group.products.sort((a, b) => a.name.localeCompare(b.name, 'es'))
-                }
+                for (const [, group] of sortedGroups) group.products.sort((a, b) => a.name.localeCompare(b.name, 'es'))
                 let rowIdx = 0
                 return sortedGroups.map(([catKey, group]) => (
                   <>
                     <tr key={`cat-${catKey}`} className="bg-gray-100 border-t border-gray-200">
-                      <td colSpan={9 + weekDays.length} className="px-4 py-1.5 text-[10px] font-black text-gray-500 uppercase tracking-widest sticky left-0">
+                      <td colSpan={9} className="px-4 py-1.5 text-[10px] font-black text-gray-500 uppercase tracking-widest sticky left-0">
                         {group.name}
                       </td>
                     </tr>
                     {group.products.map((product) => {
-                      const totals = productTotals(product)
-                      const marginColor = totals.margen > 0 ? 'text-green-600' : totals.margen < 0 ? 'text-red-500' : 'text-gray-400'
+                      const t = productTotals(product)
+                      const marginColor = t.margen > 0 ? 'text-green-600' : t.margen < 0 ? 'text-red-500' : 'text-gray-400'
                       const bg = rowIdx++ % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'
+                      const pend = pending[product.id] || { sobrante: '', consumo_interno: '', merma: '' }
                       return (
                         <tr key={product.id} className={`border-b border-gray-50 ${bg}`}>
-                          <td className={`px-4 py-2 font-medium text-gray-700 sticky left-0 z-10 ${bg}`}>{product.name}</td>
-                          {weekDays.map((day) => {
-                            const iso = toISO(day)
-                            const isToday = iso === today
-                            const sobranteVal = getPendingVal(product.id, iso, 'sobrante')
-                            const consumoVal = getPendingVal(product.id, iso, 'consumo_interno')
-                            const mermaVal = getPendingVal(product.id, iso, 'merma')
-                            return (
-                              <td key={iso} className={`px-1 py-1 ${isToday ? 'bg-teal-50/30' : ''}`}>
-                                <div className="flex flex-col items-center gap-0.5">
-                                  <input type="number" min="0" value={sobranteVal} placeholder="—" title="Sobrante"
-                                    onChange={(e) => handleCellChange(product.id, iso, 'sobrante', e.target.value)}
-                                    className="w-14 text-center border border-amber-200 rounded-lg px-1 py-1 text-sm font-bold text-amber-700 focus:outline-none focus:ring-1 focus:ring-amber-400 bg-white"
-                                  />
-                                  {(consumoVal !== '' && consumoVal !== '0') && <span className="text-[9px] text-blue-500 font-semibold">CI:{consumoVal}</span>}
-                                  {(mermaVal !== '' && mermaVal !== '0') && <span className="text-[9px] text-red-400 font-semibold">M:{mermaVal}</span>}
-                                </div>
-                              </td>
-                            )
-                          })}
-                          <td className="px-2 py-2 text-center font-black text-teal-600">{totals.totalProduced || '—'}</td>
-                          <td className="px-2 py-2 text-center font-black text-amber-600">{totals.totalSobrante || '—'}</td>
+                          <td className={`px-4 py-2.5 font-medium text-gray-700 sticky left-0 z-10 ${bg}`}>{product.name}</td>
+                          <td className="px-2 py-2 text-center font-black text-teal-600">{t.totalProduced || '—'}</td>
                           <td className="px-2 py-2 text-center">
-                            <input type="number" min="0" placeholder="0"
-                              value={getPendingVal(product.id, weekEndISO, 'consumo_interno')}
-                              onChange={(e) => handleCellChange(product.id, weekEndISO, 'consumo_interno', e.target.value)}
-                              className="w-14 text-center border border-blue-200 rounded-lg px-1 py-1 text-xs font-bold text-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white"
-                            />
+                            {editMode ? (
+                              <input type="number" min="0" value={pend.sobrante} placeholder="0"
+                                onChange={(e) => updateField(product.id, 'sobrante', e.target.value)}
+                                className="w-16 text-center border border-amber-300 rounded-lg px-1 py-1.5 text-xs font-bold text-amber-700 focus:outline-none focus:ring-1 focus:ring-amber-400 bg-amber-50" />
+                            ) : (
+                              <span className="font-bold text-amber-600">{t.sobrante || '—'}</span>
+                            )}
                           </td>
                           <td className="px-2 py-2 text-center">
-                            <input type="number" min="0" placeholder="0"
-                              value={getPendingVal(product.id, weekEndISO, 'merma')}
-                              onChange={(e) => handleCellChange(product.id, weekEndISO, 'merma', e.target.value)}
-                              className="w-14 text-center border border-red-200 rounded-lg px-1 py-1 text-xs font-bold text-red-500 focus:outline-none focus:ring-1 focus:ring-red-400 bg-white"
-                            />
+                            {editMode ? (
+                              <input type="number" min="0" value={pend.consumo_interno} placeholder="0"
+                                onChange={(e) => updateField(product.id, 'consumo_interno', e.target.value)}
+                                className="w-16 text-center border border-blue-300 rounded-lg px-1 py-1.5 text-xs font-bold text-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-400 bg-blue-50" />
+                            ) : (
+                              <span className="font-bold text-blue-600">{t.consumo || '—'}</span>
+                            )}
                           </td>
-                          <td className="px-2 py-2 text-center font-black text-emerald-600">{totals.vendidoReal || '—'}</td>
-                          <td className="px-2 py-2 text-center font-bold text-indigo-600">{totals.ingresos > 0 ? formatPrice(totals.ingresos) : '—'}</td>
-                          <td className="px-2 py-2 text-center font-bold text-orange-500">{totals.costo > 0 ? formatPrice(totals.costo) : '—'}</td>
-                          <td className={`px-2 py-2 text-center font-bold ${marginColor}`}>{(totals.costo > 0 || totals.ingresos > 0) ? formatPrice(totals.margen) : '—'}</td>
+                          <td className="px-2 py-2 text-center">
+                            {editMode ? (
+                              <input type="number" min="0" value={pend.merma} placeholder="0"
+                                onChange={(e) => updateField(product.id, 'merma', e.target.value)}
+                                className="w-16 text-center border border-red-300 rounded-lg px-1 py-1.5 text-xs font-bold text-red-500 focus:outline-none focus:ring-1 focus:ring-red-400 bg-red-50" />
+                            ) : (
+                              <span className="font-bold text-red-500">{t.merma || '—'}</span>
+                            )}
+                          </td>
+                          <td className="px-2 py-2 text-center font-black text-emerald-600">{t.vendidoReal || '—'}</td>
+                          <td className="px-2 py-2 text-center font-bold text-indigo-600">{t.ingresos > 0 ? formatPrice(t.ingresos) : '—'}</td>
+                          <td className="px-2 py-2 text-center font-bold text-orange-500">{t.costo > 0 ? formatPrice(t.costo) : '—'}</td>
+                          <td className={`px-2 py-2 text-center font-bold ${marginColor}`}>{(t.costo > 0 || t.ingresos > 0) ? formatPrice(t.margen) : '—'}</td>
                         </tr>
-                        )
-                      })}
-                    </>
-                  ))
-                })()}
+                      )
+                    })}
+                  </>
+                ))
+              })()}
             </tbody>
             <tfoot>
               <tr className="bg-gray-100 border-t-2 border-gray-200">
                 <td className="px-4 py-3 font-black text-gray-700 sticky left-0 bg-gray-100 z-10">TOTALES</td>
-                {weekDays.map((day) => {
-                  const iso = toISO(day)
-                  const daySobrante = activeProducts.reduce((s, p) => {
-                    const v = parseInt(getPendingVal(p.id, iso, 'sobrante')) || getStockField(p.id, iso, 'sobrante')
-                    return s + v
-                  }, 0)
-                  return (
-                    <td key={iso} className="px-1 py-3 text-center">
-                      <div className="text-xs font-black text-amber-600">{daySobrante || '—'}</div>
-                    </td>
-                  )
-                })}
                 <td className="px-2 py-3 text-center font-black text-teal-600">{grandTotals.produced}</td>
                 <td className="px-2 py-3 text-center font-black text-amber-600">{grandTotals.sobrante}</td>
                 <td className="px-2 py-3 text-center font-black text-blue-600">{grandTotals.consumo}</td>
@@ -1462,10 +1476,6 @@ function StockCloseGrid({ products }: { products: Product[] }) {
           </table>
         </div>
       )}
-
-      <p className="text-[10px] text-gray-400 text-center">
-        Sobrante: editá por día · Consumo interno y Merma: total semanal por producto · se guarda automáticamente
-      </p>
     </div>
   )
 }
