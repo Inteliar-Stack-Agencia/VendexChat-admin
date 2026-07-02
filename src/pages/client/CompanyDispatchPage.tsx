@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Building2, Plus, Trash2, X, Loader2, ChevronLeft, ChevronRight, Edit2, Check, FileSpreadsheet, Users } from 'lucide-react'
+import { Building2, Plus, Trash2, X, Loader2, ChevronLeft, ChevronRight, Edit2, FileSpreadsheet, Users, Download, Check } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { Card, Button } from '../../components/common'
 import { showToast } from '../../components/common/Toast'
 import { companyDispatchApi, type CompanyClient, type CompanyDispatch } from '../../services/companyDispatchApi'
 import { productsApi } from '../../services/productsApi'
+import { supabase } from '../../supabaseClient'
+import { getStoreId } from '../../services/coreApi'
 import { formatPrice } from '../../utils/helpers'
 import type { Product } from '../../types'
 
@@ -64,7 +66,6 @@ function ClientModal({
         const created = await companyDispatchApi.createClient({ name: name.trim(), contact_name: contactName || undefined, phone: phone || undefined, email: email || undefined, notes: notes || undefined })
         id = created.id
       }
-      // Save prices
       const priceEntries = Object.entries(prices)
         .filter(([, v]) => v !== '' && parseFloat(v) > 0)
         .map(([product_id, price]) => ({ product_id, price: parseFloat(price) }))
@@ -98,7 +99,6 @@ function ClientModal({
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-5">
-          {/* Datos básicos */}
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2">
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Nombre empresa *</label>
@@ -127,7 +127,6 @@ function ClientModal({
             </div>
           </div>
 
-          {/* Precios por producto */}
           <div>
             <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Precios acordados por producto</p>
             <div className="space-y-2">
@@ -181,6 +180,11 @@ function DispatchModal({
   const [notes, setNotes] = useState('')
   const [items, setItems] = useState<{ product_id: string; product_name: string; quantity: string; unit_price: string }[]>([])
   const [saving, setSaving] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const [importFrom, setImportFrom] = useState(() => getWeekBounds(0).from)
+  const [importTo, setImportTo] = useState(() => getWeekBounds(0).to)
+  const [orderResults, setOrderResults] = useState<{ id: string; customer_name: string; created_at: string; items: { product_id: string; product_name: string; quantity: number }[] }[]>([])
+  const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set())
 
   const selectedClient = clients.find(c => c.id === clientId)
 
@@ -191,7 +195,6 @@ function DispatchModal({
     for (const p of selectedClient.prices || []) priceMap[p.product_id] = p.price
 
     const activeProducts = products.filter(p => p.is_active)
-    // Show products that have an agreed price for this client
     const withPrices = activeProducts.filter(p => priceMap[p.id])
     if (withPrices.length > 0) {
       setItems(withPrices.map(p => ({
@@ -212,6 +215,59 @@ function DispatchModal({
 
   const updateItem = (i: number, patch: Partial<typeof items[0]>) =>
     setItems(prev => prev.map((it, idx) => idx === i ? { ...it, ...patch } : it))
+
+  // Step 1: fetch all completed orders in the date range (no name filter)
+  const handleSearchOrders = async () => {
+    setImporting(true)
+    setOrderResults([])
+    setSelectedOrderIds(new Set())
+    try {
+      const storeId = await getStoreId()
+      const { data, error } = await supabase
+        .from('orders')
+        .select('id, customer_name, created_at, order_items(product_id, product_name, quantity)')
+        .eq('store_id', storeId)
+        .eq('status', 'completed')
+        .gte('created_at', importFrom + 'T00:00:00')
+        .lte('created_at', importTo + 'T23:59:59')
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+      if (!data || data.length === 0) {
+        showToast('error', 'Sin pedidos completados en ese rango')
+        return
+      }
+      setOrderResults(data as typeof orderResults)
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : 'Error al buscar')
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  // Step 2: apply selected orders to items
+  const handleApplySelectedOrders = () => {
+    const qtyMap: Record<string, number> = {}
+    for (const order of orderResults) {
+      if (!selectedOrderIds.has(order.id)) continue
+      for (const item of order.items || []) {
+        if (!item.product_id) continue
+        qtyMap[item.product_id] = (qtyMap[item.product_id] || 0) + item.quantity
+      }
+    }
+    setItems(prev => prev.map(it => ({
+      ...it,
+      quantity: qtyMap[it.product_id] ? String(qtyMap[it.product_id]) : it.quantity,
+    })))
+    setOrderResults([])
+    showToast('success', `${selectedOrderIds.size} pedido${selectedOrderIds.size !== 1 ? 's' : ''} aplicado${selectedOrderIds.size !== 1 ? 's' : ''}`)
+  }
+
+  const toggleOrder = (id: string) => setSelectedOrderIds(prev => {
+    const next = new Set(prev)
+    next.has(id) ? next.delete(id) : next.add(id)
+    return next
+  })
 
   const filledItems = items.filter(it => parseInt(it.quantity) > 0)
   const total = filledItems.reduce((s, it) => s + (parseInt(it.quantity) || 0) * (parseFloat(it.unit_price) || 0), 0)
@@ -254,7 +310,7 @@ function DispatchModal({
             </div>
             <div>
               <h2 className="font-bold text-gray-900">Registrar despacho</h2>
-              <p className="text-xs text-gray-400 mt-0.5">Productos enviados a una empresa</p>
+              <p className="text-xs text-gray-400 mt-0.5">Podés importar desde pedidos o ingresar manualmente</p>
             </div>
           </div>
           <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100"><X className="w-5 h-5 text-gray-400" /></button>
@@ -273,7 +329,7 @@ function DispatchModal({
               </select>
             </div>
             <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Fecha</label>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Fecha despacho</label>
               <input type="date" value={date} onChange={e => setDate(e.target.value)}
                 className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300" />
             </div>
@@ -284,10 +340,69 @@ function DispatchModal({
             </div>
           </div>
 
+          {/* Import from orders */}
+          {clientId && (
+            <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <Download className="w-4 h-4 text-blue-500" />
+                <p className="text-xs font-bold text-blue-700 uppercase tracking-wider">Importar desde pedidos</p>
+              </div>
+              <p className="text-[11px] text-blue-500">
+                Buscá todos los pedidos completados en el rango y elegí cuáles corresponden a esta empresa.
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[10px] font-semibold text-blue-500 uppercase tracking-wider mb-1">Desde</label>
+                  <input type="date" value={importFrom} onChange={e => setImportFrom(e.target.value)}
+                    className="w-full border border-blue-200 rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-semibold text-blue-500 uppercase tracking-wider mb-1">Hasta</label>
+                  <input type="date" value={importTo} onChange={e => setImportTo(e.target.value)}
+                    className="w-full border border-blue-200 rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                </div>
+              </div>
+              <button
+                onClick={handleSearchOrders}
+                disabled={importing}
+                className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-2 px-4 rounded-lg transition-colors disabled:opacity-50"
+              >
+                {importing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                {importing ? 'Buscando...' : 'Buscar pedidos'}
+              </button>
+
+              {/* Order list to select from */}
+              {orderResults.length > 0 && (
+                <div className="space-y-1.5 pt-1">
+                  <p className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Seleccioná los que corresponden a esta empresa:</p>
+                  <div className="max-h-48 overflow-y-auto space-y-1">
+                    {orderResults.map(order => (
+                      <label key={order.id}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-colors border ${selectedOrderIds.has(order.id) ? 'bg-blue-100 border-blue-300' : 'bg-white border-blue-100 hover:bg-blue-50'}`}>
+                        <input type="checkbox" checked={selectedOrderIds.has(order.id)} onChange={() => toggleOrder(order.id)} className="accent-blue-600" />
+                        <span className="font-bold text-xs text-gray-800 flex-1 truncate">{order.customer_name}</span>
+                        <span className="text-[10px] text-gray-400 shrink-0">{order.created_at.split('T')[0]}</span>
+                      </label>
+                    ))}
+                  </div>
+                  {selectedOrderIds.size > 0 && (
+                    <button
+                      onClick={handleApplySelectedOrders}
+                      className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2 px-4 rounded-lg transition-colors"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      Aplicar {selectedOrderIds.size} pedido{selectedOrderIds.size !== 1 ? 's' : ''}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Productos */}
           {items.length > 0 && (
             <div>
-              <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Productos</p>
+              <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Productos <span className="font-normal text-gray-400 normal-case">(editá o completá manualmente)</span></p>
               <div className="rounded-xl border border-gray-100 overflow-hidden">
                 <table className="w-full text-xs">
                   <thead>
@@ -427,7 +542,6 @@ export default function CompanyDispatchPage() {
   }
 
   const exportSummary = () => {
-    // Group by client
     const byClient: Record<string, { clientName: string; rows: { date: string; employee: string; product: string; qty: number; price: number; subtotal: number }[] }> = {}
     for (const d of summaryDispatches) {
       const cname = (d.client as { name: string })?.name || 'Desconocido'
@@ -459,7 +573,6 @@ export default function CompanyDispatchPage() {
     XLSX.writeFile(wb, `despachos-${week.from}-${week.to}.xlsx`)
   }
 
-  // Summary grouped by client
   const summaryByClient = summaryDispatches.reduce((acc, d) => {
     const cname = (d.client as { name: string })?.name || 'Desconocido'
     if (!acc[d.client_id]) acc[d.client_id] = { name: cname, total: 0, dispatches: [] }
@@ -570,7 +683,6 @@ export default function CompanyDispatchPage() {
           {/* ── TAB: Resumen semanal ── */}
           {tab === 'resumen' && (
             <div className="space-y-4">
-              {/* Week navigation */}
               <div className="flex items-center justify-between">
                 <button onClick={() => setWeekOffset(wo => wo - 1)} className="p-2 hover:bg-gray-100 rounded-lg">
                   <ChevronLeft className="w-5 h-5 text-gray-500" />
@@ -593,7 +705,6 @@ export default function CompanyDispatchPage() {
                 </Card>
               ) : (
                 <>
-                  {/* Grand total */}
                   <div className="bg-indigo-50 rounded-xl p-4 flex items-center justify-between">
                     <div>
                       <p className="text-xs font-bold text-indigo-500 uppercase tracking-widest">Total semana</p>
@@ -602,9 +713,7 @@ export default function CompanyDispatchPage() {
                     <p className="text-xs text-indigo-400">{Object.keys(summaryByClient).length} empresa{Object.keys(summaryByClient).length !== 1 ? 's' : ''}</p>
                   </div>
 
-                  {/* Per client */}
                   {Object.values(summaryByClient).sort((a, b) => a.name.localeCompare(b.name, 'es')).map(client => {
-                    // Aggregate items across all dispatches
                     const itemMap: Record<string, { name: string; qty: number; price: number; subtotal: number }> = {}
                     for (const d of client.dispatches) {
                       for (const it of d.items || []) {
