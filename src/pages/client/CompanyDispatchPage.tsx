@@ -440,68 +440,10 @@ function DispatchModal({
             </div>
           )}
 
-          {/* Productos */}
-          {items.length > 0 && (
-            <div>
-              <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Productos <span className="font-normal text-gray-400 normal-case">(editá o completá manualmente)</span></p>
-              <div className="rounded-xl border border-gray-100 overflow-hidden">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="bg-gray-50 border-b border-gray-100">
-                      <th className="text-left px-3 py-2.5 font-bold text-gray-500 uppercase tracking-wider">Producto</th>
-                      <th className="text-center px-3 py-2.5 font-bold text-gray-500 uppercase tracking-wider w-20">Cant.</th>
-                      <th className="text-right px-3 py-2.5 font-bold text-gray-500 uppercase tracking-wider w-28">Precio</th>
-                      <th className="text-right px-3 py-2.5 font-bold text-gray-500 uppercase tracking-wider w-28">Subtotal</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {items.map((item, i) => {
-                      const sub = (parseInt(item.quantity) || 0) * (parseFloat(item.unit_price) || 0)
-                      return (
-                        <tr key={i} className={`border-b border-gray-50 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}`}>
-                          <td className="px-3 py-2 font-medium text-gray-700">{item.product_name}</td>
-                          <td className="px-2 py-1.5 text-center">
-                            <input type="number" min="0" value={item.quantity} placeholder="0"
-                              onChange={e => updateItem(i, { quantity: e.target.value })}
-                              className={`w-16 text-center border rounded-lg px-1 py-1.5 text-sm font-bold focus:outline-none focus:ring-1 ${parseInt(item.quantity) > 0 ? 'border-emerald-300 text-emerald-700 bg-emerald-50 focus:ring-emerald-400' : 'border-gray-200 text-gray-400 focus:ring-emerald-300'}`} />
-                          </td>
-                          <td className="px-2 py-1.5 text-right">
-                            <div className="relative flex items-center justify-end">
-                              <span className="absolute left-2 text-gray-400 text-[10px]">$</span>
-                              <input type="number" min="0" value={item.unit_price}
-                                onChange={e => updateItem(i, { unit_price: e.target.value })}
-                                className="w-24 pl-5 pr-2 py-1.5 text-xs font-bold text-indigo-600 border border-indigo-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-400 text-right" />
-                            </div>
-                          </td>
-                          <td className={`px-3 py-2 text-right font-black text-sm ${sub > 0 ? 'text-emerald-600' : 'text-gray-300'}`}>
-                            {sub > 0 ? formatPrice(sub) : '—'}
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          <div className="bg-emerald-50 rounded-xl p-3 flex items-center justify-between">
-            <span className="text-sm font-semibold text-emerald-700">Total despacho</span>
-            <span className="text-xl font-black text-emerald-700">{formatPrice(total)}</span>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Notas</label>
-            <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Observaciones..."
-              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300" />
-          </div>
         </div>
 
         <div className="flex gap-3 p-6 border-t border-gray-100 shrink-0">
           <Button variant="ghost" className="flex-1" onClick={onClose}>Cancelar</Button>
-          <Button className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handleSave} disabled={saving}>
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Registrar despacho'}
-          </Button>
         </div>
       </div>
     </div>
