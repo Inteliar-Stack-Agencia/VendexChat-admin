@@ -293,7 +293,10 @@ function DispatchModal({
       onSave()
       onClose()
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : 'Error al guardar')
+      console.error('Error al registrar despachos:', err)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const msg = (err as any)?.message || (err as any)?.details || (err as any)?.hint || JSON.stringify(err)
+      showToast('error', msg || 'Error al guardar')
     } finally {
       setSaving(false)
     }
