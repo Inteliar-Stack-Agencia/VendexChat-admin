@@ -891,52 +891,104 @@ export default function CompanyDispatchPage() {
                   </div>
 
                   {Object.values(summaryByClient).sort((a, b) => a.name.localeCompare(b.name, 'es')).map(client => {
-                    const itemMap: Record<string, { name: string; qty: number; price: number; subtotal: number }> = {}
+                    // Group dispatches by employee/person
+                    const byPerson: Record<string, { name: string; total: number; items: Record<string, { name: string; qty: number; price: number; subtotal: number }> }> = {}
+                    for (const d of client.dispatches) {
+                      const person = d.employee_name || 'Sin nombre'
+                      if (!byPerson[person]) byPerson[person] = { name: person, total: 0, items: {} }
+                      byPerson[person].total += d.total
+                      for (const it of d.items || []) {
+                        const key = it.product_name
+                        if (!byPerson[person].items[key]) byPerson[person].items[key] = { name: it.product_name, qty: 0, price: it.unit_price, subtotal: 0 }
+                        byPerson[person].items[key].qty += it.quantity
+                        byPerson[person].items[key].subtotal += it.subtotal
+                      }
+                    }
+                    const persons = Object.values(byPerson).sort((a, b) => a.name.localeCompare(b.name, 'es'))
+
+                    // Total product summary across all persons
+                    const totalItemMap: Record<string, { name: string; qty: number; price: number; subtotal: number }> = {}
                     for (const d of client.dispatches) {
                       for (const it of d.items || []) {
                         const key = it.product_name
-                        if (!itemMap[key]) itemMap[key] = { name: it.product_name, qty: 0, price: it.unit_price, subtotal: 0 }
-                        itemMap[key].qty += it.quantity
-                        itemMap[key].subtotal += it.subtotal
+                        if (!totalItemMap[key]) totalItemMap[key] = { name: it.product_name, qty: 0, price: it.unit_price, subtotal: 0 }
+                        totalItemMap[key].qty += it.quantity
+                        totalItemMap[key].subtotal += it.subtotal
                       }
                     }
-                    const rows = Object.values(itemMap).sort((a, b) => a.name.localeCompare(b.name, 'es'))
+                    const totalRows = Object.values(totalItemMap).sort((a, b) => a.name.localeCompare(b.name, 'es'))
 
                     return (
                       <Card key={client.name} className="overflow-hidden">
+                        {/* Header empresa */}
                         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-gray-50">
                           <div className="flex items-center gap-2">
                             <Building2 className="w-4 h-4 text-indigo-500" />
                             <span className="font-bold text-gray-900">{client.name}</span>
+                            <span className="text-xs text-gray-400">· {persons.length} persona{persons.length !== 1 ? 's' : ''}</span>
                           </div>
                           <span className="font-black text-indigo-600 text-lg">{formatPrice(client.total)}</span>
                         </div>
-                        <table className="w-full text-xs">
-                          <thead>
-                            <tr className="border-b border-gray-50">
-                              <th className="text-left px-5 py-2.5 font-bold text-gray-400 uppercase tracking-wider">Producto</th>
-                              <th className="text-center px-3 py-2.5 font-bold text-gray-400 uppercase tracking-wider">Cant.</th>
-                              <th className="text-right px-3 py-2.5 font-bold text-gray-400 uppercase tracking-wider">Precio unit.</th>
-                              <th className="text-right px-5 py-2.5 font-bold text-gray-400 uppercase tracking-wider">Subtotal</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {rows.map((row, i) => (
-                              <tr key={i} className={`border-b border-gray-50 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}`}>
-                                <td className="px-5 py-2.5 font-medium text-gray-700">{row.name}</td>
-                                <td className="px-3 py-2.5 text-center font-black text-emerald-600">{row.qty}</td>
-                                <td className="px-3 py-2.5 text-right text-gray-500">{formatPrice(row.price)}</td>
-                                <td className="px-5 py-2.5 text-right font-bold text-gray-800">{formatPrice(row.subtotal)}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                          <tfoot>
-                            <tr className="bg-indigo-50 border-t border-indigo-100">
-                              <td className="px-5 py-2.5 font-black text-indigo-700" colSpan={3}>TOTAL {client.name.toUpperCase()}</td>
-                              <td className="px-5 py-2.5 text-right font-black text-indigo-700">{formatPrice(client.total)}</td>
-                            </tr>
-                          </tfoot>
-                        </table>
+
+                        {/* Por persona */}
+                        {persons.map((person, pi) => {
+                          const personRows = Object.values(person.items).sort((a, b) => a.name.localeCompare(b.name, 'es'))
+                          return (
+                            <div key={pi} className={pi > 0 ? 'border-t border-gray-100' : ''}>
+                              <div className="flex items-center justify-between px-5 py-2.5 bg-gray-50/60">
+                                <span className="text-xs font-bold text-gray-600 uppercase tracking-wider">👤 {person.name}</span>
+                                <span className="text-xs font-bold text-emerald-600">{formatPrice(person.total)}</span>
+                              </div>
+                              <table className="w-full text-xs">
+                                <tbody>
+                                  {personRows.map((row, i) => (
+                                    <tr key={i} className={`border-b border-gray-50 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}`}>
+                                      <td className="px-5 py-2 font-medium text-gray-700">{row.name}</td>
+                                      <td className="px-3 py-2 text-center font-black text-emerald-600 w-16">{row.qty}</td>
+                                      <td className="px-3 py-2 text-right text-gray-400 w-24">{formatPrice(row.price)}</td>
+                                      <td className="px-5 py-2 text-right font-bold text-gray-700 w-28">{formatPrice(row.subtotal)}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )
+                        })}
+
+                        {/* Total consolidado por producto */}
+                        {persons.length > 1 && (
+                          <div className="border-t-2 border-indigo-100">
+                            <div className="px-5 py-2.5 bg-indigo-50/40">
+                              <span className="text-xs font-bold text-indigo-500 uppercase tracking-wider">Total consolidado por producto</span>
+                            </div>
+                            <table className="w-full text-xs">
+                              <tbody>
+                                {totalRows.map((row, i) => (
+                                  <tr key={i} className={`border-b border-indigo-50 ${i % 2 === 0 ? 'bg-white' : 'bg-indigo-50/20'}`}>
+                                    <td className="px-5 py-2 font-medium text-gray-700">{row.name}</td>
+                                    <td className="px-3 py-2 text-center font-black text-indigo-600 w-16">{row.qty}</td>
+                                    <td className="px-3 py-2 text-right text-gray-400 w-24">{formatPrice(row.price)}</td>
+                                    <td className="px-5 py-2 text-right font-bold text-gray-800 w-28">{formatPrice(row.subtotal)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                              <tfoot>
+                                <tr className="bg-indigo-50 border-t border-indigo-100">
+                                  <td className="px-5 py-2.5 font-black text-indigo-700" colSpan={3}>TOTAL {client.name.toUpperCase()}</td>
+                                  <td className="px-5 py-2.5 text-right font-black text-indigo-700">{formatPrice(client.total)}</td>
+                                </tr>
+                              </tfoot>
+                            </table>
+                          </div>
+                        )}
+
+                        {/* Si hay solo una persona, mostrar total directamente */}
+                        {persons.length === 1 && (
+                          <div className="bg-indigo-50 border-t border-indigo-100 px-5 py-2.5 flex justify-between">
+                            <span className="font-black text-indigo-700 text-xs uppercase tracking-wider">TOTAL {client.name.toUpperCase()}</span>
+                            <span className="font-black text-indigo-700">{formatPrice(client.total)}</span>
+                          </div>
+                        )}
                       </Card>
                     )
                   })}
