@@ -263,8 +263,9 @@ function DispatchModal({
         const prod = products.find(p => p.id === item.product_id)
         const agreedPrice = prod?.category_id ? catPriceMap[prod.category_id] : undefined
         const unitPrice = agreedPrice ?? item.unit_price ?? 0
+        const productName = item.product_name || prod?.name || 'Producto'
         if (!byPerson[person].items[item.product_id]) {
-          byPerson[person].items[item.product_id] = { product_id: item.product_id, product_name: item.product_name, quantity: 0, unit_price: unitPrice }
+          byPerson[person].items[item.product_id] = { product_id: item.product_id, product_name: productName, quantity: 0, unit_price: unitPrice }
         }
         byPerson[person].items[item.product_id].quantity += item.quantity
       }
