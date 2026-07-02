@@ -734,7 +734,7 @@ function QuickEntryTab({ clients, products, onSaved }: { clients: CompanyClient[
         <div className="flex justify-end">
           <Button
             onClick={handleSave}
-            disabled={saving || filledItems.length === 0}
+            disabled={saving || (filledItems.length === 0 && filledExtras.length === 0)}
             className="bg-violet-600 hover:bg-violet-700 text-white flex items-center gap-2 px-6"
           >
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
