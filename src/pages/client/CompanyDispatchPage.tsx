@@ -477,9 +477,13 @@ function QuickEntryTab({ clients, products, onSaved }: { clients: CompanyClient[
   }, [catPriceMap, products])
 
   const [collapsedCats, setCollapsedCats] = useState<Set<string>>(new Set())
+  const [prices, setPrices] = useState<Record<string, string>>({})
 
-  // When client changes, reset quantities
-  useEffect(() => { setQtys({}) }, [clientId])
+  // When client changes, reset quantities and prices
+  useEffect(() => {
+    setQtys({})
+    setPrices({})
+  }, [clientId])
 
   const activeProducts = products.filter(p => p.is_active)
 
@@ -507,12 +511,9 @@ function QuickEntryTab({ clients, products, onSaved }: { clients: CompanyClient[
   })
 
   const allProducts = groupedProducts.flatMap(g => g.products)
+  const getEffectivePrice = (p: Product) => parseFloat(prices[p.id] || '') || priceMap[p.id] || p.price
   const filledItems = allProducts.filter(p => parseInt(qtys[p.id] || '0') > 0)
-  const total = filledItems.reduce((s, p) => {
-    const qty = parseInt(qtys[p.id] || '0')
-    const price = priceMap[p.id] ?? p.price
-    return s + qty * price
-  }, 0)
+  const total = filledItems.reduce((s, p) => s + parseInt(qtys[p.id] || '0') * getEffectivePrice(p), 0)
 
   const handleSave = async () => {
     if (!clientId) { showToast('error', 'Seleccioná una empresa'); return }
@@ -525,7 +526,7 @@ function QuickEntryTab({ clients, products, onSaved }: { clients: CompanyClient[
         employee_name: employeeName || undefined,
         items: filledItems.map(p => {
           const qty = parseInt(qtys[p.id] || '0')
-          const price = priceMap[p.id] ?? p.price
+          const price = getEffectivePrice(p)
           return { product_id: p.id, product_name: p.name, quantity: qty, unit_price: price, subtotal: qty * price }
         }),
       })
@@ -603,15 +604,22 @@ function QuickEntryTab({ clients, products, onSaved }: { clients: CompanyClient[
                     <tbody>
                       {group.products.map((p, i) => {
                         const qty = parseInt(qtys[p.id] || '0')
-                        const price = priceMap[p.id] ?? p.price
+                        const price = getEffectivePrice(p)
                         const sub = qty * price
+                        const displayPrice = prices[p.id] !== undefined ? prices[p.id] : String(priceMap[p.id] ?? p.price)
                         return (
                           <tr key={p.id} className={`border-b border-gray-50 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}`}>
                             <td className="px-5 py-3 font-medium text-gray-800">{p.name}</td>
-                            <td className="px-4 py-3 text-right text-sm font-bold text-indigo-600">
-                              {priceMap[p.id]
-                                ? formatPrice(priceMap[p.id])
-                                : <span className="text-gray-400 font-normal text-xs">{formatPrice(p.price)}</span>}
+                            <td className="px-4 py-1.5 text-right">
+                              <div className="relative flex items-center justify-end">
+                                <span className="absolute left-2 text-gray-400 text-[10px]">$</span>
+                                <input
+                                  type="number" min="0"
+                                  value={displayPrice}
+                                  onChange={e => setPrices(prev => ({ ...prev, [p.id]: e.target.value }))}
+                                  className="w-28 pl-5 pr-2 py-1.5 text-xs font-bold text-indigo-600 border border-indigo-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-400 text-right"
+                                />
+                              </div>
                             </td>
                             <td className="px-4 py-3 text-center">
                               <input
