@@ -541,7 +541,9 @@ function QuickEntryTab({ clients, products, onSaved }: { clients: CompanyClient[
         items: [...productItems, ...extraItems],
       })
       showToast('success', 'Pedido registrado')
+      setClientId('')
       setQtys({})
+      setPrices({})
       setEmployeeName('')
       setExtras([{ name: '', price: '', qty: '' }])
       onSaved()
