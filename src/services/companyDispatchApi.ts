@@ -146,6 +146,25 @@ export const companyDispatchApi = {
     return data
   },
 
+  updateDispatch: async (id: string, patch: { date?: string; employee_name?: string | null; notes?: string | null; items: { product_id: string | null; product_name: string; quantity: number; unit_price: number; subtotal: number }[] }): Promise<CompanyDispatch> => {
+    const total = patch.items.reduce((s, i) => s + i.subtotal, 0)
+    const { data, error } = await supabase
+      .from('company_dispatches')
+      .update({ date: patch.date, employee_name: patch.employee_name ?? null, notes: patch.notes ?? null, total })
+      .eq('id', id)
+      .select()
+      .single()
+    if (error) throw error
+    await supabase.from('company_dispatch_items').delete().eq('dispatch_id', id)
+    if (patch.items.length > 0) {
+      const { error: itemsError } = await supabase
+        .from('company_dispatch_items')
+        .insert(patch.items.map(i => ({ dispatch_id: id, ...i })))
+      if (itemsError) throw itemsError
+    }
+    return data
+  },
+
   deleteDispatch: async (id: string) => {
     await supabase.from('company_dispatch_items').delete().eq('dispatch_id', id)
     const { error } = await supabase.from('company_dispatches').delete().eq('id', id)

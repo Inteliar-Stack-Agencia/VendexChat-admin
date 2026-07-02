@@ -162,6 +162,142 @@ function ClientModal({
   )
 }
 
+// ─── Edit Dispatch Modal ──────────────────────────────────────────────────────
+
+function EditDispatchModal({
+  dispatch,
+  onSave,
+  onClose,
+}: {
+  dispatch: CompanyDispatch
+  onSave: () => void
+  onClose: () => void
+}) {
+  const [date, setDate] = useState(dispatch.date)
+  const [employeeName, setEmployeeName] = useState(dispatch.employee_name || '')
+  const [items, setItems] = useState(
+    (dispatch.items || []).map(it => ({
+      product_id: it.product_id ?? null,
+      product_name: it.product_name,
+      quantity: String(it.quantity),
+      unit_price: String(it.unit_price),
+    }))
+  )
+  const [saving, setSaving] = useState(false)
+
+  const updateItem = (i: number, patch: Partial<typeof items[0]>) =>
+    setItems(prev => prev.map((it, idx) => idx === i ? { ...it, ...patch } : it))
+
+  const removeItem = (i: number) => setItems(prev => prev.filter((_, idx) => idx !== i))
+
+  const addRow = () => setItems(prev => [...prev, { product_id: null, product_name: '', quantity: '', unit_price: '' }])
+
+  const total = items.reduce((s, it) => s + (parseInt(it.quantity) || 0) * (parseFloat(it.unit_price) || 0), 0)
+
+  const handleSave = async () => {
+    const filled = items.filter(it => it.product_name.trim() && parseInt(it.quantity) > 0)
+    if (filled.length === 0) { showToast('error', 'Ingresá al menos un ítem con cantidad'); return }
+    setSaving(true)
+    try {
+      await companyDispatchApi.updateDispatch(dispatch.id, {
+        date,
+        employee_name: employeeName || null,
+        items: filled.map(it => {
+          const qty = parseInt(it.quantity)
+          const price = parseFloat(it.unit_price) || 0
+          return { product_id: it.product_id, product_name: it.product_name.trim(), quantity: qty, unit_price: price, subtotal: qty * price }
+        }),
+      })
+      showToast('success', 'Despacho actualizado')
+      onSave()
+      onClose()
+    } catch (err) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      showToast('error', (err as any)?.message || 'Error al guardar')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between p-6 border-b border-gray-100 shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 bg-amber-50 rounded-xl flex items-center justify-center">
+              <Edit2 className="w-5 h-5 text-amber-600" />
+            </div>
+            <div>
+              <h2 className="font-bold text-gray-900">Editar despacho</h2>
+              <p className="text-xs text-gray-400 mt-0.5">{(dispatch.client as { name: string })?.name}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100"><X className="w-5 h-5 text-gray-400" /></button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Día de entrega</label>
+              <input type="date" value={date} onChange={e => setDate(e.target.value)}
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Empleado / receptor</label>
+              <input value={employeeName} onChange={e => setEmployeeName(e.target.value)} placeholder="Opcional"
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300" />
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-gray-100 overflow-hidden">
+            <div className="grid grid-cols-[1fr_100px_80px_80px_32px] gap-2 px-4 py-2.5 bg-gray-50 border-b border-gray-100">
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Producto</span>
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider text-right">Precio</span>
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider text-center">Cant.</span>
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider text-right">Subtotal</span>
+              <span />
+            </div>
+            <div className="divide-y divide-gray-50">
+              {items.map((it, i) => {
+                const sub = (parseInt(it.quantity) || 0) * (parseFloat(it.unit_price) || 0)
+                return (
+                  <div key={i} className="grid grid-cols-[1fr_100px_80px_80px_32px] gap-2 items-center px-4 py-2">
+                    <input value={it.product_name} onChange={e => updateItem(i, { product_name: e.target.value })}
+                      className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-amber-300" />
+                    <input type="number" min="0" value={it.unit_price} onChange={e => updateItem(i, { unit_price: e.target.value })}
+                      className="w-full border border-indigo-200 rounded-lg px-2 py-1.5 text-xs font-bold text-indigo-600 text-right focus:outline-none focus:ring-1 focus:ring-indigo-400" />
+                    <input type="number" min="0" value={it.quantity} onChange={e => updateItem(i, { quantity: e.target.value })}
+                      className="w-full text-center border border-gray-200 rounded-lg px-2 py-1.5 text-xs font-black focus:outline-none focus:ring-1 focus:ring-amber-300" />
+                    <span className={`text-right text-xs font-black pr-1 ${sub > 0 ? 'text-emerald-600' : 'text-gray-300'}`}>{sub > 0 ? formatPrice(sub) : '—'}</span>
+                    <button onClick={() => removeItem(i)} className="p-1 text-gray-300 hover:text-red-500 rounded transition-colors"><X className="w-3.5 h-3.5" /></button>
+                  </div>
+                )
+              })}
+            </div>
+            <div className="px-4 py-2 border-t border-gray-100">
+              <button onClick={addRow} className="text-xs text-amber-600 hover:text-amber-800 font-bold flex items-center gap-1">
+                <Plus className="w-3.5 h-3.5" /> Agregar fila
+              </button>
+            </div>
+          </div>
+
+          <div className="bg-amber-50 rounded-xl p-3 flex items-center justify-between">
+            <span className="text-sm font-semibold text-amber-700">Total despacho</span>
+            <span className="text-xl font-black text-amber-700">{formatPrice(total)}</span>
+          </div>
+        </div>
+
+        <div className="flex gap-3 p-6 border-t border-gray-100 shrink-0">
+          <Button variant="ghost" className="flex-1" onClick={onClose}>Cancelar</Button>
+          <Button className="flex-1 bg-amber-500 hover:bg-amber-600 text-white" onClick={handleSave} disabled={saving}>
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Guardar cambios'}
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Dispatch Form Modal ──────────────────────────────────────────────────────
 
 function DispatchModal({
@@ -762,6 +898,7 @@ export default function CompanyDispatchPage() {
   const [showClientModal, setShowClientModal] = useState(false)
   const [editingClient, setEditingClient] = useState<CompanyClient | undefined>()
   const [showDispatchModal, setShowDispatchModal] = useState(false)
+  const [editingDispatch, setEditingDispatch] = useState<CompanyDispatch | undefined>()
   const [weekOffset, setWeekOffset] = useState(0)
   const [summaryDispatches, setSummaryDispatches] = useState<CompanyDispatch[]>([])
   const [summaryLoading, setSummaryLoading] = useState(false)
@@ -998,6 +1135,9 @@ export default function CompanyDispatchPage() {
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
                             <span className="font-black text-emerald-600 text-sm">{formatPrice((d.items || []).reduce((s, it) => s + it.subtotal, 0))}</span>
+                            <button onClick={() => setEditingDispatch(d)} className="p-1.5 text-gray-300 hover:text-amber-500 rounded-lg hover:bg-amber-50 transition-colors">
+                              <Edit2 className="w-4 h-4" />
+                            </button>
                             <button onClick={() => handleDeleteDispatch(d.id)} className="p-1.5 text-gray-300 hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors">
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -1220,6 +1360,13 @@ export default function CompanyDispatchPage() {
           products={products}
           onSave={load}
           onClose={() => setShowDispatchModal(false)}
+        />
+      )}
+      {editingDispatch && (
+        <EditDispatchModal
+          dispatch={editingDispatch}
+          onSave={load}
+          onClose={() => setEditingDispatch(undefined)}
         />
       )}
     </div>
