@@ -851,13 +851,11 @@ function ProductionGrid({ products, onCostUpdated }: { products: Product[]; onCo
   const [weekStart, setWeekStart] = useState<Date>(() => getWeekStart(new Date()))
   const [weekData, setWeekData] = useState<Awaited<ReturnType<typeof productionApi.getWeekData>> | null>(null)
   const [loading, setLoading] = useState(true)
-  // pending[productId][date] = qty string being edited
-  const [pending, setPending] = useState<Record<string, Record<string, string>>>({})
-  const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
-  // edit mode for cost_price
+  // unified edit mode: pending qtys + costs, explicit save
   const [editMode, setEditMode] = useState(false)
+  const [pendingQty, setPendingQty] = useState<Record<string, Record<string, string>>>({})
   const [pendingCosts, setPendingCosts] = useState<Record<string, string>>({})
-  const [savingCosts, setSavingCosts] = useState(false)
+  const [saving, setSaving] = useState(false)
 
   const allWeekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
   // Only Mon–Fri (getDay: 1=Mon … 5=Fri)
@@ -869,7 +867,8 @@ function ProductionGrid({ products, onCostUpdated }: { products: Product[]; onCo
 
   const load = useCallback(async () => {
     setLoading(true)
-    setPending({})
+    setPendingQty({})
+    setPendingCosts({})
     try {
       const data = await productionApi.getWeekData(weekStartISO, weekEndISO)
       setWeekData(data)
@@ -882,98 +881,144 @@ function ProductionGrid({ products, onCostUpdated }: { products: Product[]; onCo
 
   useEffect(() => { load() }, [load])
 
+  // When changing week, exit edit mode
+  useEffect(() => {
+    setEditMode(false)
+    setPendingQty({})
+    setPendingCosts({})
+  }, [weekStartISO])
+
   const getProduction = (productId: string, date: string): number =>
     weekData?.production[productId]?.[date] ?? 0
 
-  const getSales = (productId: string, date: string) =>
-    weekData?.sales[productId]?.[date] ?? { qty: 0, revenue: 0 }
+  // Cost for this week: pendingCosts > production_log cost > product.cost_price
+  const getWeekCost = (product: Product): number | null => {
+    if (pendingCosts[product.id] !== undefined) return parseFloat(pendingCosts[product.id]) || null
+    const logCost = weekData?.costs[product.id]
+    if (logCost != null) return logCost
+    return product.cost_price != null ? Number(product.cost_price) : null
+  }
 
-  const getPendingVal = (productId: string, date: string): string => {
-    if (pending[productId]?.[date] !== undefined) return pending[productId][date]
+  const getQtyVal = (productId: string, date: string): string => {
+    if (pendingQty[productId]?.[date] !== undefined) return pendingQty[productId][date]
     const v = getProduction(productId, date)
     return v === 0 ? '' : String(v)
   }
 
-  const handleCellChange = (productId: string, date: string, val: string) => {
-    setPending((prev) => ({
+  const handleQtyChange = (productId: string, date: string, val: string) => {
+    setPendingQty((prev) => ({
       ...prev,
       [productId]: { ...(prev[productId] || {}), [date]: val },
     }))
-
-    // debounce auto-save 800ms
-    const key = `${productId}__${date}`
-    clearTimeout(saveTimers.current[key])
-    saveTimers.current[key] = setTimeout(async () => {
-      const qty = parseInt(val) || 0
-      try {
-        if (qty > 0) {
-          await productionApi.upsertEntry(date, productId, qty)
-        } else {
-          await productionApi.deleteEntry(date, productId)
-        }
-        // refresh silently
-        const data = await productionApi.getWeekData(weekStartISO, weekEndISO)
-        setWeekData(data)
-      } catch {
-        showToast('error', 'Error al guardar')
-      }
-    }, 800)
   }
 
-  // Totals per product (production only — analysis moved to Cierre tab)
   const productTotals = (productId: string) => {
     let produced = 0
     for (const day of weekDays) {
       const d = toISO(day)
-      const pv = pending[productId]?.[d]
+      const pv = pendingQty[productId]?.[d]
       produced += pv !== undefined ? (parseInt(pv) || 0) : getProduction(productId, d)
     }
     return { produced }
   }
 
   const grandProduced = products.reduce((s, p) => s + productTotals(p.id).produced, 0)
-
   const activeProducts = products.filter((p) => p.is_active)
 
-  const handleSaveCosts = async () => {
-    setSavingCosts(true)
+  const enterEditMode = () => {
+    // Pre-fill pending with current saved values so user sees what exists
+    const initQty: Record<string, Record<string, string>> = {}
+    const initCosts: Record<string, string> = {}
+    for (const p of activeProducts) {
+      initQty[p.id] = {}
+      for (const day of weekDays) {
+        const d = toISO(day)
+        const v = getProduction(p.id, d)
+        initQty[p.id][d] = v === 0 ? '' : String(v)
+      }
+      const wc = weekData?.costs[p.id]
+      const fallback = p.cost_price != null ? Number(p.cost_price) : null
+      const cost = wc ?? fallback
+      initCosts[p.id] = cost != null ? String(cost) : ''
+    }
+    setPendingQty(initQty)
+    setPendingCosts(initCosts)
+    setEditMode(true)
+  }
+
+  const cancelEdit = () => {
+    setEditMode(false)
+    setPendingQty({})
+    setPendingCosts({})
+  }
+
+  const handleSave = async () => {
+    setSaving(true)
     try {
-      const updates = Object.entries(pendingCosts).filter(([, v]) => v !== '')
-      await Promise.all(updates.map(([id, val]) => productsApi.update(id, { cost_price: parseFloat(val) || null })))
-      showToast('success', 'Costos actualizados')
-      setPendingCosts({})
+      const storeId = await import('../../services/coreApi').then(m => m.getStoreId())
+      const weekDatesISO = weekDays.map(d => toISO(d))
+
+      // Build entries map from pendingQty
+      const entries: Record<string, Record<string, number>> = {}
+      for (const p of activeProducts) {
+        entries[p.id] = {}
+        for (const d of weekDatesISO) {
+          entries[p.id][d] = parseInt(pendingQty[p.id]?.[d] || '0') || 0
+        }
+      }
+
+      // Build costs map: use pending cost or fallback to existing week cost
+      const costs: Record<string, number | null> = {}
+      for (const p of activeProducts) {
+        const v = pendingCosts[p.id]
+        costs[p.id] = v !== undefined && v !== '' ? parseFloat(v) : (weekData?.costs[p.id] ?? null)
+      }
+
+      await productionApi.saveWeekEntries(weekDatesISO, entries, costs, storeId)
+
+      showToast('success', 'Producción guardada')
       setEditMode(false)
+      setPendingQty({})
+      setPendingCosts({})
+      await load()
       onCostUpdated()
-    } catch {
-      showToast('error', 'Error al guardar costos')
+    } catch (err) {
+      showToast('error', `Error al guardar: ${err instanceof Error ? err.message : 'desconocido'}`)
     } finally {
-      setSavingCosts(false)
+      setSaving(false)
     }
   }
 
   return (
     <div className="space-y-4">
-      {/* Edit / Save costs bar */}
-      <div className="flex items-center justify-end gap-3">
-        {editMode ? (
-          <>
-            <button onClick={() => { setEditMode(false); setPendingCosts({}) }}
-              className="px-4 py-2 text-sm font-semibold text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors">
-              Cancelar
+      {/* Edit / Save bar */}
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-xs text-gray-400">
+          {editMode
+            ? 'Modo edición · modificá cantidades y costos · los costos son exclusivos de esta semana'
+            : 'Los costos se guardan por semana · no afectan semanas anteriores ni futuras'}
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          {editMode ? (
+            <>
+              <button onClick={cancelEdit}
+                className="px-4 py-2 text-sm font-semibold text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors">
+                Cancelar
+              </button>
+              <button onClick={handleSave} disabled={saving}
+                className="flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-white bg-teal-600 hover:bg-teal-700 rounded-xl transition-colors disabled:opacity-60 shadow-sm">
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                Guardar cambios
+              </button>
+            </>
+          ) : (
+            <button onClick={enterEditMode}
+              className="flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-white bg-orange-500 hover:bg-orange-600 rounded-xl transition-colors shadow-sm">
+              <TableProperties className="w-4 h-4" />
+              Editar semana
             </button>
-            <button onClick={handleSaveCosts} disabled={savingCosts}
-              className="flex items-center gap-2 px-5 py-2 text-sm font-bold text-white bg-teal-600 hover:bg-teal-700 rounded-xl transition-colors disabled:opacity-60">
-              {savingCosts ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-              Guardar cambios
-            </button>
-          </>
-        ) : (
-          <button onClick={() => setEditMode(true)}
-            className="flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-white bg-orange-500 hover:bg-orange-600 rounded-xl transition-colors shadow-sm">
-            <TableProperties className="w-4 h-4" />
-            Editar costos de producción
-          </button>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Week navigation */}
@@ -1000,12 +1045,14 @@ function ProductionGrid({ products, onCostUpdated }: { products: Product[]; onCo
       {loading ? (
         <div className="flex justify-center py-12"><RefreshCw className="w-6 h-6 text-gray-300 animate-spin" /></div>
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-gray-100 bg-white">
+        <div className={`overflow-x-auto rounded-2xl border bg-white transition-colors ${editMode ? 'border-orange-200 ring-2 ring-orange-100' : 'border-gray-100'}`}>
           <table className="w-full text-xs">
             <thead>
-              <tr className="bg-gray-50 border-b border-gray-100">
-                <th className="text-left px-4 py-3 font-bold text-gray-500 uppercase tracking-wider min-w-[180px] sticky left-0 bg-gray-50 z-10">Producto</th>
-                <th className="text-center px-2 py-3 font-bold text-gray-400 uppercase tracking-wider min-w-[60px]">Costo</th>
+              <tr className={`border-b ${editMode ? 'bg-orange-50 border-orange-100' : 'bg-gray-50 border-gray-100'}`}>
+                <th className={`text-left px-4 py-3 font-bold text-gray-500 uppercase tracking-wider min-w-[180px] sticky left-0 z-10 ${editMode ? 'bg-orange-50' : 'bg-gray-50'}`}>Producto</th>
+                <th className="text-center px-2 py-3 font-bold text-orange-400 uppercase tracking-wider min-w-[80px]">
+                  Costo {editMode && <span className="text-[9px] normal-case text-orange-300 font-normal block">esta semana</span>}
+                </th>
                 <th className="text-center px-2 py-3 font-bold text-gray-400 uppercase tracking-wider min-w-[60px]">Venta</th>
                 {weekDays.map((day) => {
                   const iso = toISO(day)
@@ -1022,7 +1069,6 @@ function ProductionGrid({ products, onCostUpdated }: { products: Product[]; onCo
             </thead>
             <tbody>
               {(() => {
-                // Group by category
                 const groups: Record<string, { name: string; products: typeof activeProducts }> = {}
                 for (const p of activeProducts) {
                   const key = p.category_id || '__none__'
@@ -1030,8 +1076,13 @@ function ProductionGrid({ products, onCostUpdated }: { products: Product[]; onCo
                   if (!groups[key]) groups[key] = { name: catName, products: [] }
                   groups[key].products.push(p)
                 }
+                // Sort categories alphabetically, products within each category alphabetically
+                const sortedGroups = Object.entries(groups).sort(([, a], [, b]) => a.name.localeCompare(b.name, 'es'))
+                for (const [, group] of sortedGroups) {
+                  group.products.sort((a, b) => a.name.localeCompare(b.name, 'es'))
+                }
                 let rowIdx = 0
-                return Object.entries(groups).map(([catKey, group]) => (
+                return sortedGroups.map(([catKey, group]) => (
                   <>
                     <tr key={`cat-${catKey}`} className="bg-gray-100 border-t border-gray-200">
                       <td colSpan={4 + weekDays.length} className="px-4 py-1.5 text-[10px] font-black text-gray-500 uppercase tracking-widest sticky left-0">
@@ -1041,37 +1092,46 @@ function ProductionGrid({ products, onCostUpdated }: { products: Product[]; onCo
                     {group.products.map((product) => {
                       const { produced } = productTotals(product.id)
                       const bg = rowIdx++ % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'
+                      const weekCost = getWeekCost(product)
                       return (
                         <tr key={product.id} className={`border-b border-gray-50 ${bg}`}>
                           <td className={`px-4 py-2 font-medium text-gray-700 sticky left-0 z-10 ${bg}`}>{product.name}</td>
-                          <td className="px-1 py-1 text-center">
+                          <td className="px-1 py-1.5 text-center">
                             {editMode ? (
-                              <div className="relative">
-                                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-[10px]">$</span>
+                              <div className="relative flex items-center">
+                                <span className="absolute left-2 text-gray-400 text-[10px]">$</span>
                                 <input
                                   type="number" min="0" step="0.01"
-                                  value={pendingCosts[product.id] !== undefined ? pendingCosts[product.id] : (product.cost_price != null ? String(product.cost_price) : '')}
+                                  value={pendingCosts[product.id] ?? ''}
                                   placeholder="0"
                                   onChange={(e) => setPendingCosts((prev) => ({ ...prev, [product.id]: e.target.value }))}
-                                  className="w-20 text-center border border-orange-300 rounded-lg pl-5 pr-1 py-1 text-xs font-bold text-orange-600 focus:outline-none focus:ring-1 focus:ring-orange-400 bg-orange-50"
+                                  className="w-20 text-center border border-orange-300 rounded-lg pl-5 pr-1 py-1.5 text-xs font-bold text-orange-600 focus:outline-none focus:ring-1 focus:ring-orange-400 bg-orange-50"
                                 />
                               </div>
                             ) : (
-                              <span className="text-orange-400 font-medium text-[11px]">{product.cost_price ? formatPrice(product.cost_price) : '—'}</span>
+                              <span className="text-orange-400 font-medium text-[11px]">
+                                {weekCost != null ? formatPrice(weekCost) : '—'}
+                              </span>
                             )}
                           </td>
                           <td className="px-2 py-2 text-center text-gray-400 font-medium text-[11px]">{formatPrice(product.price)}</td>
                           {weekDays.map((day) => {
                             const iso = toISO(day)
-                            const prodVal = getPendingVal(product.id, iso)
+                            const qtyVal = getQtyVal(product.id, iso)
                             const isToday = iso === today
                             return (
                               <td key={iso} className={`px-1 py-1 ${isToday ? 'bg-teal-50/30' : ''}`}>
-                                <input
-                                  type="number" min="0" value={prodVal} placeholder="—"
-                                  onChange={(e) => handleCellChange(product.id, iso, e.target.value)}
-                                  className="w-14 text-center border border-gray-200 rounded-lg px-1 py-1 text-sm font-bold text-teal-700 focus:outline-none focus:ring-1 focus:ring-teal-400 focus:border-teal-400 bg-white"
-                                />
+                                {editMode ? (
+                                  <input
+                                    type="number" min="0" value={qtyVal} placeholder="0"
+                                    onChange={(e) => handleQtyChange(product.id, iso, e.target.value)}
+                                    className="w-14 text-center border border-teal-300 rounded-lg px-1 py-1 text-sm font-bold text-teal-700 focus:outline-none focus:ring-1 focus:ring-teal-400 focus:border-teal-400 bg-teal-50"
+                                  />
+                                ) : (
+                                  <div className="w-14 text-center text-sm font-bold text-teal-700 py-1">
+                                    {qtyVal || <span className="text-gray-300">—</span>}
+                                  </div>
+                                )}
                               </td>
                             )
                           })}
@@ -1090,7 +1150,7 @@ function ProductionGrid({ products, onCostUpdated }: { products: Product[]; onCo
                 {weekDays.map((day) => {
                   const iso = toISO(day)
                   const dayProd = activeProducts.reduce((s, p) => {
-                    const pv = pending[p.id]?.[iso]
+                    const pv = pendingQty[p.id]?.[iso]
                     return s + (pv !== undefined ? (parseInt(pv) || 0) : getProduction(p.id, iso))
                   }, 0)
                   return (
@@ -1107,7 +1167,9 @@ function ProductionGrid({ products, onCostUpdated }: { products: Product[]; onCo
       )}
 
       <p className="text-[10px] text-gray-400 text-center">
-        Editá las celdas de producción directamente · se guarda automáticamente · las ventas se toman del POS
+        {editMode
+          ? 'Los cambios no se guardan hasta que hagas clic en "Guardar cambios"'
+          : 'Presioná "Editar semana" para modificar cantidades y costos · los costos son por semana y no afectan el historial'}
       </p>
     </div>
   )
@@ -1307,8 +1369,12 @@ function StockCloseGrid({ products }: { products: Product[] }) {
                   if (!groups[key]) groups[key] = { name: catName, products: [] }
                   groups[key].products.push(p)
                 }
+                const sortedGroups = Object.entries(groups).sort(([, a], [, b]) => a.name.localeCompare(b.name, 'es'))
+                for (const [, group] of sortedGroups) {
+                  group.products.sort((a, b) => a.name.localeCompare(b.name, 'es'))
+                }
                 let rowIdx = 0
-                return Object.entries(groups).map(([catKey, group]) => (
+                return sortedGroups.map(([catKey, group]) => (
                   <>
                     <tr key={`cat-${catKey}`} className="bg-gray-100 border-t border-gray-200">
                       <td colSpan={9 + weekDays.length} className="px-4 py-1.5 text-[10px] font-black text-gray-500 uppercase tracking-widest sticky left-0">

@@ -10,6 +10,7 @@ export interface ProductionEntry {
   sobrante: number
   consumo_interno: number
   merma: number
+  cost_price: number | null
   created_at: string
 }
 
@@ -20,6 +21,8 @@ export interface ProductionWeekData {
   stock: Record<string, Record<string, { sobrante: number; consumo_interno: number; merma: number }>>
   // sales[product_id][date] = { qty, revenue }
   sales: Record<string, Record<string, { qty: number; revenue: number }>>
+  // costs[product_id] = cost_price for this week (from production_log)
+  costs: Record<string, number | null>
 }
 
 export const productionApi = {
@@ -58,6 +61,7 @@ export const productionApi = {
     // Build production map
     const production: Record<string, Record<string, number>> = {}
     const stock: Record<string, Record<string, { sobrante: number; consumo_interno: number; merma: number }>> = {}
+    const costs: Record<string, number | null> = {}
 
     for (const entry of (prodRes.data || []) as ProductionEntry[]) {
       if (!production[entry.product_id]) production[entry.product_id] = {}
@@ -68,6 +72,13 @@ export const productionApi = {
         sobrante: entry.sobrante || 0,
         consumo_interno: entry.consumo_interno || 0,
         merma: entry.merma || 0,
+      }
+
+      // Take first non-null cost_price found for this product in the week
+      if (!(entry.product_id in costs) && entry.cost_price != null) {
+        costs[entry.product_id] = entry.cost_price
+      } else if (!(entry.product_id in costs)) {
+        costs[entry.product_id] = null
       }
     }
 
@@ -89,7 +100,40 @@ export const productionApi = {
       }
     }
 
-    return { production, stock, sales }
+    return { production, stock, sales, costs }
+  },
+
+  // Save all production quantities for a week at once (used by edit mode)
+  saveWeekEntries: async (
+    weekDates: string[],
+    entries: Record<string, Record<string, number>>, // entries[productId][date] = qty
+    costs: Record<string, number | null>, // costs[productId] = cost for this week
+    storeId: string,
+  ) => {
+    const rows: Array<{
+      store_id: string
+      date: string
+      product_id: string
+      quantity: number
+      cost_price: number | null
+    }> = []
+
+    for (const [productId, datemap] of Object.entries(entries)) {
+      const cost = costs[productId] ?? null
+      for (const date of weekDates) {
+        const qty = datemap[date] ?? 0
+        if (qty > 0 || cost != null) {
+          rows.push({ store_id: storeId, date, product_id: productId, quantity: qty, cost_price: cost })
+        }
+      }
+    }
+
+    if (rows.length === 0) return
+
+    const { error } = await supabase
+      .from('production_log')
+      .upsert(rows, { onConflict: 'store_id,date,product_id' })
+    if (error) throw error
   },
 
   upsertEntry: async (date: string, productId: string, quantity: number) => {
