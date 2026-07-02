@@ -514,8 +514,15 @@ function QuickEntryTab({ clients, products, onSaved }: { clients: CompanyClient[
 
   const allProducts = groupedProducts.flatMap(g => g.products)
   const getEffectivePrice = (p: Product) => parseFloat(prices[p.id] || '') || priceMap[p.id] || p.price
-  const filledItems = allProducts.filter(p => parseInt(qtys[p.id] || '0') > 0)
+  const filledItems = allProducts.filter(p => {
+    const v = qtys[p.id]
+    const n = Number(v)
+    if (n > 0) return true
+    if (v && v !== '0') console.warn('producto con qty no contado:', p.name, 'id:', p.id, 'qty:', v, 'parsed:', n)
+    return false
+  })
   const filledExtras = extras.filter(e => e.name.trim() && parseInt(e.qty || '0') > 0)
+  console.log('DEBUG filledItems:', filledItems.map(p => p.name), 'allProducts count:', allProducts.length, 'qtys keys:', Object.keys(qtys))
   const extrasTotal = filledExtras.reduce((s, e) => s + parseInt(e.qty) * (parseFloat(e.price) || 0), 0)
   const total = filledItems.reduce((s, p) => s + parseInt(qtys[p.id] || '0') * getEffectivePrice(p), 0) + extrasTotal
 
