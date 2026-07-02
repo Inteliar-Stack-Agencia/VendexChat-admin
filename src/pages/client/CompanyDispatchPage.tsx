@@ -1197,11 +1197,12 @@ export default function CompanyDispatchPage() {
                   </div>
 
                   {Object.values(summaryByClient).sort((a, b) => a.name.localeCompare(b.name, 'es')).map(client => {
-                    // Group dispatches by employee/person
-                    const byPerson: Record<string, { name: string; items: Record<string, { name: string; qty: number; price: number; subtotal: number }> }> = {}
+                    // Group dispatches by employee/person, keep dispatch refs for editing
+                    const byPerson: Record<string, { name: string; dispatches: CompanyDispatch[]; items: Record<string, { name: string; qty: number; price: number; subtotal: number }> }> = {}
                     for (const d of client.dispatches) {
                       const person = d.employee_name || 'Sin nombre'
-                      if (!byPerson[person]) byPerson[person] = { name: person, items: {} }
+                      if (!byPerson[person]) byPerson[person] = { name: person, dispatches: [], items: {} }
+                      byPerson[person].dispatches.push(d)
                       for (const it of d.items || []) {
                         const key = it.product_name
                         if (!byPerson[person].items[key]) byPerson[person].items[key] = { name: it.product_name, qty: 0, price: it.unit_price, subtotal: 0 }
@@ -1245,7 +1246,16 @@ export default function CompanyDispatchPage() {
                             <div key={pi} className={pi > 0 ? 'border-t border-gray-100' : ''}>
                               <div className="flex items-center justify-between px-5 py-2.5 bg-gray-50/60">
                                 <span className="text-xs font-bold text-gray-600 uppercase tracking-wider">👤 {person.name}</span>
-                                <span className="text-xs font-bold text-emerald-600">{formatPrice(person.total)}</span>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-bold text-emerald-600">{formatPrice(person.total)}</span>
+                                  <button
+                                    onClick={() => setEditingDispatch(person.dispatches[person.dispatches.length - 1])}
+                                    className="p-1 text-gray-300 hover:text-amber-500 rounded hover:bg-amber-50 transition-colors"
+                                    title="Editar despacho"
+                                  >
+                                    <Edit2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
                               </div>
                               <table className="w-full text-xs">
                                 <tbody>
