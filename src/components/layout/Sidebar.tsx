@@ -29,10 +29,12 @@ import {
 interface SidebarProps {
   isOpen: boolean
   onClose: () => void
+  storeSlug?: string
 }
 
-export default function Sidebar({ isOpen, onClose }: SidebarProps) {
+export default function Sidebar({ isOpen, onClose, storeSlug }: SidebarProps) {
   const { logout, isSuperadmin, subscription } = useAuth()
+  const isEmpresas = storeSlug === 'empresas'
   const hasPro = ['pro', 'vip', 'ultra'].includes(subscription?.plan_type || '')
   const navigate = useNavigate()
   const isImpersonating = !!localStorage.getItem('vendexchat_impersonated_store')
@@ -107,111 +109,125 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                   <LayoutDashboard className="w-5 h-5" />
                   Dashboard
                 </NavLink>
-                <NavLink to="/pos" className={linkClass} onClick={onClose}>
-                  <Receipt className="w-5 h-5" />
-                  POS
-                  <span className="ml-auto text-[8px] bg-emerald-100 text-emerald-600 px-1.5 py-0.5 rounded font-black uppercase">Nuevo</span>
-                </NavLink>
+                {!isEmpresas && (
+                  <NavLink to="/pos" className={linkClass} onClick={onClose}>
+                    <Receipt className="w-5 h-5" />
+                    POS
+                    <span className="ml-auto text-[8px] bg-emerald-100 text-emerald-600 px-1.5 py-0.5 rounded font-black uppercase">Nuevo</span>
+                  </NavLink>
+                )}
                 <NavLink to="/orders" className={linkClass} onClick={onClose}>
                   <ShoppingCart className="w-5 h-5" />
                   Pedidos
                 </NavLink>
-                <NavLink to="/products" className={linkClass} onClick={onClose}>
-                  <Package className="w-5 h-5" />
-                  Productos
-                </NavLink>
-                <NavLink to="/categories" className={linkClass} onClick={onClose}>
-                  <FolderOpen className="w-5 h-5" />
-                  Categorías
-                </NavLink>
-                {hasPro && (
-                  <NavLink to="/modifiers" className={linkClass} onClick={onClose}>
-                    <UtensilsCrossed className="w-5 h-5" />
-                    Personalizaciones
-                    <span className="ml-auto text-[8px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded font-black uppercase">PRO</span>
-                  </NavLink>
+                {!isEmpresas && (
+                  <>
+                    <NavLink to="/products" className={linkClass} onClick={onClose}>
+                      <Package className="w-5 h-5" />
+                      Productos
+                    </NavLink>
+                    <NavLink to="/categories" className={linkClass} onClick={onClose}>
+                      <FolderOpen className="w-5 h-5" />
+                      Categorías
+                    </NavLink>
+                    {hasPro && (
+                      <NavLink to="/modifiers" className={linkClass} onClick={onClose}>
+                        <UtensilsCrossed className="w-5 h-5" />
+                        Personalizaciones
+                        <span className="ml-auto text-[8px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded font-black uppercase">PRO</span>
+                      </NavLink>
+                    )}
+                    <NavLink to="/customers" className={linkClass} onClick={onClose}>
+                      <Users className="w-5 h-5" />
+                      Clientes
+                      <span className="ml-auto text-[8px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded font-black uppercase">PRO</span>
+                    </NavLink>
+                  </>
                 )}
-                <NavLink to="/customers" className={linkClass} onClick={onClose}>
-                  <Users className="w-5 h-5" />
-                  Clientes
-                  <span className="ml-auto text-[8px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded font-black uppercase">PRO</span>
-                </NavLink>
                 <NavLink to="/stats" className={linkClass} onClick={onClose}>
                   <BarChart3 className="w-5 h-5" />
                   Estadísticas
                   <span className="ml-auto text-[8px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded font-black uppercase">PRO</span>
                 </NavLink>
-                <NavLink to="/ai-importer" className={linkClass} onClick={onClose}>
-                  <Wand2 className="w-5 h-5" />
-                  Importador IA
-                  <span className="ml-auto text-[8px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded font-black uppercase">PRO</span>
-                </NavLink>
-                <NavLink to="/expenses" className={linkClass} onClick={onClose}>
-                  <TrendingDown className="w-5 h-5" />
-                  Gastos & Proveedores
-                  <span className="ml-auto text-[8px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded font-black uppercase">PRO</span>
-                </NavLink>
-                <NavLink to="/cash" className={linkClass} onClick={onClose}>
-                  <Landmark className="w-5 h-5" />
-                  Caja
-                  <span className="ml-auto text-[8px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded font-black uppercase">PRO</span>
-                </NavLink>
+                {!isEmpresas && (
+                  <>
+                    <NavLink to="/ai-importer" className={linkClass} onClick={onClose}>
+                      <Wand2 className="w-5 h-5" />
+                      Importador IA
+                      <span className="ml-auto text-[8px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded font-black uppercase">PRO</span>
+                    </NavLink>
+                    <NavLink to="/expenses" className={linkClass} onClick={onClose}>
+                      <TrendingDown className="w-5 h-5" />
+                      Gastos & Proveedores
+                      <span className="ml-auto text-[8px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded font-black uppercase">PRO</span>
+                    </NavLink>
+                    <NavLink to="/cash" className={linkClass} onClick={onClose}>
+                      <Landmark className="w-5 h-5" />
+                      Caja
+                      <span className="ml-auto text-[8px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded font-black uppercase">PRO</span>
+                    </NavLink>
+                  </>
+                )}
               </div>
 
-              <div className="pt-2 pb-2">
-                <p className="px-4 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Módulos VIP</p>
-                <NavLink to="/crm-ia" className={linkClass} onClick={onClose}>
-                  <Brain className="w-5 h-5" />
-                  CRM IA
-                  <span className="ml-auto text-[8px] bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded font-black uppercase">VIP</span>
-                </NavLink>
-                <NavLink to="/logistics" className={linkClass} onClick={onClose}>
-                  <Truck className="w-5 h-5" />
-                  Logística
-                  <span className="ml-auto text-[8px] bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded font-black uppercase">VIP</span>
-                </NavLink>
-                <NavLink to="/bot" className={linkClass} onClick={onClose}>
-                  <Bot className="w-5 h-5" />
-                  Asistente Tienda
-                  <span className="ml-auto text-[8px] bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded font-black uppercase">VIP</span>
-                </NavLink>
-                <NavLink to="/inventory" className={linkClass} onClick={onClose}>
-                  <PackageCheck className="w-5 h-5" />
-                  Inventario
-                  <span className="ml-auto text-[8px] bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded font-black uppercase">VIP</span>
-                </NavLink>
-                <NavLink to="/balance" className={linkClass} onClick={onClose}>
-                  <BarChart3 className="w-5 h-5" />
-                  Balance & P&L
-                  <span className="ml-auto text-[8px] bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded font-black uppercase">VIP</span>
-                </NavLink>
-              </div>
+              {!isEmpresas && (
+                <div className="pt-2 pb-2">
+                  <p className="px-4 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Módulos VIP</p>
+                  <NavLink to="/crm-ia" className={linkClass} onClick={onClose}>
+                    <Brain className="w-5 h-5" />
+                    CRM IA
+                    <span className="ml-auto text-[8px] bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded font-black uppercase">VIP</span>
+                  </NavLink>
+                  <NavLink to="/logistics" className={linkClass} onClick={onClose}>
+                    <Truck className="w-5 h-5" />
+                    Logística
+                    <span className="ml-auto text-[8px] bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded font-black uppercase">VIP</span>
+                  </NavLink>
+                  <NavLink to="/bot" className={linkClass} onClick={onClose}>
+                    <Bot className="w-5 h-5" />
+                    Asistente Tienda
+                    <span className="ml-auto text-[8px] bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded font-black uppercase">VIP</span>
+                  </NavLink>
+                  <NavLink to="/inventory" className={linkClass} onClick={onClose}>
+                    <PackageCheck className="w-5 h-5" />
+                    Inventario
+                    <span className="ml-auto text-[8px] bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded font-black uppercase">VIP</span>
+                  </NavLink>
+                  <NavLink to="/balance" className={linkClass} onClick={onClose}>
+                    <BarChart3 className="w-5 h-5" />
+                    Balance & P&L
+                    <span className="ml-auto text-[8px] bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded font-black uppercase">VIP</span>
+                  </NavLink>
+                </div>
+              )}
 
-              <div className="pt-2 pb-2">
-                <p className="px-4 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1">
-                  <Crown className="w-3 h-3" /> Módulos ULTRA
-                </p>
-                <NavLink to="/ai-intelligence" className={linkClass} onClick={onClose}>
-                  <Cpu className="w-5 h-5" />
-                  Inteligencia IA
-                  <span className="ml-auto text-[8px] bg-purple-100 text-purple-600 px-1.5 py-0.5 rounded font-black uppercase">ULTRA</span>
-                </NavLink>
-                <NavLink to="/stats-ia" className={linkClass} onClick={onClose}>
-                  <BarChart3 className="w-5 h-5" />
-                  Estadísticas IA
-                  <span className="ml-auto text-[8px] bg-purple-100 text-purple-600 px-1.5 py-0.5 rounded font-black uppercase">ULTRA</span>
-                </NavLink>
-                <NavLink to="/whatsapp-bot" className={linkClass} onClick={onClose}>
-                  <Bot className="w-5 h-5" />
-                  Bot WhatsApp
-                  <span className="ml-auto text-[8px] bg-purple-100 text-purple-600 px-1.5 py-0.5 rounded font-black uppercase">ULTRA</span>
-                </NavLink>
-                <NavLink to="/bot-feedback" className={linkClass} onClick={onClose}>
-                  <MessageSquareWarning className="w-5 h-5" />
-                  Feedback IA
-                  <span className="ml-auto text-[8px] bg-purple-100 text-purple-600 px-1.5 py-0.5 rounded font-black uppercase">ULTRA</span>
-                </NavLink>
-              </div>
+              {!isEmpresas && (
+                <div className="pt-2 pb-2">
+                  <p className="px-4 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1">
+                    <Crown className="w-3 h-3" /> Módulos ULTRA
+                  </p>
+                  <NavLink to="/ai-intelligence" className={linkClass} onClick={onClose}>
+                    <Cpu className="w-5 h-5" />
+                    Inteligencia IA
+                    <span className="ml-auto text-[8px] bg-purple-100 text-purple-600 px-1.5 py-0.5 rounded font-black uppercase">ULTRA</span>
+                  </NavLink>
+                  <NavLink to="/stats-ia" className={linkClass} onClick={onClose}>
+                    <BarChart3 className="w-5 h-5" />
+                    Estadísticas IA
+                    <span className="ml-auto text-[8px] bg-purple-100 text-purple-600 px-1.5 py-0.5 rounded font-black uppercase">ULTRA</span>
+                  </NavLink>
+                  <NavLink to="/whatsapp-bot" className={linkClass} onClick={onClose}>
+                    <Bot className="w-5 h-5" />
+                    Bot WhatsApp
+                    <span className="ml-auto text-[8px] bg-purple-100 text-purple-600 px-1.5 py-0.5 rounded font-black uppercase">ULTRA</span>
+                  </NavLink>
+                  <NavLink to="/bot-feedback" className={linkClass} onClick={onClose}>
+                    <MessageSquareWarning className="w-5 h-5" />
+                    Feedback IA
+                    <span className="ml-auto text-[8px] bg-purple-100 text-purple-600 px-1.5 py-0.5 rounded font-black uppercase">ULTRA</span>
+                  </NavLink>
+                </div>
+              )}
             </>
           )}
         </nav>
