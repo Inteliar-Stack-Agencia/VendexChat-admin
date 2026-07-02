@@ -28,6 +28,7 @@ export default function BulkPriceEditorPage() {
     const [saving, setSaving] = useState(false)
     const [selectedCategory, setSelectedCategory] = useState<string>('all')
     const [editedPrices, setEditedPrices] = useState<Record<string, number>>({})
+    const [editedCosts, setEditedCosts] = useState<Record<string, number>>({})
     const [percentAdjust, setPercentAdjust] = useState<string>('')
     const [roundAmount, setRoundAmount] = useState<string>('')
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -92,26 +93,31 @@ export default function BulkPriceEditorPage() {
         })
     }
 
-    const hasChanges = Object.keys(editedPrices).length > 0
+    const hasChanges = Object.keys(editedPrices).length > 0 || Object.keys(editedCosts).length > 0
 
-    const changedCount = Object.keys(editedPrices).length
+    const changedCount = new Set([...Object.keys(editedPrices), ...Object.keys(editedCosts)]).size
 
     const handlePriceChange = (productId: string, newPrice: string) => {
         const price = parseFloat(newPrice)
         if (isNaN(price) || price < 0) return
-
         const product = products.find(p => p.id === productId)
         if (!product) return
-
-        // Si el precio es igual al original, quitarlo del mapa de edits
         if (price === product.price) {
-            setEditedPrices(prev => {
-                const next = { ...prev }
-                delete next[productId]
-                return next
-            })
+            setEditedPrices(prev => { const next = { ...prev }; delete next[productId]; return next })
         } else {
             setEditedPrices(prev => ({ ...prev, [productId]: price }))
+        }
+    }
+
+    const handleCostChange = (productId: string, newCost: string) => {
+        const cost = parseFloat(newCost)
+        if (isNaN(cost) || cost < 0) return
+        const product = products.find(p => p.id === productId)
+        if (!product) return
+        if (cost === (product.cost_price ?? 0)) {
+            setEditedCosts(prev => { const next = { ...prev }; delete next[productId]; return next })
+        } else {
+            setEditedCosts(prev => ({ ...prev, [productId]: cost }))
         }
     }
 
@@ -156,33 +162,34 @@ export default function BulkPriceEditorPage() {
 
     const resetChanges = () => {
         setEditedPrices({})
+        setEditedCosts({})
         setPercentAdjust('')
         showToast('success', 'Cambios descartados')
     }
 
     const handleSave = async () => {
         if (!hasChanges) return
-
         setSaving(true)
         try {
-            const updates = Object.entries(editedPrices).map(([id, price]) =>
-                productsApi.update(id, { price })
-            )
+            const allIds = new Set([...Object.keys(editedPrices), ...Object.keys(editedCosts)])
+            const updates = Array.from(allIds).map(id => {
+                const patch: { price?: number; cost_price?: number } = {}
+                if (editedPrices[id] !== undefined) patch.price = editedPrices[id]
+                if (editedCosts[id] !== undefined) patch.cost_price = editedCosts[id]
+                return productsApi.update(id, patch)
+            })
             await Promise.all(updates)
-
-            // Actualizar estado local
-            setProducts(prev =>
-                prev.map(p =>
-                    editedPrices[p.id] !== undefined
-                        ? { ...p, price: editedPrices[p.id] }
-                        : p
-                )
-            )
+            setProducts(prev => prev.map(p => ({
+                ...p,
+                ...(editedPrices[p.id] !== undefined ? { price: editedPrices[p.id] } : {}),
+                ...(editedCosts[p.id] !== undefined ? { cost_price: editedCosts[p.id] } : {}),
+            })))
             setEditedPrices({})
-            showToast('success', `${updates.length} precios actualizados correctamente`)
+            setEditedCosts({})
+            showToast('success', `${allIds.size} producto${allIds.size > 1 ? 's' : ''} actualizados correctamente`)
         } catch (err: unknown) {
-            console.error('Error saving prices:', err)
-            showToast('error', err instanceof Error ? err.message : 'Error al guardar precios')
+            console.error('Error saving:', err)
+            showToast('error', err instanceof Error ? err.message : 'Error al guardar')
         } finally {
             setSaving(false)
         }
@@ -388,9 +395,11 @@ export default function BulkPriceEditorPage() {
                                     <th className="text-left px-4 py-4 w-10">#</th>
                                     <th className="text-left px-4 py-4">Producto</th>
                                     <th className="text-left px-4 py-4 hidden sm:table-cell">Categoría</th>
-                                    <th className="text-right px-4 py-4 w-36">Precio Actual</th>
-                                    <th className="text-right px-4 py-4 w-40">Nuevo Precio</th>
-                                    <th className="text-right px-4 py-4 w-24">Dif.</th>
+                                    <th className="text-right px-4 py-4 w-32">Precio Actual</th>
+                                    <th className="text-right px-4 py-4 w-36">Nuevo Precio</th>
+                                    <th className="text-right px-4 py-4 w-32 text-amber-500">Costo Actual</th>
+                                    <th className="text-right px-4 py-4 w-36 text-amber-500">Nuevo Costo</th>
+                                    <th className="text-right px-4 py-4 w-20">Dif.</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
@@ -401,10 +410,14 @@ export default function BulkPriceEditorPage() {
                                     const diff = isEdited ? editedPrice - product.price : 0
                                     const diffPct = isEdited && product.price > 0 ? ((diff / product.price) * 100).toFixed(1) : null
 
+                                    const editedCost = editedCosts[product.id]
+                                    const isCostEdited = editedCost !== undefined
+                                    const currentCost = product.cost_price ?? 0
+
                                     return (
                                         <tr
                                             key={product.id}
-                                            className={`group hover:bg-slate-50/50 transition-colors ${isEdited ? 'bg-indigo-50/30' : ''} ${isSelected ? 'bg-indigo-50/20' : ''}`}
+                                            className={`group hover:bg-slate-50/50 transition-colors ${isEdited || isCostEdited ? 'bg-indigo-50/30' : ''} ${isSelected ? 'bg-indigo-50/20' : ''}`}
                                         >
                                             <td className="text-center px-3 py-3">
                                                 <button onClick={() => toggleSelect(product.id)} className="hover:text-indigo-600 transition-colors">
@@ -442,6 +455,25 @@ export default function BulkPriceEditorPage() {
                                                     className={`w-full text-right px-3 py-1.5 rounded-xl border-2 text-sm font-black transition-all ${isEdited
                                                         ? 'bg-indigo-50 border-indigo-200 text-indigo-700 focus:border-indigo-500'
                                                         : 'bg-slate-50 border-transparent text-slate-700 focus:border-slate-200 hover:bg-white hover:border-slate-200'
+                                                        }`}
+                                                />
+                                            </td>
+                                            <td className="px-4 py-3 text-right">
+                                                <span className={`font-black text-sm ${isCostEdited ? 'text-slate-400 line-through' : 'text-amber-600'}`}>
+                                                    {currentCost > 0 ? formatPrice(currentCost) : <span className="text-slate-300">—</span>}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3 text-right">
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    step="1"
+                                                    value={isCostEdited ? editedCost : currentCost || ''}
+                                                    placeholder="0"
+                                                    onChange={e => handleCostChange(product.id, e.target.value)}
+                                                    className={`w-full text-right px-3 py-1.5 rounded-xl border-2 text-sm font-black transition-all ${isCostEdited
+                                                        ? 'bg-amber-50 border-amber-200 text-amber-700 focus:border-amber-500'
+                                                        : 'bg-slate-50 border-transparent text-slate-700 focus:border-amber-200 hover:bg-white hover:border-slate-200'
                                                         }`}
                                                 />
                                             </td>
