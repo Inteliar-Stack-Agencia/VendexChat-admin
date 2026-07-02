@@ -1237,7 +1237,7 @@ function StockCloseGrid({ products }: { products: Product[] }) {
     const vendidoReal = Math.max(0, totalProduced - sobrante - consumo - merma)
     const weekCost = weekData?.costs[product.id] ?? (product.cost_price != null ? Number(product.cost_price) : null)
     const ingresos = vendidoReal * Number(product.price || 0)
-    const costo = totalProduced * (weekCost ?? 0)
+    const costo = vendidoReal * (weekCost ?? 0)
     const margen = ingresos - costo
     return { totalProduced, sobrante, consumo, merma, vendidoReal, ingresos, costo, margen }
   }
@@ -1780,16 +1780,7 @@ export default function InventoryPage() {
               </Button>
             </div>
           )}
-          {tab === 'stock' && (
-            <div className="flex gap-2">
-              <Button onClick={() => setShowEgressForm(true)} className="bg-orange-500 hover:bg-orange-600 text-white flex items-center gap-2">
-                <ArrowUpCircle className="w-4 h-4" /> Egreso
-              </Button>
-              <Button onClick={() => setShowForm(true)} className="bg-teal-600 hover:bg-teal-700 text-white flex items-center gap-2">
-                <ArrowDownCircle className="w-4 h-4" /> Ingreso
-              </Button>
-            </div>
-          )}
+          {tab === 'stock' && <div />}
           {tab === 'ventas' && <div />}
         </div>
 
