@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Building2, Plus, Trash2, X, Loader2, ChevronLeft, ChevronRight, Edit2, FileSpreadsheet, Users, Download, Check, Zap, ChevronDown } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { Card, Button } from '../../components/common'
@@ -322,8 +322,64 @@ function DispatchModal({
   const [importTo, setImportTo] = useState(() => getWeekBounds(0).to)
   const [orderResults, setOrderResults] = useState<{ id: string; customer_name: string; created_at: string; items: { product_id: string; product_name: string; quantity: number; unit_price: number }[] }[]>([])
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set())
+  const [xlsxItems, setXlsxItems] = useState<{ product_name: string; quantity: number; unit_price: number }[]>([])
+  const xlsxInputRef = useRef<HTMLInputElement>(null)
 
   const selectedClient = clients.find(c => c.id === clientId)
+
+  const handleXlsxFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      const wb = XLSX.read(ev.target?.result, { type: 'binary' })
+      const ws = wb.Sheets[wb.SheetNames[0]]
+      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' })
+      // Detect columns flexibly (unidades/cantidad, producto/descripción, total/precio)
+      const parsed = rows.map(row => {
+        const keys = Object.keys(row)
+        const qtyKey = keys.find(k => /unid|cant/i.test(k)) || keys[0]
+        const nameKey = keys.find(k => /prod|desc|nombre/i.test(k)) || keys[1]
+        const priceKey = keys.find(k => /total|precio|unit/i.test(k)) || keys[2]
+        const qty = parseFloat(String(row[qtyKey] || '0')) || 0
+        const name = String(row[nameKey] || '').trim()
+        const price = parseFloat(String(row[priceKey] || '0').replace(/[^0-9.,]/g, '').replace(',', '.')) || 0
+        return { product_name: name, quantity: qty, unit_price: qty > 0 && price > 0 ? price / qty : price }
+      }).filter(r => r.product_name && r.quantity > 0)
+      setXlsxItems(parsed)
+    }
+    reader.readAsBinaryString(file)
+    e.target.value = ''
+  }
+
+  const handleSaveXlsx = async () => {
+    if (!clientId) { showToast('error', 'Seleccioná una empresa'); return }
+    if (xlsxItems.length === 0) return
+    setSaving(true)
+    try {
+      await companyDispatchApi.createDispatch({
+        client_id: clientId,
+        date,
+        employee_name: employeeName || undefined,
+        notes: notes || undefined,
+        items: xlsxItems.map(it => ({
+          product_id: null,
+          product_name: it.product_name,
+          quantity: it.quantity,
+          unit_price: it.unit_price,
+          subtotal: it.quantity * it.unit_price,
+        })),
+      })
+      showToast('success', 'Despacho importado desde Excel')
+      onSave()
+      onClose()
+    } catch (err) {
+      const msg = (err as any)?.message || JSON.stringify(err)
+      showToast('error', msg || 'Error al guardar')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   // When client changes, auto-fill items resolving price by category
   useEffect(() => {
@@ -576,6 +632,60 @@ function DispatchModal({
             </div>
           )}
 
+          {/* Import from Excel */}
+          {clientId && (
+            <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                <p className="text-xs font-bold text-emerald-700 uppercase tracking-wider">Importar desde Excel</p>
+              </div>
+              <p className="text-[11px] text-emerald-600">
+                El archivo debe tener columnas: <strong>unidades</strong>, <strong>producto</strong>, <strong>total</strong>.
+              </p>
+              <input ref={xlsxInputRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleXlsxFile} />
+              <button
+                onClick={() => xlsxInputRef.current?.click()}
+                className="w-full flex items-center justify-center gap-2 bg-white border border-emerald-300 hover:bg-emerald-50 text-emerald-700 text-xs font-bold py-2 px-4 rounded-lg transition-colors"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5" />
+                Seleccionar archivo
+              </button>
+
+              {xlsxItems.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">{xlsxItems.length} filas importadas:</p>
+                  <div className="max-h-40 overflow-y-auto rounded-lg border border-emerald-200 bg-white">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="bg-emerald-50">
+                          <th className="px-3 py-1.5 text-left text-emerald-600 font-bold">Producto</th>
+                          <th className="px-3 py-1.5 text-center text-emerald-600 font-bold w-14">Cant.</th>
+                          <th className="px-3 py-1.5 text-right text-emerald-600 font-bold w-24">P. unit.</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {xlsxItems.map((it, i) => (
+                          <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-emerald-50/30'}>
+                            <td className="px-3 py-1.5 text-gray-700">{it.product_name}</td>
+                            <td className="px-3 py-1.5 text-center font-bold text-emerald-700">{it.quantity}</td>
+                            <td className="px-3 py-1.5 text-right text-gray-500">{formatPrice(it.unit_price)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <button
+                    onClick={handleSaveXlsx}
+                    disabled={saving}
+                    className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2 px-4 rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                    {saving ? 'Guardando...' : `Guardar ${xlsxItems.length} productos`}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="flex gap-3 p-6 border-t border-gray-100 shrink-0">
