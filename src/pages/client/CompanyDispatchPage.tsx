@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { Building2, Plus, Trash2, X, Loader2, ChevronLeft, ChevronRight, Edit2, FileSpreadsheet, Users, Download, Check, Zap } from 'lucide-react'
+import { Building2, Plus, Trash2, X, Loader2, ChevronLeft, ChevronRight, Edit2, FileSpreadsheet, Users, Download, Check, Zap, ChevronDown } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { Card, Button } from '../../components/common'
 import { showToast } from '../../components/common/Toast'
@@ -489,18 +489,38 @@ function QuickEntryTab({ clients, products, onSaved }: { clients: CompanyClient[
     return map
   }, [catPriceMap, products])
 
+  const [collapsedCats, setCollapsedCats] = useState<Set<string>>(new Set())
+
   // When client changes, reset quantities
   useEffect(() => { setQtys({}) }, [clientId])
 
   const activeProducts = products.filter(p => p.is_active)
 
-  // Only show products with agreed price (or all if none configured)
-  const displayProducts = useMemo(() => {
-    const withPrice = activeProducts.filter(p => priceMap[p.id])
-    return withPrice.length > 0 ? withPrice : activeProducts
-  }, [activeProducts, priceMap])
+  // Group all active products by category, sorted alphabetically
+  const groupedProducts = useMemo(() => {
+    const groups: Record<string, { catName: string; catId: string; products: Product[] }> = {}
+    for (const p of activeProducts) {
+      const catId = p.category_id || '__sin_categoria__'
+      const catName = (p as Product & { category_name?: string }).category_name || 'Sin categoría'
+      if (!groups[catId]) groups[catId] = { catId, catName, products: [] }
+      groups[catId].products.push(p)
+    }
+    // Sort products within each category alphabetically
+    for (const g of Object.values(groups)) {
+      g.products.sort((a, b) => a.name.localeCompare(b.name, 'es'))
+    }
+    // Sort categories alphabetically
+    return Object.values(groups).sort((a, b) => a.catName.localeCompare(b.catName, 'es'))
+  }, [activeProducts])
 
-  const filledItems = displayProducts.filter(p => parseInt(qtys[p.id] || '0') > 0)
+  const toggleCat = (catId: string) => setCollapsedCats(prev => {
+    const next = new Set(prev)
+    next.has(catId) ? next.delete(catId) : next.add(catId)
+    return next
+  })
+
+  const allProducts = groupedProducts.flatMap(g => g.products)
+  const filledItems = allProducts.filter(p => parseInt(qtys[p.id] || '0') > 0)
   const total = filledItems.reduce((s, p) => {
     const qty = parseInt(qtys[p.id] || '0')
     const price = priceMap[p.id] ?? p.price
@@ -561,55 +581,81 @@ function QuickEntryTab({ clients, products, onSaved }: { clients: CompanyClient[
         </div>
       </Card>
 
-      {/* Quick qty grid */}
-      {clientId && displayProducts.length > 0 && (
-        <Card className="overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-gray-50 border-b border-gray-100">
-                <th className="text-left px-5 py-3 font-bold text-gray-500 uppercase tracking-wider text-xs">Producto</th>
-                <th className="text-right px-4 py-3 font-bold text-gray-500 uppercase tracking-wider text-xs w-32">Precio empresa</th>
-                <th className="text-center px-4 py-3 font-bold text-gray-500 uppercase tracking-wider text-xs w-28">Cantidad</th>
-                <th className="text-right px-5 py-3 font-bold text-gray-500 uppercase tracking-wider text-xs w-32">Subtotal</th>
-              </tr>
-            </thead>
-            <tbody>
-              {displayProducts.map((p, i) => {
-                const qty = parseInt(qtys[p.id] || '0')
-                const price = priceMap[p.id] ?? p.price
-                const sub = qty * price
-                return (
-                  <tr key={p.id} className={`border-b border-gray-50 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}`}>
-                    <td className="px-5 py-3 font-medium text-gray-800">{p.name}</td>
-                    <td className="px-4 py-3 text-right text-sm font-bold text-indigo-600">
-                      {priceMap[p.id] ? formatPrice(priceMap[p.id]) : <span className="text-gray-400 font-normal text-xs">{formatPrice(p.price)} (normal)</span>}
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <input
-                        type="number" min="0"
-                        value={qtys[p.id] || ''}
-                        placeholder="0"
-                        onChange={e => setQtys(prev => ({ ...prev, [p.id]: e.target.value }))}
-                        className={`w-20 text-center border rounded-xl px-2 py-2 text-base font-black focus:outline-none focus:ring-2 transition-colors ${qty > 0 ? 'border-violet-300 text-violet-700 bg-violet-50 focus:ring-violet-400' : 'border-gray-200 text-gray-400 focus:ring-violet-300'}`}
-                      />
-                    </td>
-                    <td className={`px-5 py-3 text-right font-black text-base ${sub > 0 ? 'text-emerald-600' : 'text-gray-200'}`}>
-                      {sub > 0 ? formatPrice(sub) : '—'}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-            <tfoot>
-              <tr className="bg-violet-50 border-t border-violet-100">
-                <td className="px-5 py-3 font-black text-violet-700 text-sm" colSpan={3}>
-                  TOTAL · {filledItems.length} producto{filledItems.length !== 1 ? 's' : ''}
-                </td>
-                <td className="px-5 py-3 text-right font-black text-violet-700 text-lg">{formatPrice(total)}</td>
-              </tr>
-            </tfoot>
-          </table>
-        </Card>
+      {/* Quick qty grid — grouped by category */}
+      {clientId && groupedProducts.length > 0 && (
+        <div className="space-y-2">
+          {groupedProducts.map(group => {
+            const collapsed = collapsedCats.has(group.catId)
+            const catQtyFilled = group.products.filter(p => parseInt(qtys[p.id] || '0') > 0).length
+            return (
+              <Card key={group.catId} className="overflow-hidden">
+                {/* Category header — clickable to collapse */}
+                <button
+                  onClick={() => toggleCat(group.catId)}
+                  className="w-full flex items-center justify-between px-5 py-3 bg-gray-50 hover:bg-gray-100 transition-colors border-b border-gray-100"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-gray-700 text-sm uppercase tracking-wider">{group.catName}</span>
+                    {catQtyFilled > 0 && (
+                      <span className="text-[10px] bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full font-black">{catQtyFilled} ítem{catQtyFilled !== 1 ? 's' : ''}</span>
+                    )}
+                  </div>
+                  <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${collapsed ? '-rotate-90' : ''}`} />
+                </button>
+
+                {!collapsed && (
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-50">
+                        <th className="text-left px-5 py-2 font-bold text-gray-400 uppercase tracking-wider text-[10px]">Producto</th>
+                        <th className="text-right px-4 py-2 font-bold text-gray-400 uppercase tracking-wider text-[10px] w-32">Precio empresa</th>
+                        <th className="text-center px-4 py-2 font-bold text-gray-400 uppercase tracking-wider text-[10px] w-28">Cantidad</th>
+                        <th className="text-right px-5 py-2 font-bold text-gray-400 uppercase tracking-wider text-[10px] w-32">Subtotal</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {group.products.map((p, i) => {
+                        const qty = parseInt(qtys[p.id] || '0')
+                        const price = priceMap[p.id] ?? p.price
+                        const sub = qty * price
+                        return (
+                          <tr key={p.id} className={`border-b border-gray-50 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}`}>
+                            <td className="px-5 py-3 font-medium text-gray-800">{p.name}</td>
+                            <td className="px-4 py-3 text-right text-sm font-bold text-indigo-600">
+                              {priceMap[p.id]
+                                ? formatPrice(priceMap[p.id])
+                                : <span className="text-gray-400 font-normal text-xs">{formatPrice(p.price)}</span>}
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <input
+                                type="number" min="0"
+                                value={qtys[p.id] || ''}
+                                placeholder="0"
+                                onChange={e => setQtys(prev => ({ ...prev, [p.id]: e.target.value }))}
+                                className={`w-20 text-center border rounded-xl px-2 py-2 text-base font-black focus:outline-none focus:ring-2 transition-colors ${qty > 0 ? 'border-violet-300 text-violet-700 bg-violet-50 focus:ring-violet-400' : 'border-gray-200 text-gray-400 focus:ring-violet-300'}`}
+                              />
+                            </td>
+                            <td className={`px-5 py-3 text-right font-black text-base ${sub > 0 ? 'text-emerald-600' : 'text-gray-200'}`}>
+                              {sub > 0 ? formatPrice(sub) : '—'}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </Card>
+            )
+          })}
+
+          {/* Total bar */}
+          <Card className="px-5 py-3 bg-violet-50 flex items-center justify-between">
+            <span className="font-black text-violet-700 text-sm">
+              TOTAL · {filledItems.length} producto{filledItems.length !== 1 ? 's' : ''}
+            </span>
+            <span className="font-black text-violet-700 text-lg">{formatPrice(total)}</span>
+          </Card>
+        </div>
       )}
 
       {clientId && (
