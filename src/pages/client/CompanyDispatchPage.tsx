@@ -952,7 +952,7 @@ export default function CompanyDispatchPage() {
 
           {/* ── TAB: Despachos ── */}
           {tab === 'despachos' && (
-            <div className="space-y-3">
+            <div className="space-y-4">
               {dispatches.length === 0 ? (
                 <Card className="p-12 text-center">
                   <Building2 className="w-10 h-10 text-gray-200 mx-auto mb-3" />
@@ -961,37 +961,53 @@ export default function CompanyDispatchPage() {
                     {clients.length === 0 ? 'Primero creá una empresa en el tab "Empresas"' : 'Usá el botón "Registrar despacho" para agregar'}
                   </p>
                 </Card>
-              ) : (
-                dispatches.map(d => {
+              ) : (() => {
+                // Group by client
+                const byClient: Record<string, { name: string; total: number; dispatches: CompanyDispatch[] }> = {}
+                for (const d of dispatches) {
                   const cname = (d.client as { name: string })?.name || '—'
-                  return (
-                    <Card key={d.id} className="p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="font-bold text-gray-900 text-sm">{cname}</span>
-                            <span className="text-xs text-gray-400">{d.date}</span>
-                            {d.employee_name && <span className="text-xs text-gray-400">· {d.employee_name}</span>}
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            {(d.items || []).filter(it => it.quantity > 0).map(it => (
-                              <span key={it.id} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-medium">
-                                {it.quantity}× {it.product_name} <span className="text-gray-400">({formatPrice(it.unit_price)})</span>
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3 shrink-0">
-                          <span className="font-black text-emerald-600 text-base">{formatPrice(d.total)}</span>
-                          <button onClick={() => handleDeleteDispatch(d.id)} className="p-1.5 text-gray-300 hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors">
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
+                  if (!byClient[d.client_id]) byClient[d.client_id] = { name: cname, total: 0, dispatches: [] }
+                  byClient[d.client_id].total += (d.items || []).reduce((s, it) => s + it.subtotal, 0)
+                  byClient[d.client_id].dispatches.push(d)
+                }
+                return Object.values(byClient).sort((a, b) => a.name.localeCompare(b.name, 'es')).map(group => (
+                  <Card key={group.name} className="overflow-hidden">
+                    <div className="flex items-center justify-between px-5 py-3 bg-gray-50 border-b border-gray-100">
+                      <div className="flex items-center gap-2">
+                        <Building2 className="w-4 h-4 text-indigo-500" />
+                        <span className="font-bold text-gray-900">{group.name}</span>
+                        <span className="text-xs text-gray-400">· {group.dispatches.length} despacho{group.dispatches.length !== 1 ? 's' : ''}</span>
                       </div>
-                    </Card>
-                  )
-                })
-              )}
+                      <span className="font-black text-indigo-600">{formatPrice(group.total)}</span>
+                    </div>
+                    <div className="divide-y divide-gray-50">
+                      {group.dispatches.map(d => (
+                        <div key={d.id} className="flex items-start justify-between gap-3 px-5 py-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-xs text-gray-500">{d.date}</span>
+                              {d.employee_name && <span className="text-xs font-semibold text-gray-700">· {d.employee_name}</span>}
+                            </div>
+                            <div className="flex flex-wrap gap-1.5">
+                              {(d.items || []).filter(it => it.quantity > 0).map(it => (
+                                <span key={it.id} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-medium">
+                                  {it.quantity}× {it.product_name} <span className="text-gray-400">({formatPrice(it.unit_price)})</span>
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className="font-black text-emerald-600 text-sm">{formatPrice((d.items || []).reduce((s, it) => s + it.subtotal, 0))}</span>
+                            <button onClick={() => handleDeleteDispatch(d.id)} className="p-1.5 text-gray-300 hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors">
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </Card>
+                ))
+              })()}
             </div>
           )}
 
