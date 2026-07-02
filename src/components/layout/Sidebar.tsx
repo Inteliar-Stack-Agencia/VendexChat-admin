@@ -24,6 +24,7 @@ import {
   TrendingDown,
   PackageCheck,
   Landmark,
+  Building2,
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -124,6 +125,12 @@ export default function Sidebar({ isOpen, onClose, storeSlug }: SidebarProps) {
                   <Package className="w-5 h-5" />
                   Productos
                 </NavLink>
+                {isEmpresas && (
+                  <NavLink to="/company-dispatch" className={linkClass} onClick={onClose}>
+                    <Building2 className="w-5 h-5" />
+                    Despachos
+                  </NavLink>
+                )}
                 {!isEmpresas && (
                   <>
                     <NavLink to="/categories" className={linkClass} onClick={onClose}>

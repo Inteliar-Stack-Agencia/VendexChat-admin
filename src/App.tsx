@@ -52,6 +52,7 @@ const BotFeedbackPage = lazy(() => import('./pages/client/BotFeedbackPage'))
 const ExpensesPage = lazy(() => import('./pages/client/ExpensesPage'))
 const BalancePage = lazy(() => import('./pages/client/BalancePage'))
 const InventoryPage = lazy(() => import('./pages/client/InventoryPage'))
+const CompanyDispatchPage = lazy(() => import('./pages/client/CompanyDispatchPage'))
 const CashRegisterPage = lazy(() => import('./pages/client/CashRegisterPage'))
 const LegalPage = lazy(() => import('./pages/legal/LegalPage'))
 const TermsPage = lazy(() => import('./pages/legal/TermsPage'))
@@ -164,6 +165,7 @@ export default function App() {
               <Route path="/balance" element={<BalancePage />} />
               <Route path="/inventory" element={<InventoryPage />} />
               <Route path="/cash" element={<CashRegisterPage />} />
+              <Route path="/company-dispatch" element={<CompanyDispatchPage />} />
 
               {/* Redirigir root del merchant a dashboard */}
               <Route index element={<Navigate to="/dashboard" replace />} />
