@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Link } from 'react-router-dom'
-import { Eye, ShoppingCart, Printer, Archive, ArchiveRestore, Trash2 } from 'lucide-react'
+import { Eye, ShoppingCart, Printer, Archive, ArchiveRestore, Trash2, Search } from 'lucide-react'
 import { Card, Badge, EmptyState, Pagination, Button, ConfirmDialog, showToast } from '../../components/common'
 import { ordersApi } from '../../services/api'
 import { getStoreId } from '../../services/coreApi'
@@ -23,6 +23,8 @@ export default function OrdersPage() {
   const [dateFilter, setDateFilter] = useState('')
   const [archiveFilter, setArchiveFilter] = useState<'active' | 'archived' | 'all'>('active')
   const [deliveryFilter, setDeliveryFilter] = useState<'all' | 'delivery' | 'pickup'>('all')
+  const [customerSearch, setCustomerSearch] = useState('')
+  const [customerSearchDebounced, setCustomerSearchDebounced] = useState('')
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([])
@@ -41,11 +43,18 @@ export default function OrdersPage() {
     return order.customer_address ? 'delivery' : 'pickup'
   }
 
+  // Debounce customer search
+  useEffect(() => {
+    const t = setTimeout(() => { setCustomerSearchDebounced(customerSearch); setPage(1) }, 350)
+    return () => clearTimeout(t)
+  }, [customerSearch])
+
   const loadOrders = useCallback(async () => {
     setLoading(true)
     try {
       const params: Record<string, string | number> = { page, limit: 20 }
       if (statusFilter !== 'all') params.status = statusFilter
+      if (customerSearchDebounced.trim()) params.customer_search = customerSearchDebounced.trim()
 
       const now = new Date()
       if (dateFilter === 'today') {
@@ -68,7 +77,7 @@ export default function OrdersPage() {
     } finally {
       setLoading(false)
     }
-  }, [page, statusFilter, dateFilter])
+  }, [page, statusFilter, dateFilter, customerSearchDebounced])
 
   useEffect(() => {
     loadOrders()
@@ -222,7 +231,18 @@ export default function OrdersPage() {
 
       <Card>
         <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
-          <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="text"
+                value={customerSearch}
+                onChange={e => setCustomerSearch(e.target.value)}
+                placeholder="Buscar empresa o cliente..."
+                className="pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 w-52"
+              />
+            </div>
+
             <select
               value={statusFilter}
               onChange={(e) => { setStatusFilter(e.target.value); setPage(1) }}

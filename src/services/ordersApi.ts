@@ -33,6 +33,11 @@ export const ordersApi = {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             query = query.lte('created_at', (params as any).date_to + 'T23:59:59')
         }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        if ((params as any)?.customer_search) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            query = query.ilike('customer_name', `%${(params as any).customer_search}%`)
+        }
 
         const from = ((params?.page || 1) - 1) * (params?.limit || 10)
         const to = from + (params?.limit || 10) - 1
