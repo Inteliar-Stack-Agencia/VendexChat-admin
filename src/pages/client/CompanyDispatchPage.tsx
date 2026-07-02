@@ -832,7 +832,8 @@ export default function CompanyDispatchPage() {
   const summaryByClient = summaryDispatches.reduce((acc, d) => {
     const cname = (d.client as { name: string })?.name || 'Desconocido'
     if (!acc[d.client_id]) acc[d.client_id] = { name: cname, total: 0, dispatches: [] }
-    acc[d.client_id].total += d.total
+    // Sum from items to avoid stale d.total stored in DB
+    acc[d.client_id].total += (d.items || []).reduce((s, it) => s + it.subtotal, 0)
     acc[d.client_id].dispatches.push(d)
     return acc
   }, {} as Record<string, { name: string; total: number; dispatches: CompanyDispatch[] }>)
@@ -996,11 +997,10 @@ export default function CompanyDispatchPage() {
 
                   {Object.values(summaryByClient).sort((a, b) => a.name.localeCompare(b.name, 'es')).map(client => {
                     // Group dispatches by employee/person
-                    const byPerson: Record<string, { name: string; total: number; items: Record<string, { name: string; qty: number; price: number; subtotal: number }> }> = {}
+                    const byPerson: Record<string, { name: string; items: Record<string, { name: string; qty: number; price: number; subtotal: number }> }> = {}
                     for (const d of client.dispatches) {
                       const person = d.employee_name || 'Sin nombre'
-                      if (!byPerson[person]) byPerson[person] = { name: person, total: 0, items: {} }
-                      byPerson[person].total += d.total
+                      if (!byPerson[person]) byPerson[person] = { name: person, items: {} }
                       for (const it of d.items || []) {
                         const key = it.product_name
                         if (!byPerson[person].items[key]) byPerson[person].items[key] = { name: it.product_name, qty: 0, price: it.unit_price, subtotal: 0 }
@@ -1008,7 +1008,10 @@ export default function CompanyDispatchPage() {
                         byPerson[person].items[key].subtotal += it.subtotal
                       }
                     }
-                    const persons = Object.values(byPerson).sort((a, b) => a.name.localeCompare(b.name, 'es'))
+                    // Compute each person's total from their items (avoids stale d.total in DB)
+                    const persons = Object.values(byPerson)
+                      .map(p => ({ ...p, total: Object.values(p.items).reduce((s, it) => s + it.subtotal, 0) }))
+                      .sort((a, b) => a.name.localeCompare(b.name, 'es'))
 
                     // Total product summary across all dispatches (no duplication)
                     const totalItemMap: Record<string, { name: string; qty: number; price: number; subtotal: number }> = {}
