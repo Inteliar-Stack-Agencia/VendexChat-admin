@@ -478,11 +478,13 @@ function QuickEntryTab({ clients, products, onSaved }: { clients: CompanyClient[
 
   const [collapsedCats, setCollapsedCats] = useState<Set<string>>(new Set())
   const [prices, setPrices] = useState<Record<string, string>>({})
+  const [extras, setExtras] = useState<{ name: string; price: string; qty: string }[]>([{ name: '', price: '', qty: '' }])
 
   // When client changes, reset quantities and prices
   useEffect(() => {
     setQtys({})
     setPrices({})
+    setExtras([{ name: '', price: '', qty: '' }])
   }, [clientId])
 
   const activeProducts = products.filter(p => p.is_active)
@@ -513,26 +515,35 @@ function QuickEntryTab({ clients, products, onSaved }: { clients: CompanyClient[
   const allProducts = groupedProducts.flatMap(g => g.products)
   const getEffectivePrice = (p: Product) => parseFloat(prices[p.id] || '') || priceMap[p.id] || p.price
   const filledItems = allProducts.filter(p => parseInt(qtys[p.id] || '0') > 0)
-  const total = filledItems.reduce((s, p) => s + parseInt(qtys[p.id] || '0') * getEffectivePrice(p), 0)
+  const filledExtras = extras.filter(e => e.name.trim() && parseInt(e.qty || '0') > 0)
+  const extrasTotal = filledExtras.reduce((s, e) => s + parseInt(e.qty) * (parseFloat(e.price) || 0), 0)
+  const total = filledItems.reduce((s, p) => s + parseInt(qtys[p.id] || '0') * getEffectivePrice(p), 0) + extrasTotal
 
   const handleSave = async () => {
     if (!clientId) { showToast('error', 'Seleccioná una empresa'); return }
-    if (filledItems.length === 0) { showToast('error', 'Ingresá al menos una cantidad'); return }
+    if (filledItems.length === 0 && filledExtras.length === 0) { showToast('error', 'Ingresá al menos una cantidad'); return }
     setSaving(true)
     try {
+      const productItems = filledItems.map(p => {
+        const qty = parseInt(qtys[p.id] || '0')
+        const price = getEffectivePrice(p)
+        return { product_id: p.id, product_name: p.name, quantity: qty, unit_price: price, subtotal: qty * price }
+      })
+      const extraItems = filledExtras.map(e => {
+        const qty = parseInt(e.qty)
+        const price = parseFloat(e.price) || 0
+        return { product_id: null, product_name: e.name.trim(), quantity: qty, unit_price: price, subtotal: qty * price }
+      })
       await companyDispatchApi.createDispatch({
         client_id: clientId,
         date,
         employee_name: employeeName || undefined,
-        items: filledItems.map(p => {
-          const qty = parseInt(qtys[p.id] || '0')
-          const price = getEffectivePrice(p)
-          return { product_id: p.id, product_name: p.name, quantity: qty, unit_price: price, subtotal: qty * price }
-        }),
+        items: [...productItems, ...extraItems],
       })
       showToast('success', 'Pedido registrado')
       setQtys({})
       setEmployeeName('')
+      setExtras([{ name: '', price: '', qty: '' }])
       onSaved()
     } catch (err) {
       showToast('error', err instanceof Error ? err.message : 'Error al guardar')
@@ -643,10 +654,72 @@ function QuickEntryTab({ clients, products, onSaved }: { clients: CompanyClient[
             )
           })}
 
+          {/* OTROS — platos especiales manuales */}
+          <Card className="overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-3 bg-gray-50 border-b border-gray-100">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-gray-700 text-sm uppercase tracking-wider">Otros</span>
+                {filledExtras.length > 0 && (
+                  <span className="text-[10px] bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full font-black">{filledExtras.length} ítem{filledExtras.length !== 1 ? 's' : ''}</span>
+                )}
+              </div>
+              <span className="text-xs text-gray-400">Platos especiales / fuera de menú</span>
+            </div>
+            <div className="p-4 space-y-2">
+              <div className="grid grid-cols-[1fr_120px_80px_80px] gap-2 px-1 mb-1">
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Producto</span>
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider text-right">Precio</span>
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider text-center">Cant.</span>
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider text-right">Subtotal</span>
+              </div>
+              {extras.map((e, i) => {
+                const qty = parseInt(e.qty || '0')
+                const price = parseFloat(e.price || '0')
+                const sub = qty * price
+                return (
+                  <div key={i} className="grid grid-cols-[1fr_120px_80px_80px] gap-2 items-center">
+                    <input
+                      value={e.name}
+                      onChange={ev => setExtras(prev => prev.map((r, ri) => ri === i ? { ...r, name: ev.target.value } : r))}
+                      placeholder="Nombre del plato..."
+                      className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-violet-300"
+                    />
+                    <div className="relative">
+                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-[10px]">$</span>
+                      <input
+                        type="number" min="0"
+                        value={e.price}
+                        onChange={ev => setExtras(prev => prev.map((r, ri) => ri === i ? { ...r, price: ev.target.value } : r))}
+                        placeholder="0"
+                        className="w-full pl-5 pr-2 py-2 text-xs font-bold text-indigo-600 border border-indigo-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-400 text-right"
+                      />
+                    </div>
+                    <input
+                      type="number" min="0"
+                      value={e.qty}
+                      onChange={ev => setExtras(prev => prev.map((r, ri) => ri === i ? { ...r, qty: ev.target.value } : r))}
+                      placeholder="0"
+                      className={`w-full text-center border rounded-lg px-2 py-2 text-sm font-black focus:outline-none focus:ring-1 transition-colors ${qty > 0 ? 'border-violet-300 text-violet-700 bg-violet-50 focus:ring-violet-400' : 'border-gray-200 text-gray-400 focus:ring-violet-300'}`}
+                    />
+                    <span className={`text-right font-black text-sm pr-1 ${sub > 0 ? 'text-emerald-600' : 'text-gray-200'}`}>
+                      {sub > 0 ? formatPrice(sub) : '—'}
+                    </span>
+                  </div>
+                )
+              })}
+              <button
+                onClick={() => setExtras(prev => [...prev, { name: '', price: '', qty: '' }])}
+                className="mt-1 text-xs text-violet-600 hover:text-violet-800 font-bold flex items-center gap-1"
+              >
+                <Plus className="w-3.5 h-3.5" /> Agregar fila
+              </button>
+            </div>
+          </Card>
+
           {/* Total bar */}
           <Card className="px-5 py-3 bg-violet-50 flex items-center justify-between">
             <span className="font-black text-violet-700 text-sm">
-              TOTAL · {filledItems.length} producto{filledItems.length !== 1 ? 's' : ''}
+              TOTAL · {filledItems.length + filledExtras.length} producto{(filledItems.length + filledExtras.length) !== 1 ? 's' : ''}
             </span>
             <span className="font-black text-violet-700 text-lg">{formatPrice(total)}</span>
           </Card>
