@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
-import { Building2, Plus, Trash2, X, Loader2, ChevronLeft, ChevronRight, Edit2, FileSpreadsheet, Users, Download, Check } from 'lucide-react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import { Building2, Plus, Trash2, X, Loader2, ChevronLeft, ChevronRight, Edit2, FileSpreadsheet, Users, Download, Check, Zap } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { Card, Button } from '../../components/common'
 import { showToast } from '../../components/common/Toast'
@@ -467,12 +467,169 @@ function DispatchModal({
   )
 }
 
+// ─── Quick Entry (inline daily orders) ───────────────────────────────────────
+
+function QuickEntryTab({ clients, products, onSaved }: { clients: CompanyClient[]; products: Product[]; onSaved: () => void }) {
+  const [clientId, setClientId] = useState(clients[0]?.id || '')
+  const [date, setDate] = useState(today)
+  const [employeeName, setEmployeeName] = useState('')
+  const [qtys, setQtys] = useState<Record<string, string>>({})
+  const [saving, setSaving] = useState(false)
+
+  const selectedClient = clients.find(c => c.id === clientId)
+
+  // Build agreed-price map for the selected client
+  const priceMap = useMemo(() => {
+    const map: Record<string, number> = {}
+    for (const p of selectedClient?.prices || []) map[p.product_id] = p.price
+    return map
+  }, [selectedClient])
+
+  // When client changes, reset quantities
+  useEffect(() => { setQtys({}) }, [clientId])
+
+  const activeProducts = products.filter(p => p.is_active)
+
+  // Only show products with agreed price (or all if none configured)
+  const displayProducts = useMemo(() => {
+    const withPrice = activeProducts.filter(p => priceMap[p.id])
+    return withPrice.length > 0 ? withPrice : activeProducts
+  }, [activeProducts, priceMap])
+
+  const filledItems = displayProducts.filter(p => parseInt(qtys[p.id] || '0') > 0)
+  const total = filledItems.reduce((s, p) => {
+    const qty = parseInt(qtys[p.id] || '0')
+    const price = priceMap[p.id] ?? p.price
+    return s + qty * price
+  }, 0)
+
+  const handleSave = async () => {
+    if (!clientId) { showToast('error', 'Seleccioná una empresa'); return }
+    if (filledItems.length === 0) { showToast('error', 'Ingresá al menos una cantidad'); return }
+    setSaving(true)
+    try {
+      await companyDispatchApi.createDispatch({
+        client_id: clientId,
+        date,
+        employee_name: employeeName || undefined,
+        items: filledItems.map(p => {
+          const qty = parseInt(qtys[p.id] || '0')
+          const price = priceMap[p.id] ?? p.price
+          return { product_id: p.id, product_name: p.name, quantity: qty, unit_price: price, subtotal: qty * price }
+        }),
+      })
+      showToast('success', 'Pedido registrado')
+      setQtys({})
+      setEmployeeName('')
+      onSaved()
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : 'Error al guardar')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Header controls */}
+      <Card className="p-4">
+        <div className="grid grid-cols-3 gap-3">
+          <div className="col-span-1">
+            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Empresa</label>
+            <select value={clientId} onChange={e => setClientId(e.target.value)}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 bg-white font-semibold">
+              <option value="">Seleccioná...</option>
+              {clients.filter(c => c.is_active).map(c => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Fecha</label>
+            <input type="date" value={date} onChange={e => setDate(e.target.value)}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300" />
+          </div>
+          <div>
+            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Empleado / receptor</label>
+            <input value={employeeName} onChange={e => setEmployeeName(e.target.value)} placeholder="Opcional"
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300" />
+          </div>
+        </div>
+      </Card>
+
+      {/* Quick qty grid */}
+      {clientId && displayProducts.length > 0 && (
+        <Card className="overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-100">
+                <th className="text-left px-5 py-3 font-bold text-gray-500 uppercase tracking-wider text-xs">Producto</th>
+                <th className="text-right px-4 py-3 font-bold text-gray-500 uppercase tracking-wider text-xs w-32">Precio empresa</th>
+                <th className="text-center px-4 py-3 font-bold text-gray-500 uppercase tracking-wider text-xs w-28">Cantidad</th>
+                <th className="text-right px-5 py-3 font-bold text-gray-500 uppercase tracking-wider text-xs w-32">Subtotal</th>
+              </tr>
+            </thead>
+            <tbody>
+              {displayProducts.map((p, i) => {
+                const qty = parseInt(qtys[p.id] || '0')
+                const price = priceMap[p.id] ?? p.price
+                const sub = qty * price
+                return (
+                  <tr key={p.id} className={`border-b border-gray-50 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}`}>
+                    <td className="px-5 py-3 font-medium text-gray-800">{p.name}</td>
+                    <td className="px-4 py-3 text-right text-sm font-bold text-indigo-600">
+                      {priceMap[p.id] ? formatPrice(priceMap[p.id]) : <span className="text-gray-400 font-normal text-xs">{formatPrice(p.price)} (normal)</span>}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <input
+                        type="number" min="0"
+                        value={qtys[p.id] || ''}
+                        placeholder="0"
+                        onChange={e => setQtys(prev => ({ ...prev, [p.id]: e.target.value }))}
+                        className={`w-20 text-center border rounded-xl px-2 py-2 text-base font-black focus:outline-none focus:ring-2 transition-colors ${qty > 0 ? 'border-violet-300 text-violet-700 bg-violet-50 focus:ring-violet-400' : 'border-gray-200 text-gray-400 focus:ring-violet-300'}`}
+                      />
+                    </td>
+                    <td className={`px-5 py-3 text-right font-black text-base ${sub > 0 ? 'text-emerald-600' : 'text-gray-200'}`}>
+                      {sub > 0 ? formatPrice(sub) : '—'}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+            <tfoot>
+              <tr className="bg-violet-50 border-t border-violet-100">
+                <td className="px-5 py-3 font-black text-violet-700 text-sm" colSpan={3}>
+                  TOTAL · {filledItems.length} producto{filledItems.length !== 1 ? 's' : ''}
+                </td>
+                <td className="px-5 py-3 text-right font-black text-violet-700 text-lg">{formatPrice(total)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </Card>
+      )}
+
+      {clientId && (
+        <div className="flex justify-end">
+          <Button
+            onClick={handleSave}
+            disabled={saving || filledItems.length === 0}
+            className="bg-violet-600 hover:bg-violet-700 text-white flex items-center gap-2 px-6"
+          >
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+            {saving ? 'Guardando...' : `Registrar pedido${total > 0 ? ' · ' + formatPrice(total) : ''}`}
+          </Button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
-type Tab = 'clientes' | 'despachos' | 'resumen'
+type Tab = 'rapido' | 'clientes' | 'despachos' | 'resumen'
 
 export default function CompanyDispatchPage() {
-  const [tab, setTab] = useState<Tab>('despachos')
+  const [tab, setTab] = useState<Tab>('rapido')
   const [clients, setClients] = useState<CompanyClient[]>([])
   const [dispatches, setDispatches] = useState<CompanyDispatch[]>([])
   const [products, setProducts] = useState<Product[]>([])
@@ -602,10 +759,10 @@ export default function CompanyDispatchPage() {
               <Plus className="w-4 h-4" /> Nueva empresa
             </Button>
           )}
-          {tab === 'despachos' && (
+          {(tab === 'despachos' || tab === 'rapido') && (
             <Button onClick={() => setShowDispatchModal(true)} disabled={clients.length === 0}
               className="bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-2">
-              <Plus className="w-4 h-4" /> Registrar despacho
+              <Plus className="w-4 h-4" /> Despacho completo
             </Button>
           )}
           {tab === 'resumen' && summaryDispatches.length > 0 && (
@@ -618,9 +775,10 @@ export default function CompanyDispatchPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex bg-gray-100 rounded-xl p-1 gap-1 w-fit">
+      <div className="flex bg-gray-100 rounded-xl p-1 gap-1 w-fit flex-wrap">
         {([
-          { key: 'despachos', label: 'Despachos' },
+          { key: 'rapido', label: '⚡ Entrada rápida' },
+          { key: 'despachos', label: 'Historial' },
           { key: 'resumen', label: 'Resumen semanal' },
           { key: 'clientes', label: 'Empresas' },
         ] as { key: Tab; label: string }[]).map(t => (
@@ -635,6 +793,18 @@ export default function CompanyDispatchPage() {
         <div className="flex justify-center py-20"><Loader2 className="w-6 h-6 text-gray-300 animate-spin" /></div>
       ) : (
         <>
+          {/* ── TAB: Entrada rápida ── */}
+          {tab === 'rapido' && (
+            clients.length === 0 ? (
+              <Card className="p-12 text-center">
+                <Zap className="w-10 h-10 text-gray-200 mx-auto mb-3" />
+                <p className="text-gray-400 font-semibold">Primero creá empresas en el tab "Empresas"</p>
+              </Card>
+            ) : (
+              <QuickEntryTab clients={clients} products={products} onSaved={load} />
+            )
+          )}
+
           {/* ── TAB: Despachos ── */}
           {tab === 'despachos' && (
             <div className="space-y-3">
