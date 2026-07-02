@@ -120,12 +120,12 @@ export default function Sidebar({ isOpen, onClose, storeSlug }: SidebarProps) {
                   <ShoppingCart className="w-5 h-5" />
                   Pedidos
                 </NavLink>
+                <NavLink to="/products" className={linkClass} onClick={onClose}>
+                  <Package className="w-5 h-5" />
+                  Productos
+                </NavLink>
                 {!isEmpresas && (
                   <>
-                    <NavLink to="/products" className={linkClass} onClick={onClose}>
-                      <Package className="w-5 h-5" />
-                      Productos
-                    </NavLink>
                     <NavLink to="/categories" className={linkClass} onClick={onClose}>
                       <FolderOpen className="w-5 h-5" />
                       Categorías
