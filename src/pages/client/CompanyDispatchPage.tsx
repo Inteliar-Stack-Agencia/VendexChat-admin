@@ -1211,9 +1211,15 @@ export default function CompanyDispatchPage() {
                       }
                     }
                     // Compute each person's total from their items (avoids stale d.total in DB)
+                    const DAY_ORDER: Record<string, number> = { lunes: 0, martes: 1, miercoles: 2, miércoles: 2, jueves: 3, viernes: 4, sabado: 5, sábado: 5, domingo: 6 }
+                    const dayRank = (name: string) => { const k = name.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); return DAY_ORDER[k] ?? DAY_ORDER[name.toLowerCase()] ?? 99 }
                     const persons = Object.values(byPerson)
                       .map(p => ({ ...p, total: Object.values(p.items).reduce((s, it) => s + it.subtotal, 0) }))
-                      .sort((a, b) => a.name.localeCompare(b.name, 'es'))
+                      .sort((a, b) => {
+                        const ra = dayRank(a.name), rb = dayRank(b.name)
+                        if (ra !== 99 || rb !== 99) return ra - rb
+                        return a.name.localeCompare(b.name, 'es')
+                      })
 
                     // Total product summary across all dispatches (no duplication)
                     const totalItemMap: Record<string, { name: string; qty: number; price: number; subtotal: number }> = {}
