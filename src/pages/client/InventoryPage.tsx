@@ -847,13 +847,17 @@ function ImportProductionModal({ products, onImport, onClose }: ImportModalProps
 
 // ─── Production Grid ──────────────────────────────────────────────────────────
 
-function ProductionGrid({ products }: { products: Product[] }) {
+function ProductionGrid({ products, onCostUpdated }: { products: Product[]; onCostUpdated: () => void }) {
   const [weekStart, setWeekStart] = useState<Date>(() => getWeekStart(new Date()))
   const [weekData, setWeekData] = useState<Awaited<ReturnType<typeof productionApi.getWeekData>> | null>(null)
   const [loading, setLoading] = useState(true)
   // pending[productId][date] = qty string being edited
   const [pending, setPending] = useState<Record<string, Record<string, string>>>({})
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
+  // edit mode for cost_price
+  const [editMode, setEditMode] = useState(false)
+  const [pendingCosts, setPendingCosts] = useState<Record<string, string>>({})
+  const [savingCosts, setSavingCosts] = useState(false)
 
   const allWeekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
   // Only Mon–Fri (getDay: 1=Mon … 5=Fri)
@@ -931,8 +935,47 @@ function ProductionGrid({ products }: { products: Product[] }) {
 
   const activeProducts = products.filter((p) => p.is_active)
 
+  const handleSaveCosts = async () => {
+    setSavingCosts(true)
+    try {
+      const updates = Object.entries(pendingCosts).filter(([, v]) => v !== '')
+      await Promise.all(updates.map(([id, val]) => productsApi.update(id, { cost_price: parseFloat(val) || null })))
+      showToast('success', 'Costos actualizados')
+      setPendingCosts({})
+      setEditMode(false)
+      onCostUpdated()
+    } catch {
+      showToast('error', 'Error al guardar costos')
+    } finally {
+      setSavingCosts(false)
+    }
+  }
+
   return (
     <div className="space-y-4">
+      {/* Edit / Save costs bar */}
+      <div className="flex items-center justify-end gap-3">
+        {editMode ? (
+          <>
+            <button onClick={() => { setEditMode(false); setPendingCosts({}) }}
+              className="px-4 py-2 text-sm font-semibold text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors">
+              Cancelar
+            </button>
+            <button onClick={handleSaveCosts} disabled={savingCosts}
+              className="flex items-center gap-2 px-5 py-2 text-sm font-bold text-white bg-teal-600 hover:bg-teal-700 rounded-xl transition-colors disabled:opacity-60">
+              {savingCosts ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+              Guardar cambios
+            </button>
+          </>
+        ) : (
+          <button onClick={() => setEditMode(true)}
+            className="flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-white bg-orange-500 hover:bg-orange-600 rounded-xl transition-colors shadow-sm">
+            <TableProperties className="w-4 h-4" />
+            Editar costos de producción
+          </button>
+        )}
+      </div>
+
       {/* Week navigation */}
       <div className="flex items-center justify-between">
         <button onClick={() => setWeekStart(addDays(weekStart, -7))} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
@@ -1001,7 +1044,22 @@ function ProductionGrid({ products }: { products: Product[] }) {
                       return (
                         <tr key={product.id} className={`border-b border-gray-50 ${bg}`}>
                           <td className={`px-4 py-2 font-medium text-gray-700 sticky left-0 z-10 ${bg}`}>{product.name}</td>
-                          <td className="px-2 py-2 text-center text-orange-400 font-medium text-[11px]">{product.cost_price ? formatPrice(product.cost_price) : '—'}</td>
+                          <td className="px-1 py-1 text-center">
+                            {editMode ? (
+                              <div className="relative">
+                                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-[10px]">$</span>
+                                <input
+                                  type="number" min="0" step="0.01"
+                                  value={pendingCosts[product.id] !== undefined ? pendingCosts[product.id] : (product.cost_price != null ? String(product.cost_price) : '')}
+                                  placeholder="0"
+                                  onChange={(e) => setPendingCosts((prev) => ({ ...prev, [product.id]: e.target.value }))}
+                                  className="w-20 text-center border border-orange-300 rounded-lg pl-5 pr-1 py-1 text-xs font-bold text-orange-600 focus:outline-none focus:ring-1 focus:ring-orange-400 bg-orange-50"
+                                />
+                              </div>
+                            ) : (
+                              <span className="text-orange-400 font-medium text-[11px]">{product.cost_price ? formatPrice(product.cost_price) : '—'}</span>
+                            )}
+                          </td>
                           <td className="px-2 py-2 text-center text-gray-400 font-medium text-[11px]">{formatPrice(product.price)}</td>
                           {weekDays.map((day) => {
                             const iso = toISO(day)
@@ -1684,7 +1742,7 @@ export default function InventoryPage() {
           </button>
         </div>
 
-        {tab === 'produccion' && <ProductionGrid products={products} />}
+        {tab === 'produccion' && <ProductionGrid products={products} onCostUpdated={load} />}
         {tab === 'stock' && <StockCloseGrid products={products} />}
         {tab === 'ventas' && <POSSalesGrid products={products} />}
 
