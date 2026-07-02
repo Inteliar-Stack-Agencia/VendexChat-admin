@@ -232,8 +232,11 @@ function DispatchModal({
         showToast('error', 'Sin pedidos completados en ese rango')
         return
       }
+      // Deduplicate by id (just in case) and map order_items → items
+      const seen = new Set<string>()
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      setOrderResults((data as any[]).map(o => ({ ...o, items: o.order_items || [] })))
+      const deduped = (data as any[]).filter(o => { if (seen.has(o.id)) return false; seen.add(o.id); return true })
+      setOrderResults(deduped.map(o => ({ ...o, items: o.order_items || [] })))
     } catch (err) {
       showToast('error', err instanceof Error ? err.message : 'Error al buscar')
     } finally {
@@ -241,22 +244,54 @@ function DispatchModal({
     }
   }
 
-  // Step 2: apply selected orders to items
-  const handleApplySelectedOrders = () => {
-    const qtyMap: Record<string, number> = {}
-    for (const order of orderResults) {
-      if (!selectedOrderIds.has(order.id)) continue
+  // Step 2: create one dispatch per person directly from selected orders
+  const handleApplySelectedOrders = async () => {
+    const selected = orderResults.filter(o => selectedOrderIds.has(o.id))
+
+    // Group by customer_name
+    const byPerson: Record<string, { name: string; items: Record<string, { product_id: string; product_name: string; quantity: number; unit_price: number }> }> = {}
+    for (const order of selected) {
+      const person = order.customer_name || 'Sin nombre'
+      if (!byPerson[person]) byPerson[person] = { name: person, items: {} }
       for (const item of order.items || []) {
         if (!item.product_id) continue
-        qtyMap[item.product_id] = (qtyMap[item.product_id] || 0) + item.quantity
+        // Find agreed price for this product via its category
+        const prod = items.find(it => it.product_id === item.product_id)
+        const unitPrice = prod ? parseFloat(prod.unit_price) : 0
+        if (!byPerson[person].items[item.product_id]) {
+          byPerson[person].items[item.product_id] = { product_id: item.product_id, product_name: item.product_name, quantity: 0, unit_price: unitPrice }
+        }
+        byPerson[person].items[item.product_id].quantity += item.quantity
       }
     }
-    setItems(prev => prev.map(it => ({
-      ...it,
-      quantity: qtyMap[it.product_id] ? String(qtyMap[it.product_id]) : it.quantity,
-    })))
-    setOrderResults([])
-    showToast('success', `${selectedOrderIds.size} pedido${selectedOrderIds.size !== 1 ? 's' : ''} aplicado${selectedOrderIds.size !== 1 ? 's' : ''}`)
+
+    setSaving(true)
+    try {
+      const persons = Object.values(byPerson)
+      for (const person of persons) {
+        const dispatchItems = Object.values(person.items).filter(it => it.quantity > 0)
+        if (dispatchItems.length === 0) continue
+        await companyDispatchApi.createDispatch({
+          client_id: clientId,
+          date,
+          employee_name: person.name,
+          items: dispatchItems.map(it => ({
+            product_id: it.product_id,
+            product_name: it.product_name,
+            quantity: it.quantity,
+            unit_price: it.unit_price,
+            subtotal: it.quantity * it.unit_price,
+          })),
+        })
+      }
+      showToast('success', `${persons.length} despacho${persons.length !== 1 ? 's' : ''} registrado${persons.length !== 1 ? 's' : ''} (uno por persona)`)
+      onSave()
+      onClose()
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : 'Error al guardar')
+    } finally {
+      setSaving(false)
+    }
   }
 
   const toggleOrder = (id: string) => setSelectedOrderIds(prev => {
@@ -384,10 +419,11 @@ function DispatchModal({
                   {selectedOrderIds.size > 0 && (
                     <button
                       onClick={handleApplySelectedOrders}
-                      className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2 px-4 rounded-lg transition-colors"
+                      disabled={saving}
+                      className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2 px-4 rounded-lg transition-colors disabled:opacity-50"
                     >
-                      <Check className="w-3.5 h-3.5" />
-                      Aplicar {selectedOrderIds.size} pedido{selectedOrderIds.size !== 1 ? 's' : ''}
+                      {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                      {saving ? 'Registrando...' : `Registrar ${selectedOrderIds.size} pedido${selectedOrderIds.size !== 1 ? 's' : ''} (uno por persona)`}
                     </button>
                   )}
                 </div>
