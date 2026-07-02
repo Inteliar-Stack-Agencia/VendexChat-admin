@@ -1212,7 +1212,11 @@ export default function CompanyDispatchPage() {
                     }
                     // Compute each person's total from their items (avoids stale d.total in DB)
                     const DAY_ORDER: Record<string, number> = { lunes: 0, martes: 1, miercoles: 2, miércoles: 2, jueves: 3, viernes: 4, sabado: 5, sábado: 5, domingo: 6 }
-                    const dayRank = (name: string) => { const k = name.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); return DAY_ORDER[k] ?? DAY_ORDER[name.toLowerCase()] ?? 99 }
+                    const dayRank = (name: string) => {
+                      const norm = name.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+                      const firstWord = norm.split(/\s+/)[0]
+                      return DAY_ORDER[firstWord] ?? 99
+                    }
                     const persons = Object.values(byPerson)
                       .map(p => ({ ...p, total: Object.values(p.items).reduce((s, it) => s + it.subtotal, 0) }))
                       .sort((a, b) => {
