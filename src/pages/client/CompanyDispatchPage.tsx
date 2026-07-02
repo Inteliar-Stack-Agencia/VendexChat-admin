@@ -570,7 +570,7 @@ function QuickEntryTab({ clients, products, onSaved }: { clients: CompanyClient[
             </select>
           </div>
           <div>
-            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Fecha</label>
+            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Día de entrega</label>
             <input type="date" value={date} onChange={e => setDate(e.target.value)}
               className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300" />
           </div>
