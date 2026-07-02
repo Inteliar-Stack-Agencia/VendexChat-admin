@@ -766,6 +766,7 @@ export default function CompanyDispatchPage() {
   const [summaryDispatches, setSummaryDispatches] = useState<CompanyDispatch[]>([])
   const [summaryLoading, setSummaryLoading] = useState(false)
   const [summaryView, setSummaryView] = useState<'empleado' | 'producto'>('empleado')
+  const [exportClientId, setExportClientId] = useState<string>('')
 
   const week = getWeekBounds(weekOffset)
 
@@ -828,7 +829,10 @@ export default function CompanyDispatchPage() {
 
   const exportSummary = () => {
     const byClient: Record<string, { clientName: string; rows: { date: string; employee: string; product: string; qty: number; price: number; subtotal: number }[] }> = {}
-    for (const d of summaryDispatches) {
+    const dispatchesToExport = exportClientId
+      ? summaryDispatches.filter(d => d.client_id === exportClientId)
+      : summaryDispatches
+    for (const d of dispatchesToExport) {
       const cname = (d.client as { name: string })?.name || 'Desconocido'
       if (!byClient[d.client_id]) byClient[d.client_id] = { clientName: cname, rows: [] }
       for (const item of d.items || []) {
@@ -895,10 +899,22 @@ export default function CompanyDispatchPage() {
             </Button>
           )}
           {tab === 'resumen' && summaryDispatches.length > 0 && (
-            <Button onClick={exportSummary}
-              className="bg-green-600 hover:bg-green-700 text-white flex items-center gap-2">
-              <FileSpreadsheet className="w-4 h-4" /> Exportar Excel
-            </Button>
+            <div className="flex items-center gap-2">
+              <select
+                value={exportClientId}
+                onChange={e => setExportClientId(e.target.value)}
+                className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-300 bg-white"
+              >
+                <option value="">Todas las empresas</option>
+                {Object.entries(summaryByClient).map(([id, c]) => (
+                  <option key={id} value={id}>{c.name}</option>
+                ))}
+              </select>
+              <Button onClick={exportSummary}
+                className="bg-green-600 hover:bg-green-700 text-white flex items-center gap-2">
+                <FileSpreadsheet className="w-4 h-4" /> Exportar Excel
+              </Button>
+            </div>
           )}
         </div>
       </div>
