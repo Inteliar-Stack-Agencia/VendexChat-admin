@@ -232,7 +232,8 @@ function DispatchModal({
         showToast('error', 'Sin pedidos completados en ese rango')
         return
       }
-      setOrderResults(data as typeof orderResults)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      setOrderResults((data as any[]).map(o => ({ ...o, items: o.order_items || [] })))
     } catch (err) {
       showToast('error', err instanceof Error ? err.message : 'Error al buscar')
     } finally {
