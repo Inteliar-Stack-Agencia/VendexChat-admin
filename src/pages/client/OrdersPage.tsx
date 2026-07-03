@@ -393,7 +393,7 @@ export default function OrdersPage() {
                 {filteredOrders.map((order) => {
                   const statusConf = orderStatusConfig[order.status]
                   const archived = isArchived(order)
-                  const effectiveTotal = order.total > 0 ? order.total : (order.items || []).reduce((acc, i) => acc + (i.subtotal || 0), 0)
+                  const effectiveTotal = (order.items || []).reduce((acc, i) => acc + (i.quantity * i.unit_price || i.subtotal || 0), 0) || order.total
                   return (
                     <tr key={order.id} className={`hover:bg-gray-50 ${archived ? 'opacity-75' : ''}`}>
                       <td className="px-4 py-3">

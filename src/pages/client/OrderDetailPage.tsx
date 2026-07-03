@@ -108,9 +108,9 @@ export default function OrderDetailPage() {
   const statusConf = orderStatusConfig[order.status]
   const printerSettings = ((tenant?.metadata?.printer ?? {}) as { width?: string; header?: string; footer?: string; show_order_number?: boolean })
 
-  const computedSubtotal = (order.items || []).reduce((acc, item) => acc + (item.subtotal || 0), 0)
-  const effectiveSubtotal = order.subtotal > 0 ? order.subtotal : computedSubtotal
-  const effectiveTotal = order.total > 0 ? order.total : effectiveSubtotal + (order.delivery_cost || 0)
+  const computedSubtotal = (order.items || []).reduce((acc, item) => acc + (item.quantity * item.unit_price || item.subtotal || 0), 0)
+  const effectiveSubtotal = computedSubtotal
+  const effectiveTotal = effectiveSubtotal + (order.delivery_cost || 0)
   const deliveryDays = [...new Set((order.items || []).map(i => i.notes).filter(Boolean))]
   const hasDeliveryDays = deliveryDays.length > 0
 
