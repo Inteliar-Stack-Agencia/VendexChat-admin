@@ -12,7 +12,7 @@
 |----|-----------|----------|--------|
 | CR-01 | CRÍTICA | `.env` commiteado con credenciales reales | ✅ `.gitignore` reforzado — rotar keys manualmente en Supabase y MercadoPago |
 | CR-02 | CRÍTICA | `changePassword` ignoraba contraseña actual | ✅ Re-autentica antes de cambiar (`authApi.ts:208`) |
-| CR-03 | CRÍTICA | `inviteStaff` promovía a superadmin sin verificación real | ⚠️ Pendiente: mover a Edge Function con `service_role` |
+| CR-03 | CRÍTICA | `inviteStaff` promovía a superadmin sin verificación real | ✅ La Edge Function ya usaba `service_role` pero no verificaba quién llamaba — cualquiera con la anon key podía promoverse a sí mismo. Ahora exige `caller.auth.getUser()` + `profiles.role = 'superadmin'` antes de promover (`supabase/functions/invite-staff/index.ts`, mismo patrón que `groq-proxy`) |
 | AL-01 | ALTA | JWT almacenado en `localStorage` (XSS) | ✅ Eliminado — token solo en estado React |
 | AL-02 | ALTA | CORS `*` en proxy de Google Images | ✅ Restringido a dominios propios (`google-image-search.ts`) |
 | AL-03 | ALTA | `productsApi.get()` sin filtro de `store_id` (IDOR) | ✅ Filtra por `store_id` del usuario (`productsApi.ts:42`) |
@@ -22,7 +22,7 @@
 | ME-03 | MEDIA | `createUser`/`updateUser` aceptan `Record<string, unknown>` | ✅ Tipado estricto con `ProfileCreateInput`/`ProfileUpdateInput` |
 | BA-01 | BAJA | Impersonation via localStorage sin firma | ⚠️ Documentado — seguridad recae en RLS |
 | BA-02 | BAJA | Imágenes externas subidas sin validar MIME type | ✅ Validación agregada (`PexelsImageSuggestions.tsx:128`) |
-| BA-03 | BAJA | `VITE_GROQ_API_KEY` expuesta en bundle del browser | ⚠️ Pendiente: mover a Edge Function |
+| BA-03 | BAJA | `VITE_GROQ_API_KEY` expuesta en bundle del browser | ℹ️ No aplica a este repo — `vendexchat-admin` no referencia `VITE_GROQ_API_KEY` en ningún lado (ni en `src/`, ni en `.env.example`). El proxy server-side (`groq-proxy`) ya existe acá. Si la key sigue expuesta, es en `vendexchat-front`, no en este repo — revisar ahí |
 
 ---
 
@@ -48,7 +48,7 @@
 
 ## Pendientes (próxima sesión)
 
-1. **CR-03 / BA-03**: Mover `inviteStaff` y llamadas a Groq a Edge Functions de Supabase/Cloudflare
+1. ~~CR-03 / BA-03: Mover `inviteStaff` y llamadas a Groq a Edge Functions de Supabase/Cloudflare~~ — Cerrado 2026-07-13 (ver tabla arriba). BA-03 se re-abre en `vendexchat-front` si corresponde.
 
 ---
 
