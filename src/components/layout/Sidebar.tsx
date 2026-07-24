@@ -25,6 +25,7 @@ import {
   PackageCheck,
   Landmark,
   Building2,
+  Tag,
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -131,6 +132,10 @@ export default function Sidebar({ isOpen, onClose, storeSlug }: SidebarProps) {
                     Despachos
                   </NavLink>
                 )}
+                <NavLink to="/scan" className={linkClass} onClick={onClose}>
+                  <Tag className="w-5 h-5" />
+                  Escanear stock
+                </NavLink>
                 {!isEmpresas && (
                   <>
                     <NavLink to="/categories" className={linkClass} onClick={onClose}>

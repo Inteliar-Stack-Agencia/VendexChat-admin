@@ -136,6 +136,19 @@ export const productionApi = {
     if (error) throw error
   },
 
+  // Cantidad producida por producto en un día puntual (para generar etiquetas)
+  getDayEntries: async (date: string): Promise<{ product_id: string; quantity: number }[]> => {
+    const storeId = await getStoreId()
+    const { data, error } = await supabase
+      .from('production_log')
+      .select('product_id, quantity')
+      .eq('store_id', storeId)
+      .eq('date', date)
+      .gt('quantity', 0)
+    if (error) throw error
+    return data || []
+  },
+
   upsertEntry: async (date: string, productId: string, quantity: number) => {
     const storeId = await getStoreId()
     const { error } = await supabase

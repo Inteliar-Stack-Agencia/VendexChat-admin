@@ -3,7 +3,7 @@ import {
   PackageCheck, Plus, Trash2, X, Loader2, RefreshCw,
   TrendingUp, TrendingDown, ChevronDown, ChevronUp, CalendarDays, Link2,
   ArrowDownCircle, ArrowUpCircle, ChevronLeft, ChevronRight, TableProperties,
-  Upload, FileSpreadsheet, Image as ImageIcon, CheckCircle2,
+  Upload, FileSpreadsheet, Image as ImageIcon, CheckCircle2, Tag,
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import Tesseract from 'tesseract.js'
@@ -19,6 +19,7 @@ import {
 } from '../../services/inventoryApi'
 import { productionApi } from '../../services/productionApi'
 import { companyDispatchApi } from '../../services/companyDispatchApi'
+import { labelsApi } from '../../services/labelsApi'
 import { productsApi } from '../../services/productsApi'
 import { formatPrice } from '../../utils/helpers'
 import { showToast } from '../../components/common/Toast'
@@ -862,6 +863,7 @@ function ProductionGrid({ products, onCostUpdated }: { products: Product[]; onCo
   const [pendingQty, setPendingQty] = useState<Record<string, Record<string, string>>>({})
   const [pendingCosts, setPendingCosts] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
+  const [generatingLabelsFor, setGeneratingLabelsFor] = useState<string | null>(null)
 
   const allWeekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
   // Only Mon–Fri (getDay: 1=Mon … 5=Fri)
@@ -956,6 +958,32 @@ function ProductionGrid({ products, onCostUpdated }: { products: Product[]; onCo
     setEditMode(false)
     setPendingQty({})
     setPendingCosts({})
+  }
+
+  // Genera etiquetas (código único por unidad) para venta directa a partir de la producción
+  // ya cargada ese día — nada de tipeo nuevo, listo para importar en tu app de etiquetas.
+  const handleGenerateLabels = async (date: string) => {
+    setGeneratingLabelsFor(date)
+    try {
+      const entries = await productionApi.getDayEntries(date)
+      const items = entries.map(e => ({
+        product_id: e.product_id,
+        product_name: products.find(p => p.id === e.product_id)?.name || 'Producto',
+        quantity: e.quantity,
+      }))
+      const labels = await labelsApi.generateForProduction(date, items)
+      if (labels.length === 0) { showToast('info', 'Sin producción cargada ese día'); return }
+      const rows = labels.map(l => ({ plato: l.product_name, cantidad: 1, codigo: l.code }))
+      const ws = XLSX.utils.json_to_sheet(rows, { header: ['plato', 'cantidad', 'codigo'] })
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, 'Etiquetas')
+      XLSX.writeFile(wb, `etiquetas-venta-directa-${date}.xlsx`)
+      showToast('success', `${labels.length} etiquetas generadas`)
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : 'Error al generar etiquetas')
+    } finally {
+      setGeneratingLabelsFor(null)
+    }
   }
 
   const handleSave = async () => {
@@ -1067,6 +1095,16 @@ function ProductionGrid({ products, onCostUpdated }: { products: Product[]; onCo
                     <th key={iso} className={`text-center px-1 py-3 min-w-[80px] ${isToday ? 'text-teal-600' : 'text-gray-400'}`}>
                       <div className="font-bold uppercase tracking-wider">{DAY_SHORT[day.getDay()]}</div>
                       <div className={`text-[10px] font-normal ${isToday ? 'text-teal-400' : 'text-gray-300'}`}>{day.getDate()}/{day.getMonth() + 1}</div>
+                      {!editMode && (
+                        <button
+                          onClick={() => handleGenerateLabels(iso)}
+                          disabled={generatingLabelsFor === iso}
+                          title="Generar etiquetas de este día"
+                          className="mt-1 mx-auto flex items-center justify-center p-1 text-gray-300 hover:text-teal-600 hover:bg-teal-50 rounded transition-colors disabled:opacity-40"
+                        >
+                          {generatingLabelsFor === iso ? <Loader2 className="w-3 h-3 animate-spin" /> : <Tag className="w-3 h-3" />}
+                        </button>
+                      )}
                     </th>
                   )
                 })}

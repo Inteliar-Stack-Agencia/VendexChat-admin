@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { Building2, Plus, Trash2, X, Loader2, ChevronLeft, ChevronRight, Edit2, FileSpreadsheet, Users, Download, Check, Zap, ChevronDown, Receipt, CheckCircle2 } from 'lucide-react'
+import { Building2, Plus, Trash2, X, Loader2, ChevronLeft, ChevronRight, Edit2, FileSpreadsheet, Users, Download, Check, Zap, ChevronDown, Receipt, CheckCircle2, Tag } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { Card, Button } from '../../components/common'
 import { showToast } from '../../components/common/Toast'
 import { companyDispatchApi, type CompanyClient, type CompanyDispatch, type CompanyInvoice, type PriceMode } from '../../services/companyDispatchApi'
+import { labelsApi } from '../../services/labelsApi'
 import { productsApi } from '../../services/productsApi'
 import { categoriesApi } from '../../services/categoriesApi'
 import { supabase } from '../../supabaseClient'
@@ -1289,6 +1290,29 @@ export default function CompanyDispatchPage() {
     }
   }
 
+  const [generatingLabelsFor, setGeneratingLabelsFor] = useState<string | null>(null)
+
+  // Genera etiquetas (código único por unidad) para este despacho — el comensal sale del
+  // despacho ya cargado, no hay que tipearlo de nuevo.
+  const handleGenerateLabels = async (dispatch: CompanyDispatch) => {
+    setGeneratingLabelsFor(dispatch.id)
+    try {
+      const items = (dispatch.items || []).filter(it => it.quantity > 0)
+      const labels = await labelsApi.generateForDispatch(dispatch.id, dispatch.employee_name, dispatch.date, items)
+      if (labels.length === 0) { showToast('info', 'Sin items para etiquetar'); return }
+      const rows = labels.map(l => ({ plato: l.product_name, comensal: l.comensal || '', cantidad: 1, codigo: l.code }))
+      const ws = XLSX.utils.json_to_sheet(rows, { header: ['plato', 'comensal', 'cantidad', 'codigo'] })
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, 'Etiquetas')
+      XLSX.writeFile(wb, `etiquetas-despacho-${dispatch.date}-${(dispatch.employee_name || 'sin-nombre').replace(/\s+/g, '_')}.xlsx`)
+      showToast('success', `${labels.length} etiquetas generadas`)
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : 'Error al generar etiquetas')
+    } finally {
+      setGeneratingLabelsFor(null)
+    }
+  }
+
   const exportSummary = () => {
     const byClient: Record<string, { clientName: string; rows: { date: string; employee: string; product: string; qty: number; price: number; subtotal: number }[] }> = {}
     const dispatchesToExport = exportClientId
@@ -1461,6 +1485,10 @@ export default function CompanyDispatchPage() {
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
                             <span className="font-black text-emerald-600 text-sm">{formatPrice((d.items || []).reduce((s, it) => s + it.subtotal, 0))}</span>
+                            <button onClick={() => handleGenerateLabels(d)} disabled={generatingLabelsFor === d.id}
+                              title="Generar etiquetas" className="p-1.5 text-gray-300 hover:text-indigo-500 rounded-lg hover:bg-indigo-50 transition-colors disabled:opacity-40">
+                              {generatingLabelsFor === d.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Tag className="w-4 h-4" />}
+                            </button>
                             <button onClick={() => setEditingDispatch(d)} className="p-1.5 text-gray-300 hover:text-amber-500 rounded-lg hover:bg-amber-50 transition-colors">
                               <Edit2 className="w-4 h-4" />
                             </button>
