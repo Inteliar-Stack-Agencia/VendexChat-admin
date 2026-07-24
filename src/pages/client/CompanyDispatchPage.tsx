@@ -1375,6 +1375,22 @@ export default function CompanyDispatchPage() {
                                   >
                                     <Edit2 className="w-3.5 h-3.5" />
                                   </button>
+                                  <button
+                                    onClick={async () => {
+                                      if (!confirm(`¿Eliminar todos los despachos de ${person.name} esta semana?`)) return
+                                      try {
+                                        await Promise.all(person.dispatches.map(d => companyDispatchApi.deleteDispatch(d.id)))
+                                        showToast('success', 'Despacho eliminado')
+                                        load()
+                                      } catch {
+                                        showToast('error', 'Error al eliminar')
+                                      }
+                                    }}
+                                    className="p-1 text-gray-300 hover:text-red-500 rounded hover:bg-red-50 transition-colors"
+                                    title="Eliminar despacho"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
                                 </div>
                               </div>
                               <table className="w-full text-xs">
