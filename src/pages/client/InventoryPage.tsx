@@ -18,6 +18,7 @@ import {
   EGRESS_REASON_LABEL,
 } from '../../services/inventoryApi'
 import { productionApi } from '../../services/productionApi'
+import { companyDispatchApi } from '../../services/companyDispatchApi'
 import { productsApi } from '../../services/productsApi'
 import { formatPrice } from '../../utils/helpers'
 import { showToast } from '../../components/common/Toast'
@@ -53,6 +54,11 @@ function addDays(date: Date, n: number): Date {
 
 function toISO(date: Date) {
   return date.toISOString().split('T')[0]
+}
+
+// Normalizes a product name for cross-store matching (Empresas' despachos vs. CABA's catálogo)
+function normalizeName(name: string): string {
+  return name.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
 }
 
 // ─── Row / Egress data types ──────────────────────────────────────────────────
@@ -1180,6 +1186,8 @@ function ProductionGrid({ products, onCostUpdated }: { products: Product[]; onCo
 function StockCloseGrid({ products }: { products: Product[] }) {
   const [weekStart, setWeekStart] = useState<Date>(() => getWeekStart(new Date()))
   const [weekData, setWeekData] = useState<Awaited<ReturnType<typeof productionApi.getWeekData>> | null>(null)
+  // Unidades despachadas a empresas esta semana, agrupadas por nombre de producto normalizado (cross-store)
+  const [dispatchedByName, setDispatchedByName] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
   // weekly close: one row per product — pending[productId][field]
   const [pending, setPending] = useState<Record<string, { sobrante: string; consumo_interno: string; merma: string }>>({})
@@ -1197,8 +1205,17 @@ function StockCloseGrid({ products }: { products: Product[] }) {
     setPending({})
     setEditMode(false)
     try {
-      const data = await productionApi.getWeekData(weekStartISO, weekEndISO)
+      const [data, dispatchItems] = await Promise.all([
+        productionApi.getWeekData(weekStartISO, weekEndISO),
+        companyDispatchApi.crossStoreDispatchItemsByDate(weekStartISO, weekEndISO).catch(() => []),
+      ])
       setWeekData(data)
+      const byName: Record<string, number> = {}
+      for (const item of dispatchItems) {
+        const key = normalizeName(item.product_name)
+        byName[key] = (byName[key] || 0) + item.quantity
+      }
+      setDispatchedByName(byName)
     } catch {
       showToast('error', 'Error al cargar cierre de stock')
     } finally {
@@ -1229,17 +1246,29 @@ function StockCloseGrid({ products }: { products: Product[] }) {
     return getSavedWeekField(productId, field)
   }
 
+  const getSalesQty = (productId: string): number => {
+    let total = 0
+    for (const day of weekDays) total += weekData?.sales[productId]?.[toISO(day)]?.qty ?? 0
+    return total
+  }
+
+  const getDispatchedQty = (product: Product): number => dispatchedByName[normalizeName(product.name)] ?? 0
+
   const productTotals = (product: Product) => {
     const totalProduced = getTotalProduced(product.id)
     const sobrante = getField(product.id, 'sobrante')
     const consumo = getField(product.id, 'consumo_interno')
     const merma = getField(product.id, 'merma')
     const vendidoReal = Math.max(0, totalProduced - sobrante - consumo - merma)
+    const salesQty = getSalesQty(product.id)
+    const dispatchedQty = getDispatchedQty(product)
+    const registrado = salesQty + dispatchedQty
+    const sinExplicar = vendidoReal - registrado
     const weekCost = weekData?.costs[product.id] ?? (product.cost_price != null ? Number(product.cost_price) : null)
     const ingresos = vendidoReal * Number(product.price || 0)
     const costo = vendidoReal * (weekCost ?? 0)
     const margen = ingresos - costo
-    return { totalProduced, sobrante, consumo, merma, vendidoReal, ingresos, costo, margen }
+    return { totalProduced, sobrante, consumo, merma, vendidoReal, salesQty, dispatchedQty, registrado, sinExplicar, ingresos, costo, margen }
   }
 
   const activeProducts = products.filter((p) => p.is_active)
@@ -1249,10 +1278,11 @@ function StockCloseGrid({ products }: { products: Product[] }) {
       const t = productTotals(p)
       acc.sobrante += t.sobrante; acc.consumo += t.consumo; acc.merma += t.merma
       acc.produced += t.totalProduced; acc.vendido += t.vendidoReal
+      acc.registrado += t.registrado; acc.sinExplicar += t.sinExplicar
       acc.ingresos += t.ingresos; acc.costo += t.costo; acc.margen += t.margen
       return acc
     },
-    { sobrante: 0, consumo: 0, merma: 0, produced: 0, vendido: 0, ingresos: 0, costo: 0, margen: 0 },
+    { sobrante: 0, consumo: 0, merma: 0, produced: 0, vendido: 0, registrado: 0, sinExplicar: 0, ingresos: 0, costo: 0, margen: 0 },
   )
 
   const enterEditMode = () => {
@@ -1375,6 +1405,19 @@ function StockCloseGrid({ products }: { products: Product[] }) {
         </div>
       </div>
 
+      {/* Diferencia sin explicar — lo que salió de producción y no aparece ni vendido (POS), ni despachado a empresas, ni declarado como sobrante/consumo/merma */}
+      <div className={`rounded-xl p-3 flex items-center justify-between ${grandTotals.sinExplicar > 0 ? 'bg-red-50 border border-red-200' : 'bg-gray-50 border border-gray-100'}`}>
+        <div>
+          <p className={`text-[10px] font-black uppercase tracking-widest ${grandTotals.sinExplicar > 0 ? 'text-red-600' : 'text-gray-400'}`}>
+            Diferencia sin explicar
+          </p>
+          <p className="text-[10px] text-gray-400">Producido − vendido (POS) − despachado a empresas − sobrante − consumo − merma</p>
+        </div>
+        <p className={`text-xl font-black ${grandTotals.sinExplicar > 0 ? 'text-red-600' : 'text-gray-400'}`}>
+          {grandTotals.sinExplicar > 0 ? grandTotals.sinExplicar : '0'}
+        </p>
+      </div>
+
       {/* Grid */}
       {loading ? (
         <div className="flex justify-center py-12"><RefreshCw className="w-6 h-6 text-gray-300 animate-spin" /></div>
@@ -1389,6 +1432,8 @@ function StockCloseGrid({ products }: { products: Product[] }) {
                 <th className="text-center px-2 py-3 font-bold text-blue-500 uppercase tracking-wider min-w-[80px]">C. Interno</th>
                 <th className="text-center px-2 py-3 font-bold text-red-500 uppercase tracking-wider min-w-[70px]">Merma</th>
                 <th className="text-center px-2 py-3 font-bold text-emerald-600 uppercase tracking-wider min-w-[70px]">Vendido</th>
+                <th className="text-center px-2 py-3 font-bold text-cyan-600 uppercase tracking-wider min-w-[80px]">Registrado<br /><span className="normal-case font-normal text-[9px] text-cyan-400">POS + empresas</span></th>
+                <th className="text-center px-2 py-3 font-bold text-rose-600 uppercase tracking-wider min-w-[80px]">Sin explicar</th>
                 <th className="text-center px-2 py-3 font-bold text-indigo-500 uppercase tracking-wider min-w-[90px]">Ingresos</th>
                 <th className="text-center px-2 py-3 font-bold text-orange-500 uppercase tracking-wider min-w-[80px]">Costo</th>
                 <th className="text-center px-2 py-3 font-bold text-green-600 uppercase tracking-wider min-w-[80px]">Margen</th>
@@ -1409,7 +1454,7 @@ function StockCloseGrid({ products }: { products: Product[] }) {
                 return sortedGroups.map(([catKey, group]) => (
                   <>
                     <tr key={`cat-${catKey}`} className="bg-gray-100 border-t border-gray-200">
-                      <td colSpan={9} className="px-4 py-1.5 text-[10px] font-black text-gray-500 uppercase tracking-widest sticky left-0">
+                      <td colSpan={11} className="px-4 py-1.5 text-[10px] font-black text-gray-500 uppercase tracking-widest sticky left-0">
                         {group.name}
                       </td>
                     </tr>
@@ -1450,6 +1495,8 @@ function StockCloseGrid({ products }: { products: Product[] }) {
                             )}
                           </td>
                           <td className="px-2 py-2 text-center font-black text-emerald-600">{t.vendidoReal || '—'}</td>
+                          <td className="px-2 py-2 text-center font-bold text-cyan-600" title={`POS: ${t.salesQty} · Empresas: ${t.dispatchedQty}`}>{t.registrado || '—'}</td>
+                          <td className={`px-2 py-2 text-center font-black ${t.sinExplicar > 0 ? 'text-rose-600 bg-rose-50' : 'text-gray-300'}`}>{t.sinExplicar > 0 ? t.sinExplicar : '—'}</td>
                           <td className="px-2 py-2 text-center font-bold text-indigo-600">{t.ingresos > 0 ? formatPrice(t.ingresos) : '—'}</td>
                           <td className="px-2 py-2 text-center font-bold text-orange-500">{t.costo > 0 ? formatPrice(t.costo) : '—'}</td>
                           <td className={`px-2 py-2 text-center font-bold ${marginColor}`}>{(t.costo > 0 || t.ingresos > 0) ? formatPrice(t.margen) : '—'}</td>
@@ -1468,6 +1515,8 @@ function StockCloseGrid({ products }: { products: Product[] }) {
                 <td className="px-2 py-3 text-center font-black text-blue-600">{grandTotals.consumo}</td>
                 <td className="px-2 py-3 text-center font-black text-red-500">{grandTotals.merma}</td>
                 <td className="px-2 py-3 text-center font-black text-emerald-600">{grandTotals.vendido}</td>
+                <td className="px-2 py-3 text-center font-black text-cyan-600">{grandTotals.registrado}</td>
+                <td className={`px-2 py-3 text-center font-black ${grandTotals.sinExplicar > 0 ? 'text-rose-600' : 'text-gray-400'}`}>{grandTotals.sinExplicar > 0 ? grandTotals.sinExplicar : '—'}</td>
                 <td className="px-2 py-3 text-center font-black text-indigo-600">{formatPrice(grandTotals.ingresos)}</td>
                 <td className="px-2 py-3 text-center font-black text-orange-600">{formatPrice(grandTotals.costo)}</td>
                 <td className={`px-2 py-3 text-center font-black ${grandTotals.margen >= 0 ? 'text-green-700' : 'text-red-600'}`}>{formatPrice(grandTotals.margen)}</td>

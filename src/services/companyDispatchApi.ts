@@ -1,6 +1,8 @@
 import { supabase } from '../supabaseClient'
 import { getStoreId } from './coreApi'
 
+export type PriceMode = 'iva_incluido' | 'mas_iva'
+
 export interface CompanyClient {
   id: string
   store_id: string
@@ -11,7 +13,27 @@ export interface CompanyClient {
   notes: string | null
   is_active: boolean
   created_at: string
+  price_mode: PriceMode
+  iva_rate: number
   prices?: CompanyClientPrice[]
+}
+
+export interface CompanyInvoice {
+  id: string
+  store_id: string
+  client_id: string
+  period_from: string
+  period_to: string
+  subtotal: number
+  iva_amount: number
+  total: number
+  status: 'facturado' | 'pagado'
+  invoiced_at: string
+  paid_at: string | null
+  paid_amount: number | null
+  notes: string | null
+  created_at: string
+  client?: { name: string }
 }
 
 export interface CompanyClientPrice {
@@ -30,6 +52,7 @@ export interface CompanyDispatch {
   notes: string | null
   total: number
   created_at: string
+  invoice_id: string | null
   client?: { name: string }
   items?: CompanyDispatchItem[]
 }
@@ -64,6 +87,8 @@ export const companyDispatchApi = {
     phone?: string
     email?: string
     notes?: string
+    price_mode?: PriceMode
+    iva_rate?: number
   }): Promise<CompanyClient> => {
     const storeId = await getStoreId()
     const { data, error } = await supabase
@@ -183,5 +208,113 @@ export const companyDispatchApi = {
       .order('date')
     if (error) throw error
     return data || []
+  },
+
+  // ── Facturación / cuenta corriente ──────────────────────────────────────────
+
+  // Dispatches for a client in a period that haven't been invoiced yet
+  getUninvoicedDispatches: async (clientId: string, from: string, to: string): Promise<CompanyDispatch[]> => {
+    const storeId = await getStoreId()
+    const { data, error } = await supabase
+      .from('company_dispatches')
+      .select('*, items:company_dispatch_items(*)')
+      .eq('store_id', storeId)
+      .eq('client_id', clientId)
+      .is('invoice_id', null)
+      .gte('date', from)
+      .lte('date', to)
+      .order('date')
+    if (error) throw error
+    return data || []
+  },
+
+  // Compute subtotal/IVA/total for a set of dispatches given the client's price mode
+  computeInvoiceAmounts: (dispatches: CompanyDispatch[], priceMode: PriceMode, ivaRate: number) => {
+    const sum = dispatches.reduce((s, d) => s + Number(d.total), 0)
+    if (priceMode === 'iva_incluido') {
+      const subtotal = sum / (1 + ivaRate / 100)
+      return { subtotal, iva_amount: sum - subtotal, total: sum }
+    }
+    const iva_amount = sum * (ivaRate / 100)
+    return { subtotal: sum, iva_amount, total: sum + iva_amount }
+  },
+
+  createInvoice: async (clientId: string, from: string, to: string, notes?: string): Promise<CompanyInvoice> => {
+    const storeId = await getStoreId()
+    const [{ data: client, error: clientError }, dispatches] = await Promise.all([
+      supabase.from('company_clients').select('price_mode, iva_rate').eq('id', clientId).single(),
+      companyDispatchApi.getUninvoicedDispatches(clientId, from, to),
+    ])
+    if (clientError) throw clientError
+    if (dispatches.length === 0) throw new Error('No hay despachos sin facturar en ese período')
+
+    const { subtotal, iva_amount, total } = companyDispatchApi.computeInvoiceAmounts(
+      dispatches, client.price_mode as PriceMode, Number(client.iva_rate),
+    )
+
+    const { data: invoice, error } = await supabase
+      .from('company_invoices')
+      .insert({ store_id: storeId, client_id: clientId, period_from: from, period_to: to, subtotal, iva_amount, total, notes: notes || null })
+      .select()
+      .single()
+    if (error) throw error
+
+    const { error: linkError } = await supabase
+      .from('company_dispatches')
+      .update({ invoice_id: invoice.id })
+      .in('id', dispatches.map(d => d.id))
+    if (linkError) throw linkError
+
+    return invoice
+  },
+
+  listInvoices: async (params?: { client_id?: string; status?: 'facturado' | 'pagado' }): Promise<CompanyInvoice[]> => {
+    const storeId = await getStoreId()
+    let query = supabase
+      .from('company_invoices')
+      .select('*, client:company_clients(name)')
+      .eq('store_id', storeId)
+      .order('period_to', { ascending: false })
+    if (params?.client_id) query = query.eq('client_id', params.client_id)
+    if (params?.status) query = query.eq('status', params.status)
+    const { data, error } = await query
+    if (error) throw error
+    return data || []
+  },
+
+  markInvoicePaid: async (id: string, paidAmount: number, notes?: string): Promise<CompanyInvoice> => {
+    const { data, error } = await supabase
+      .from('company_invoices')
+      .update({ status: 'pagado', paid_at: new Date().toISOString(), paid_amount: paidAmount, notes: notes ?? undefined })
+      .eq('id', id)
+      .select()
+      .single()
+    if (error) throw error
+    return data
+  },
+
+  deleteInvoice: async (id: string) => {
+    await supabase.from('company_dispatches').update({ invoice_id: null }).eq('invoice_id', id)
+    const { error } = await supabase.from('company_invoices').delete().eq('id', id)
+    if (error) throw error
+  },
+
+  // ── Cross-store (mismo dueño) ───────────────────────────────────────────────
+
+  // Despachos de TODAS las tiendas del mismo dueño en un rango (para conciliar stock desde otra tienda, ej. CABA leyendo Empresas)
+  crossStoreDispatchItemsByDate: async (from: string, to: string): Promise<{ date: string; product_name: string; quantity: number; store_id: string }[]> => {
+    const { data, error } = await supabase
+      .from('company_dispatches')
+      .select('date, store_id, items:company_dispatch_items(product_name, quantity)')
+      .gte('date', from)
+      .lte('date', to)
+    if (error) throw error
+    const rows: { date: string; product_name: string; quantity: number; store_id: string }[] = []
+    for (const d of (data || []) as unknown as { date: string; store_id: string; items: { product_name: string; quantity: number }[] }[]) {
+      for (const item of d.items || []) {
+        rows.push({ date: d.date, product_name: item.product_name, quantity: item.quantity, store_id: d.store_id })
+      }
+    }
+    return rows
   },
 }

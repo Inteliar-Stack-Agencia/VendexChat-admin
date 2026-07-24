@@ -33,6 +33,7 @@ interface CashFormProps {
 }
 
 function CashForm({ date, session, onSave, onClose }: CashFormProps) {
+  const isNew = !session
   const [saving, setSaving] = useState(false)
   const [loadingPOS, setLoadingPOS] = useState(false)
   const [form, setForm] = useState<CashSessionForm>({
@@ -172,12 +173,16 @@ function CashForm({ date, session, onSave, onClose }: CashFormProps) {
           {/* Closing */}
           <div>
             <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-3">Cierre</p>
-            <div className="bg-gray-50 rounded-xl p-3 mb-3 flex justify-between items-center">
-              <span className="text-xs font-semibold text-gray-500">Efectivo esperado en caja</span>
-              <span className="text-sm font-black text-teal-700">{formatPrice(expectedCash)}</span>
-            </div>
+            {isNew ? (
+              <p className="text-[11px] text-gray-400 mb-2">Contá el efectivo físico antes de cargar las ventas del día, así el resultado no se puede acomodar.</p>
+            ) : (
+              <div className="bg-gray-50 rounded-xl p-3 mb-3 flex justify-between items-center">
+                <span className="text-xs font-semibold text-gray-500">Efectivo esperado en caja</span>
+                <span className="text-sm font-black text-teal-700">{formatPrice(expectedCash)}</span>
+              </div>
+            )}
             {numInput('Efectivo contado físicamente', 'closing_cash', 'text-teal-700')}
-            {diff !== null && (
+            {!isNew && diff !== null && (
               <div className={`mt-2 rounded-lg px-3 py-2 flex items-center justify-between ${Math.abs(diff) < 0.01 ? 'bg-green-50' : 'bg-red-50'}`}>
                 <span className={`text-xs font-semibold flex items-center gap-1 ${getDiffColor(diff)}`}>
                   {Math.abs(diff) < 0.01
