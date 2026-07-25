@@ -3,7 +3,7 @@ import { Building2, Plus, Trash2, X, Loader2, ChevronLeft, ChevronRight, Edit2, 
 import * as XLSX from 'xlsx'
 import { Card, Button } from '../../components/common'
 import { showToast } from '../../components/common/Toast'
-import { companyDispatchApi, type CompanyClient, type CompanyDispatch, type CompanyInvoice, type PriceMode } from '../../services/companyDispatchApi'
+import { companyDispatchApi, type CompanyClient, type CompanyDispatch, type CompanyInvoice, type CompanyWebOrder, type PriceMode } from '../../services/companyDispatchApi'
 import { labelsApi } from '../../services/labelsApi'
 import { productsApi } from '../../services/productsApi'
 import { categoriesApi } from '../../services/categoriesApi'
@@ -1031,7 +1031,7 @@ function BillingTab({ clients }: { clients: CompanyClient[] }) {
   const [selectedClientId, setSelectedClientId] = useState('')
   const [periodFrom, setPeriodFrom] = useState(fifteenDaysAgo)
   const [periodTo, setPeriodTo] = useState(today)
-  const [preview, setPreview] = useState<{ dispatches: CompanyDispatch[]; subtotal: number; iva_amount: number; total: number } | null>(null)
+  const [preview, setPreview] = useState<{ dispatches: CompanyDispatch[]; webOrders: CompanyWebOrder[]; subtotal: number; iva_amount: number; total: number } | null>(null)
   const [loadingPreview, setLoadingPreview] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [invoices, setInvoices] = useState<CompanyInvoice[]>([])
@@ -1058,9 +1058,14 @@ function BillingTab({ clients }: { clients: CompanyClient[] }) {
     if (!client) return
     setLoadingPreview(true)
     try {
-      const dispatches = await companyDispatchApi.getUninvoicedDispatches(selectedClientId, periodFrom, periodTo)
-      const amounts = companyDispatchApi.computeInvoiceAmounts(dispatches, client.price_mode, client.iva_rate)
-      setPreview({ dispatches, ...amounts })
+      const [dispatches, webOrders] = await Promise.all([
+        companyDispatchApi.getUninvoicedDispatches(selectedClientId, periodFrom, periodTo),
+        companyDispatchApi.getWebOrdersForClient(client.name, periodFrom, periodTo),
+      ])
+      const sum = dispatches.reduce((s, d) => s + companyDispatchApi.dispatchTotal(d), 0)
+        + webOrders.reduce((s, o) => s + o.total, 0)
+      const amounts = companyDispatchApi.computeInvoiceAmounts(sum, client.price_mode, client.iva_rate)
+      setPreview({ dispatches, webOrders, ...amounts })
     } catch {
       showToast('error', 'Error al calcular el período')
     } finally {
@@ -1157,11 +1162,25 @@ function BillingTab({ clients }: { clients: CompanyClient[] }) {
         {preview && (
           <div className="mt-4 bg-gray-50 rounded-xl p-4 space-y-2">
             <div className="flex justify-between text-sm"><span className="text-gray-500">Despachos incluidos</span><span className="font-bold text-gray-800">{preview.dispatches.length}</span></div>
+            <div className="flex justify-between text-sm"><span className="text-gray-500">Pedidos web incluidos</span><span className="font-bold text-gray-800">{preview.webOrders.length}</span></div>
+
+            {preview.webOrders.length > 0 && (
+              <div className="bg-white rounded-lg border border-gray-200 divide-y divide-gray-100 my-2">
+                {preview.webOrders.map(o => (
+                  <div key={o.id} className="flex items-center justify-between px-3 py-1.5 text-xs">
+                    <span className="text-gray-600">{o.date} · {o.customer_name} <span className="text-gray-400">({o.company_name})</span></span>
+                    <span className="font-bold text-gray-700">{formatPrice(o.total)}</span>
+                  </div>
+                ))}
+                <p className="px-3 py-1.5 text-[10px] text-gray-400">Verificá que el nombre de empresa de cada pedido corresponda — se matchean por texto libre que escribe cada empleado.</p>
+              </div>
+            )}
+
             <div className="flex justify-between text-sm"><span className="text-gray-500">Subtotal (neto)</span><span className="font-bold text-gray-800">{formatPrice(preview.subtotal)}</span></div>
             <div className="flex justify-between text-sm"><span className="text-gray-500">IVA</span><span className="font-bold text-gray-800">{formatPrice(preview.iva_amount)}</span></div>
             <div className="flex justify-between text-base border-t border-gray-200 pt-2"><span className="font-bold text-gray-700">Total a facturar</span><span className="font-black text-indigo-700">{formatPrice(preview.total)}</span></div>
-            {preview.dispatches.length === 0 ? (
-              <p className="text-xs text-gray-400">No hay despachos sin facturar en ese período.</p>
+            {preview.dispatches.length === 0 && preview.webOrders.length === 0 ? (
+              <p className="text-xs text-gray-400">No hay despachos ni pedidos web sin facturar en ese período.</p>
             ) : (
               <Button onClick={handleGenerate} disabled={generating} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white mt-2 flex items-center justify-center gap-2">
                 {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Receipt className="w-4 h-4" />}
