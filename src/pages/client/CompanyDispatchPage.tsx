@@ -136,14 +136,18 @@ function ClientModal({
             <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Trato de facturación</p>
             <p className="text-[11px] text-gray-400 mb-3">Cómo se interpreta el precio cargado abajo al generar la factura quincenal.</p>
             <div className="flex items-center gap-3 bg-gray-50 rounded-xl px-3 py-2.5">
-              <div className="flex-1 grid grid-cols-2 gap-2">
+              <div className="flex-1 grid grid-cols-3 gap-2">
                 <button type="button" onClick={() => setPriceMode('iva_incluido')}
-                  className={`px-3 py-2 rounded-lg text-xs font-bold border transition-colors ${priceMode === 'iva_incluido' ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-gray-200 text-gray-500'}`}>
+                  className={`px-2 py-2 rounded-lg text-[11px] font-bold border transition-colors ${priceMode === 'iva_incluido' ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-gray-200 text-gray-500'}`}>
                   IVA incluido
                 </button>
                 <button type="button" onClick={() => setPriceMode('mas_iva')}
-                  className={`px-3 py-2 rounded-lg text-xs font-bold border transition-colors ${priceMode === 'mas_iva' ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-gray-200 text-gray-500'}`}>
+                  className={`px-2 py-2 rounded-lg text-[11px] font-bold border transition-colors ${priceMode === 'mas_iva' ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-gray-200 text-gray-500'}`}>
                   + IVA
+                </button>
+                <button type="button" onClick={() => setPriceMode('mostrador_menos_iva')}
+                  className={`px-2 py-2 rounded-lg text-[11px] font-bold border transition-colors ${priceMode === 'mostrador_menos_iva' ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-gray-200 text-gray-500'}`}>
+                  Mostrador − IVA
                 </button>
               </div>
               <div className="relative shrink-0">
@@ -157,9 +161,9 @@ function ClientModal({
           <div>
             <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Precios acordados por categoría</p>
             <p className="text-[11px] text-gray-400 mb-3">
-              {priceMode === 'iva_incluido'
-                ? 'Precio final que paga la empresa (ya incluye el IVA).'
-                : 'Precio neto (sin IVA); se le suma el % de arriba al facturar.'}
+              {priceMode === 'iva_incluido' && 'Precio final que paga la empresa (ya incluye el IVA).'}
+              {priceMode === 'mas_iva' && 'Precio neto (sin IVA); se le suma el % de arriba al facturar.'}
+              {priceMode === 'mostrador_menos_iva' && 'Opcional: solo si alguna categoría tiene un precio distinto al de mostrador. Lo que no cargués acá se factura al precio de mostrador con el IVA descontado.'}
             </p>
             <div className="space-y-2">
               {activeCategories.map(cat => (
@@ -1031,7 +1035,9 @@ function BillingTab({ clients }: { clients: CompanyClient[] }) {
   const [selectedClientId, setSelectedClientId] = useState('')
   const [periodFrom, setPeriodFrom] = useState(fifteenDaysAgo)
   const [periodTo, setPeriodTo] = useState(today)
-  const [preview, setPreview] = useState<{ dispatches: CompanyDispatch[]; webOrders: CompanyWebOrder[]; subtotal: number; iva_amount: number; total: number } | null>(null)
+  const [preview, setPreview] = useState<{ dispatches: CompanyDispatch[]; webOrders: CompanyWebOrder[] } | null>(null)
+  const [selectedDispatchIds, setSelectedDispatchIds] = useState<Set<string>>(new Set())
+  const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set())
   const [loadingPreview, setLoadingPreview] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [invoices, setInvoices] = useState<CompanyInvoice[]>([])
@@ -1039,6 +1045,7 @@ function BillingTab({ clients }: { clients: CompanyClient[] }) {
   const [payingId, setPayingId] = useState<string | null>(null)
 
   const activeClients = clients.filter(c => c.is_active)
+  const selectedClient = clients.find(c => c.id === selectedClientId)
 
   const loadInvoices = useCallback(async () => {
     setLoadingInvoices(true)
@@ -1060,12 +1067,14 @@ function BillingTab({ clients }: { clients: CompanyClient[] }) {
     try {
       const [dispatches, webOrders] = await Promise.all([
         companyDispatchApi.getUninvoicedDispatches(selectedClientId, periodFrom, periodTo),
-        companyDispatchApi.getWebOrdersForClient(client.name, periodFrom, periodTo),
+        companyDispatchApi.getWebOrdersForClient(client, periodFrom, periodTo),
       ])
-      const sum = dispatches.reduce((s, d) => s + companyDispatchApi.dispatchTotal(d), 0)
-        + webOrders.reduce((s, o) => s + o.total, 0)
-      const amounts = companyDispatchApi.computeInvoiceAmounts(sum, client.price_mode, client.iva_rate)
-      setPreview({ dispatches, webOrders, ...amounts })
+      setPreview({ dispatches, webOrders })
+      // Despachos (cargados a mano) van tildados por defecto — son el registro confirmado.
+      // Pedidos web quedan destildados: muchas veces son solo el aviso a cocina y no
+      // reflejan quién finalmente recibió comida ese día.
+      setSelectedDispatchIds(new Set(dispatches.map(d => d.id)))
+      setSelectedOrderIds(new Set())
     } catch {
       showToast('error', 'Error al calcular el período')
     } finally {
@@ -1073,11 +1082,32 @@ function BillingTab({ clients }: { clients: CompanyClient[] }) {
     }
   }
 
+  const toggleDispatch = (id: string) => setSelectedDispatchIds(prev => {
+    const next = new Set(prev)
+    next.has(id) ? next.delete(id) : next.add(id)
+    return next
+  })
+  const toggleOrder = (id: string) => setSelectedOrderIds(prev => {
+    const next = new Set(prev)
+    next.has(id) ? next.delete(id) : next.add(id)
+    return next
+  })
+
+  const selectedDispatches = preview?.dispatches.filter(d => selectedDispatchIds.has(d.id)) ?? []
+  const selectedOrders = preview?.webOrders.filter(o => selectedOrderIds.has(o.id)) ?? []
+  const selectedSum = selectedDispatches.reduce((s, d) => s + companyDispatchApi.dispatchTotal(d), 0)
+    + selectedOrders.reduce((s, o) => s + o.total, 0)
+  const amounts = selectedClient ? companyDispatchApi.computeInvoiceAmounts(selectedSum, selectedClient.price_mode, selectedClient.iva_rate) : null
+
   const handleGenerate = async () => {
-    if (!selectedClientId) return
+    if (!selectedClientId || !preview) return
+    if (selectedDispatches.length === 0 && selectedOrders.length === 0) {
+      showToast('error', 'Tildá al menos un despacho o pedido')
+      return
+    }
     setGenerating(true)
     try {
-      await companyDispatchApi.createInvoice(selectedClientId, periodFrom, periodTo)
+      await companyDispatchApi.createInvoice(selectedClientId, periodFrom, periodTo, { dispatches: selectedDispatches, webOrders: selectedOrders })
       showToast('success', 'Factura generada')
       setPreview(null)
       loadInvoices()
@@ -1160,29 +1190,54 @@ function BillingTab({ clients }: { clients: CompanyClient[] }) {
         </div>
 
         {preview && (
-          <div className="mt-4 bg-gray-50 rounded-xl p-4 space-y-2">
-            <div className="flex justify-between text-sm"><span className="text-gray-500">Despachos incluidos</span><span className="font-bold text-gray-800">{preview.dispatches.length}</span></div>
-            <div className="flex justify-between text-sm"><span className="text-gray-500">Pedidos web incluidos</span><span className="font-bold text-gray-800">{preview.webOrders.length}</span></div>
+          <div className="mt-4 bg-gray-50 rounded-xl p-4 space-y-3">
+            <p className="text-[11px] text-gray-400">Tildá lo que corresponde facturar. El total se recalcula con lo tildado.</p>
 
-            {preview.webOrders.length > 0 && (
-              <div className="bg-white rounded-lg border border-gray-200 divide-y divide-gray-100 my-2">
-                {preview.webOrders.map(o => (
-                  <div key={o.id} className="flex items-center justify-between px-3 py-1.5 text-xs">
-                    <span className="text-gray-600">{o.date} · {o.customer_name} <span className="text-gray-400">({o.company_name})</span></span>
-                    <span className="font-bold text-gray-700">{formatPrice(o.total)}</span>
-                  </div>
-                ))}
-                <p className="px-3 py-1.5 text-[10px] text-gray-400">Verificá que el nombre de empresa de cada pedido corresponda — se matchean por texto libre que escribe cada empleado.</p>
+            {preview.dispatches.length > 0 && (
+              <div>
+                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Despachos (Entrada rápida) · {selectedDispatches.length}/{preview.dispatches.length}</p>
+                <div className="bg-white rounded-lg border border-gray-200 divide-y divide-gray-100 max-h-56 overflow-y-auto">
+                  {preview.dispatches.map(d => (
+                    <label key={d.id} className="flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer hover:bg-gray-50">
+                      <input type="checkbox" checked={selectedDispatchIds.has(d.id)} onChange={() => toggleDispatch(d.id)}
+                        className="h-3.5 w-3.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-400" />
+                      <span className="flex-1 text-gray-600">{d.date} · {d.employee_name || 'Sin nombre'}</span>
+                      <span className="font-bold text-gray-700">{formatPrice(companyDispatchApi.dispatchTotal(d))}</span>
+                    </label>
+                  ))}
+                </div>
               </div>
             )}
 
-            <div className="flex justify-between text-sm"><span className="text-gray-500">Subtotal (neto)</span><span className="font-bold text-gray-800">{formatPrice(preview.subtotal)}</span></div>
-            <div className="flex justify-between text-sm"><span className="text-gray-500">IVA</span><span className="font-bold text-gray-800">{formatPrice(preview.iva_amount)}</span></div>
-            <div className="flex justify-between text-base border-t border-gray-200 pt-2"><span className="font-bold text-gray-700">Total a facturar</span><span className="font-black text-indigo-700">{formatPrice(preview.total)}</span></div>
+            {preview.webOrders.length > 0 && (
+              <div>
+                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Pedidos web · {selectedOrders.length}/{preview.webOrders.length}</p>
+                <div className="bg-white rounded-lg border border-gray-200 divide-y divide-gray-100 max-h-56 overflow-y-auto">
+                  {preview.webOrders.map(o => (
+                    <label key={o.id} className="flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer hover:bg-gray-50">
+                      <input type="checkbox" checked={selectedOrderIds.has(o.id)} onChange={() => toggleOrder(o.id)}
+                        className="h-3.5 w-3.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-400" />
+                      <span className="flex-1 text-gray-600">{o.date} · {o.customer_name} <span className="text-gray-400">({o.company_name})</span></span>
+                      <span className="font-bold text-gray-700">{formatPrice(o.total)}</span>
+                    </label>
+                  ))}
+                </div>
+                <p className="text-[10px] text-gray-400 mt-1">Destildados por defecto: suelen ser solo el aviso a cocina, no necesariamente lo que se facturó.</p>
+              </div>
+            )}
+
+            {amounts && (
+              <>
+                <div className="flex justify-between text-sm pt-1"><span className="text-gray-500">Subtotal (neto)</span><span className="font-bold text-gray-800">{formatPrice(amounts.subtotal)}</span></div>
+                <div className="flex justify-between text-sm"><span className="text-gray-500">IVA</span><span className="font-bold text-gray-800">{formatPrice(amounts.iva_amount)}</span></div>
+                <div className="flex justify-between text-base border-t border-gray-200 pt-2"><span className="font-bold text-gray-700">Total a facturar</span><span className="font-black text-indigo-700">{formatPrice(amounts.total)}</span></div>
+              </>
+            )}
+
             {preview.dispatches.length === 0 && preview.webOrders.length === 0 ? (
               <p className="text-xs text-gray-400">No hay despachos ni pedidos web sin facturar en ese período.</p>
             ) : (
-              <Button onClick={handleGenerate} disabled={generating} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white mt-2 flex items-center justify-center gap-2">
+              <Button onClick={handleGenerate} disabled={generating || (selectedDispatches.length === 0 && selectedOrders.length === 0)} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white mt-2 flex items-center justify-center gap-2">
                 {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Receipt className="w-4 h-4" />}
                 Generar factura
               </Button>
@@ -1244,13 +1299,24 @@ export default function CompanyDispatchPage() {
   const [editingClient, setEditingClient] = useState<CompanyClient | undefined>()
   const [showDispatchModal, setShowDispatchModal] = useState(false)
   const [editingDispatch, setEditingDispatch] = useState<CompanyDispatch | undefined>()
-  const [weekOffset, setWeekOffset] = useState(0)
+  const [summaryFrom, setSummaryFrom] = useState(() => getWeekBounds(0).from)
+  const [summaryTo, setSummaryTo] = useState(() => getWeekBounds(0).to)
   const [summaryDispatches, setSummaryDispatches] = useState<CompanyDispatch[]>([])
   const [summaryLoading, setSummaryLoading] = useState(false)
   const [summaryView, setSummaryView] = useState<'empleado' | 'producto'>('empleado')
   const [exportClientId, setExportClientId] = useState<string>('')
 
-  const week = getWeekBounds(weekOffset)
+  const shiftSummaryWeek = (deltaDays: number) => {
+    const shift = (iso: string) => {
+      const d = new Date(iso + 'T00:00:00')
+      d.setDate(d.getDate() + deltaDays)
+      return d.toISOString().split('T')[0]
+    }
+    setSummaryFrom(f => shift(f))
+    setSummaryTo(t => shift(t))
+  }
+
+  const week = { from: summaryFrom, to: summaryTo }
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -1527,16 +1593,22 @@ export default function CompanyDispatchPage() {
           {/* ── TAB: Resumen semanal ── */}
           {tab === 'resumen' && (
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <button onClick={() => setWeekOffset(wo => wo - 1)} className="p-2 hover:bg-gray-100 rounded-lg">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <button onClick={() => shiftSummaryWeek(-7)} className="p-2 hover:bg-gray-100 rounded-lg shrink-0" title="Semana anterior">
                   <ChevronLeft className="w-5 h-5 text-gray-500" />
                 </button>
-                <div className="text-center">
-                  <p className="text-sm font-bold text-gray-800">{week.label}</p>
-                  <p className="text-xs text-gray-400">Semana de despachos</p>
+                <div className="flex items-center gap-2">
+                  <input type="date" value={summaryFrom} onChange={e => setSummaryFrom(e.target.value)}
+                    className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+                  <span className="text-gray-400 text-xs">a</span>
+                  <input type="date" value={summaryTo} onChange={e => setSummaryTo(e.target.value)}
+                    className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+                  <button onClick={() => { const w = getWeekBounds(0); setSummaryFrom(w.from); setSummaryTo(w.to) }}
+                    className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 px-2 py-1.5 rounded-lg hover:bg-indigo-50">
+                    Esta semana
+                  </button>
                 </div>
-                <button onClick={() => setWeekOffset(wo => wo + 1)} disabled={weekOffset >= 0}
-                  className="p-2 hover:bg-gray-100 rounded-lg disabled:opacity-30">
+                <button onClick={() => shiftSummaryWeek(7)} className="p-2 hover:bg-gray-100 rounded-lg shrink-0" title="Semana siguiente">
                   <ChevronRight className="w-5 h-5 text-gray-500" />
                 </button>
               </div>
