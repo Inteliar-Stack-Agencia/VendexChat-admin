@@ -14,6 +14,12 @@ import type { Product, Category } from '../../types'
 
 const today = new Date().toISOString().split('T')[0]
 
+const PRICE_MODE_LABEL: Record<PriceMode, string> = {
+  iva_incluido: 'IVA incluido',
+  mas_iva: '+ IVA',
+  mostrador_menos_iva: 'Mostrador − IVA',
+}
+
 function getWeekBounds(offset = 0): { from: string; to: string; label: string } {
   const now = new Date()
   const day = now.getDay()
@@ -1334,9 +1340,15 @@ function BillingTab({ clients }: { clients: CompanyClient[] }) {
               </div>
             </div>
 
-            {amounts && (
+            {amounts && selectedClient && (
               <>
-                <div className="flex justify-between text-sm pt-1"><span className="text-gray-500">Subtotal (neto)</span><span className="font-bold text-gray-800">{formatPrice(amounts.subtotal)}</span></div>
+                <div className="flex items-center justify-between pt-1">
+                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Trato de esta empresa</span>
+                  <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">
+                    {PRICE_MODE_LABEL[selectedClient.price_mode]} ({selectedClient.iva_rate}%)
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm"><span className="text-gray-500">Subtotal (neto)</span><span className="font-bold text-gray-800">{formatPrice(amounts.subtotal)}</span></div>
                 <div className="flex justify-between text-sm"><span className="text-gray-500">IVA</span><span className="font-bold text-gray-800">{formatPrice(amounts.iva_amount)}</span></div>
                 <div className="flex justify-between text-base border-t border-gray-200 pt-2"><span className="font-bold text-gray-700">Total a facturar</span><span className="font-black text-indigo-700">{formatPrice(amounts.total)}</span></div>
               </>
