@@ -21,6 +21,11 @@ export interface CompanyClient {
   prices?: CompanyClientPrice[]
 }
 
+export interface CompanyInvoiceExtraItem {
+  description: string
+  amount: number
+}
+
 export interface CompanyInvoice {
   id: string
   store_id: string
@@ -30,6 +35,7 @@ export interface CompanyInvoice {
   subtotal: number
   iva_amount: number
   total: number
+  extra_items: CompanyInvoiceExtraItem[]
   status: 'facturado' | 'pagado'
   invoiced_at: string
   paid_at: string | null
@@ -334,7 +340,7 @@ export const companyDispatchApi = {
   // web que fueron solo un aviso a cocina y no reflejan quién realmente comió ese día).
   createInvoice: async (
     clientId: string, from: string, to: string,
-    selection: { dispatches: CompanyDispatch[]; webOrders: CompanyWebOrder[] },
+    selection: { dispatches: CompanyDispatch[]; webOrders: CompanyWebOrder[]; extraItems?: CompanyInvoiceExtraItem[] },
     notes?: string,
   ): Promise<CompanyInvoice> => {
     const storeId = await getStoreId()
@@ -342,18 +348,21 @@ export const companyDispatchApi = {
       .from('company_clients').select('price_mode, iva_rate').eq('id', clientId).single()
     if (clientError) throw clientError
 
-    const { dispatches, webOrders } = selection
-    if (dispatches.length === 0 && webOrders.length === 0) throw new Error('Seleccioná al menos un despacho o pedido para facturar')
+    const { dispatches, webOrders, extraItems = [] } = selection
+    if (dispatches.length === 0 && webOrders.length === 0 && extraItems.length === 0) {
+      throw new Error('Seleccioná al menos un despacho, pedido o ítem manual para facturar')
+    }
 
     const sum = dispatches.reduce((s, d) => s + companyDispatchApi.dispatchTotal(d), 0)
       + webOrders.reduce((s, o) => s + o.total, 0)
+      + extraItems.reduce((s, i) => s + i.amount, 0)
     const { subtotal, iva_amount, total } = companyDispatchApi.computeInvoiceAmounts(
       sum, client.price_mode as PriceMode, Number(client.iva_rate),
     )
 
     const { data: invoice, error } = await supabase
       .from('company_invoices')
-      .insert({ store_id: storeId, client_id: clientId, period_from: from, period_to: to, subtotal, iva_amount, total, notes: notes || null })
+      .insert({ store_id: storeId, client_id: clientId, period_from: from, period_to: to, subtotal, iva_amount, total, extra_items: extraItems, notes: notes || null })
       .select()
       .single()
     if (error) throw error
@@ -395,6 +404,35 @@ export const companyDispatchApi = {
       .single()
     if (error) throw error
     return data
+  },
+
+  // Detalle completo de una factura ya generada (para armar el recibo imprimible)
+  getInvoiceDetail: async (invoiceId: string): Promise<{ dispatches: CompanyDispatch[]; webOrders: CompanyWebOrder[] }> => {
+    const [dispatchesRes, ordersRes] = await Promise.all([
+      supabase.from('company_dispatches').select('*, items:company_dispatch_items(*)').eq('invoice_id', invoiceId).order('date'),
+      supabase.from('orders').select('id, public_id, customer_name, status, created_at, metadata, order_items(name, product_name, quantity, unit_price, subtotal)').eq('invoice_id', invoiceId).order('created_at'),
+    ])
+    if (dispatchesRes.error) throw dispatchesRes.error
+    if (ordersRes.error) throw ordersRes.error
+
+    type OrderRow = {
+      id: string; public_id: string; customer_name: string; status: string; created_at: string
+      metadata: Record<string, unknown> | null
+      order_items: { name: string | null; product_name: string | null; quantity: number; unit_price: number; subtotal: number | null }[]
+    }
+    const webOrders: CompanyWebOrder[] = ((ordersRes.data || []) as unknown as OrderRow[]).map(o => {
+      const items = (o.order_items || []).map(it => ({
+        name: it.name || it.product_name || 'Producto', quantity: it.quantity,
+        unit_price: Number(it.unit_price), subtotal: Number(it.subtotal ?? it.quantity * it.unit_price), negotiated: true,
+      }))
+      return {
+        id: o.id, public_id: o.public_id, customer_name: o.customer_name,
+        company_name: String(o.metadata?.company_name || ''), date: o.created_at.split('T')[0], status: o.status,
+        total: items.reduce((s, it) => s + it.subtotal, 0), allNegotiated: true, items,
+      }
+    })
+
+    return { dispatches: (dispatchesRes.data || []) as CompanyDispatch[], webOrders }
   },
 
   deleteInvoice: async (id: string) => {
