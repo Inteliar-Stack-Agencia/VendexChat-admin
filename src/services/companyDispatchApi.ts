@@ -67,6 +67,30 @@ export interface CompanyDispatchItem {
   subtotal: number
 }
 
+export interface CompanyWebOrder {
+  id: string
+  public_id: string
+  customer_name: string
+  company_name: string
+  date: string
+  status: string
+  total: number
+  items: { name: string; quantity: number; unit_price: number; subtotal: number }[]
+}
+
+// Normaliza texto para matchear "AVSA", "avsa", "AVSA Argentina Valores", "Argentina Valores SA"
+// contra el mismo company_client, sin depender de que el cliente tipee el nombre exacto
+function normalizeCompanyText(s: string): string {
+  return s.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9\s]/g, '')
+}
+
+function matchesClient(orderCompanyName: string, clientName: string): boolean {
+  if (!orderCompanyName.trim()) return false
+  const orderWords = new Set(normalizeCompanyText(orderCompanyName).split(/\s+/).filter(w => w.length >= 4))
+  const clientWords = normalizeCompanyText(clientName).split(/\s+/).filter(w => w.length >= 4)
+  return clientWords.some(w => orderWords.has(w))
+}
+
 export const companyDispatchApi = {
   // ── Clients ──────────────────────────────────────────────────────────────────
 
@@ -228,9 +252,52 @@ export const companyDispatchApi = {
     return data || []
   },
 
-  // Compute subtotal/IVA/total for a set of dispatches given the client's price mode
-  computeInvoiceAmounts: (dispatches: CompanyDispatch[], priceMode: PriceMode, ivaRate: number) => {
-    const sum = dispatches.reduce((s, d) => s + Number(d.total), 0)
+  // Total real de un despacho, sumado desde los items (evita depender del campo `total`
+  // guardado en la tabla, que puede haber quedado desactualizado)
+  dispatchTotal: (dispatch: CompanyDispatch): number =>
+    (dispatch.items || []).reduce((s, it) => s + Number(it.subtotal), 0),
+
+  // Pedidos web de la tienda Empresas para un cliente en un período, sin facturar todavía.
+  // El total se calcula siempre desde los items — la columna orders.total no se mantiene
+  // actualizada para pedidos B2B.
+  getWebOrdersForClient: async (clientName: string, from: string, to: string): Promise<CompanyWebOrder[]> => {
+    const storeId = await getStoreId()
+    const { data, error } = await supabase
+      .from('orders')
+      .select('id, public_id, customer_name, status, created_at, metadata, order_items(name, product_name, quantity, unit_price, subtotal)')
+      .eq('store_id', storeId)
+      .is('invoice_id', null)
+      .neq('status', 'cancelled')
+      .gte('created_at', `${from}T00:00:00`)
+      .lte('created_at', `${to}T23:59:59`)
+    if (error) throw error
+
+    type Row = {
+      id: string; public_id: string; customer_name: string; status: string; created_at: string
+      metadata: Record<string, unknown> | null
+      order_items: { name: string | null; product_name: string | null; quantity: number; unit_price: number; subtotal: number | null }[]
+    }
+    return ((data || []) as unknown as Row[])
+      .map(o => ({ ...o, companyName: String(o.metadata?.company_name || '') }))
+      .filter(o => matchesClient(o.companyName, clientName))
+      .map(o => {
+        const items = (o.order_items || []).map(it => ({
+          name: it.name || it.product_name || 'Producto',
+          quantity: it.quantity,
+          unit_price: Number(it.unit_price),
+          subtotal: Number(it.subtotal ?? it.quantity * it.unit_price),
+        }))
+        return {
+          id: o.id, public_id: o.public_id, customer_name: o.customer_name,
+          company_name: o.companyName, date: o.created_at.split('T')[0], status: o.status,
+          total: items.reduce((s, it) => s + it.subtotal, 0),
+          items,
+        }
+      })
+  },
+
+  // Compute subtotal/IVA/total for a combined amount, given the client's price mode
+  computeInvoiceAmounts: (sum: number, priceMode: PriceMode, ivaRate: number) => {
     if (priceMode === 'iva_incluido') {
       const subtotal = sum / (1 + ivaRate / 100)
       return { subtotal, iva_amount: sum - subtotal, total: sum }
@@ -241,15 +308,20 @@ export const companyDispatchApi = {
 
   createInvoice: async (clientId: string, from: string, to: string, notes?: string): Promise<CompanyInvoice> => {
     const storeId = await getStoreId()
-    const [{ data: client, error: clientError }, dispatches] = await Promise.all([
-      supabase.from('company_clients').select('price_mode, iva_rate').eq('id', clientId).single(),
-      companyDispatchApi.getUninvoicedDispatches(clientId, from, to),
-    ])
+    const { data: client, error: clientError } = await supabase
+      .from('company_clients').select('name, price_mode, iva_rate').eq('id', clientId).single()
     if (clientError) throw clientError
-    if (dispatches.length === 0) throw new Error('No hay despachos sin facturar en ese período')
 
+    const [dispatches, webOrders] = await Promise.all([
+      companyDispatchApi.getUninvoicedDispatches(clientId, from, to),
+      companyDispatchApi.getWebOrdersForClient(client.name, from, to),
+    ])
+    if (dispatches.length === 0 && webOrders.length === 0) throw new Error('No hay despachos ni pedidos web sin facturar en ese período')
+
+    const sum = dispatches.reduce((s, d) => s + companyDispatchApi.dispatchTotal(d), 0)
+      + webOrders.reduce((s, o) => s + o.total, 0)
     const { subtotal, iva_amount, total } = companyDispatchApi.computeInvoiceAmounts(
-      dispatches, client.price_mode as PriceMode, Number(client.iva_rate),
+      sum, client.price_mode as PriceMode, Number(client.iva_rate),
     )
 
     const { data: invoice, error } = await supabase
@@ -259,11 +331,16 @@ export const companyDispatchApi = {
       .single()
     if (error) throw error
 
-    const { error: linkError } = await supabase
-      .from('company_dispatches')
-      .update({ invoice_id: invoice.id })
-      .in('id', dispatches.map(d => d.id))
-    if (linkError) throw linkError
+    if (dispatches.length > 0) {
+      const { error: linkError } = await supabase
+        .from('company_dispatches').update({ invoice_id: invoice.id }).in('id', dispatches.map(d => d.id))
+      if (linkError) throw linkError
+    }
+    if (webOrders.length > 0) {
+      const { error: linkError } = await supabase
+        .from('orders').update({ invoice_id: invoice.id }).in('id', webOrders.map(o => o.id))
+      if (linkError) throw linkError
+    }
 
     return invoice
   },
@@ -295,6 +372,7 @@ export const companyDispatchApi = {
 
   deleteInvoice: async (id: string) => {
     await supabase.from('company_dispatches').update({ invoice_id: null }).eq('invoice_id', id)
+    await supabase.from('orders').update({ invoice_id: null }).eq('invoice_id', id)
     const { error } = await supabase.from('company_invoices').delete().eq('id', id)
     if (error) throw error
   },

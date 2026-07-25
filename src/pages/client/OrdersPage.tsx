@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { Eye, ShoppingCart, Printer, Archive, ArchiveRestore, Trash2, Search } from 'lucide-react'
-import { Card, Badge, EmptyState, Pagination, Button, ConfirmDialog, showToast } from '../../components/common'
+import { Card, EmptyState, Pagination, Button, ConfirmDialog, showToast } from '../../components/common'
 import { ordersApi } from '../../services/api'
 import { getStoreId } from '../../services/coreApi'
 import { supabase } from '../../supabaseClient'
@@ -192,6 +192,16 @@ export default function OrdersPage() {
   const openDeleteAction = (ids: string[]) => {
     if (ids.length === 0) return
     setPendingAction({ kind: 'delete', ids })
+  }
+
+  const handleStatusChange = async (orderId: string, status: Order['status']) => {
+    try {
+      const updated = await ordersApi.updateStatus(orderId, status)
+      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: updated.status } : o))
+      showToast('success', 'Estado actualizado')
+    } catch {
+      showToast('error', 'Error al actualizar el estado')
+    }
   }
 
   const runPendingAction = async () => {
@@ -421,10 +431,16 @@ export default function OrdersPage() {
                       <td className="px-4 py-3 text-gray-600 hidden sm:table-cell">{order.customer_whatsapp}</td>
                       <td className="px-4 py-3 font-medium text-gray-900">{formatPrice(effectiveTotal)}</td>
                       <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <Badge color={statusConf?.color} bg={statusConf?.bg}>
-                            {statusConf?.label || order.status}
-                          </Badge>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <select
+                            value={order.status}
+                            onChange={(e) => handleStatusChange(order.id, e.target.value as Order['status'])}
+                            className={`text-xs font-semibold rounded-full px-2 py-1 border-0 outline-none cursor-pointer ${statusConf?.bg || 'bg-gray-100'} ${statusConf?.color || 'text-gray-700'}`}
+                          >
+                            {Object.entries(orderStatusConfig).map(([key, conf]) => (
+                              <option key={key} value={key}>{conf.label}</option>
+                            ))}
+                          </select>
                           <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600">{getDeliveryType(order) === 'delivery' ? 'Delivery' : 'Retiro'}</span>
                           {archived && <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">Archivado</span>}
                         </div>
