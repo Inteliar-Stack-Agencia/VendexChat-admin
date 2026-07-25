@@ -406,6 +406,35 @@ export const companyDispatchApi = {
     return data
   },
 
+  // Detalle completo de una factura ya generada (para armar el recibo imprimible)
+  getInvoiceDetail: async (invoiceId: string): Promise<{ dispatches: CompanyDispatch[]; webOrders: CompanyWebOrder[] }> => {
+    const [dispatchesRes, ordersRes] = await Promise.all([
+      supabase.from('company_dispatches').select('*, items:company_dispatch_items(*)').eq('invoice_id', invoiceId).order('date'),
+      supabase.from('orders').select('id, public_id, customer_name, status, created_at, metadata, order_items(name, product_name, quantity, unit_price, subtotal)').eq('invoice_id', invoiceId).order('created_at'),
+    ])
+    if (dispatchesRes.error) throw dispatchesRes.error
+    if (ordersRes.error) throw ordersRes.error
+
+    type OrderRow = {
+      id: string; public_id: string; customer_name: string; status: string; created_at: string
+      metadata: Record<string, unknown> | null
+      order_items: { name: string | null; product_name: string | null; quantity: number; unit_price: number; subtotal: number | null }[]
+    }
+    const webOrders: CompanyWebOrder[] = ((ordersRes.data || []) as unknown as OrderRow[]).map(o => {
+      const items = (o.order_items || []).map(it => ({
+        name: it.name || it.product_name || 'Producto', quantity: it.quantity,
+        unit_price: Number(it.unit_price), subtotal: Number(it.subtotal ?? it.quantity * it.unit_price), negotiated: true,
+      }))
+      return {
+        id: o.id, public_id: o.public_id, customer_name: o.customer_name,
+        company_name: String(o.metadata?.company_name || ''), date: o.created_at.split('T')[0], status: o.status,
+        total: items.reduce((s, it) => s + it.subtotal, 0), allNegotiated: true, items,
+      }
+    })
+
+    return { dispatches: (dispatchesRes.data || []) as CompanyDispatch[], webOrders }
+  },
+
   deleteInvoice: async (id: string) => {
     await supabase.from('company_dispatches').update({ invoice_id: null }).eq('invoice_id', id)
     await supabase.from('orders').update({ invoice_id: null }).eq('invoice_id', id)

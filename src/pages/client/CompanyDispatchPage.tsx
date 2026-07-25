@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { Building2, Plus, Trash2, X, Loader2, ChevronLeft, ChevronRight, Edit2, FileSpreadsheet, Users, Download, Check, Zap, ChevronDown, Receipt, CheckCircle2, Tag } from 'lucide-react'
+import { Building2, Plus, Trash2, X, Loader2, ChevronLeft, ChevronRight, Edit2, FileSpreadsheet, Users, Download, Check, Zap, ChevronDown, Receipt, CheckCircle2, Tag, Printer } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { Card, Button } from '../../components/common'
 import { showToast } from '../../components/common/Toast'
@@ -1121,15 +1121,82 @@ function BillingTab({ clients }: { clients: CompanyClient[] }) {
     }
     setGenerating(true)
     try {
-      await companyDispatchApi.createInvoice(selectedClientId, periodFrom, periodTo, { dispatches: selectedDispatches, webOrders: selectedOrders, extraItems })
+      const invoice = await companyDispatchApi.createInvoice(selectedClientId, periodFrom, periodTo, { dispatches: selectedDispatches, webOrders: selectedOrders, extraItems })
       showToast('success', 'Factura generada')
       setPreview(null)
-      loadInvoices()
+      await loadInvoices()
+      printReceipt({ ...invoice, client: selectedClient ? { name: selectedClient.name } : undefined }, selectedDispatches, selectedOrders, extraItems)
     } catch (err) {
       showToast('error', err instanceof Error ? err.message : 'Error al generar factura')
     } finally {
       setGenerating(false)
     }
+  }
+
+  const [printingId, setPrintingId] = useState<string | null>(null)
+
+  const handlePrintExisting = async (inv: CompanyInvoice) => {
+    setPrintingId(inv.id)
+    try {
+      const detail = await companyDispatchApi.getInvoiceDetail(inv.id)
+      printReceipt(inv, detail.dispatches, detail.webOrders, inv.extra_items || [])
+    } catch {
+      showToast('error', 'Error al armar el recibo')
+    } finally {
+      setPrintingId(null)
+    }
+  }
+
+  const printReceipt = (
+    inv: CompanyInvoice,
+    dispatches: CompanyDispatch[],
+    webOrders: CompanyWebOrder[],
+    items: CompanyInvoiceExtraItem[],
+  ) => {
+    const printWindow = window.open('', '_blank', 'width=420,height=700')
+    if (!printWindow) return
+
+    const rows: string[] = []
+    for (const d of dispatches) {
+      rows.push(`<div class="row"><span>${d.date} · Despacho${d.employee_name ? ` · ${d.employee_name}` : ''}</span><span>${formatPrice(companyDispatchApi.dispatchTotal(d))}</span></div>`)
+    }
+    for (const o of webOrders) {
+      rows.push(`<div class="row"><span>${o.date} · Pedido web${o.customer_name ? ` · ${o.customer_name}` : ''}</span><span>${formatPrice(o.total)}</span></div>`)
+    }
+    for (const it of items) {
+      rows.push(`<div class="row"><span>${it.description}</span><span>${formatPrice(it.amount)}</span></div>`)
+    }
+
+    printWindow.document.write(`
+      <html>
+      <head><title>Recibo</title>
+      <style>
+        body { font-family: 'Courier New', monospace; font-size: 12px; width: 320px; margin: 0 auto; padding: 16px; }
+        .center { text-align: center; }
+        .bold { font-weight: bold; }
+        .line { border-top: 1px dashed #000; margin: 10px 0; }
+        .row { display: flex; justify-content: space-between; gap: 12px; margin: 2px 0; }
+        .big { font-size: 16px; }
+        @media print { body { margin: 0; } }
+      </style>
+      </head>
+      <body>
+        <p class="center bold big">RECIBO</p>
+        <p class="center">${inv.client?.name || 'Empresa'}</p>
+        <p class="center">Período: ${inv.period_from} → ${inv.period_to}</p>
+        <div class="line"></div>
+        ${rows.join('')}
+        <div class="line"></div>
+        <div class="row"><span>Subtotal</span><span>${formatPrice(inv.subtotal)}</span></div>
+        <div class="row"><span>IVA</span><span>${formatPrice(inv.iva_amount)}</span></div>
+        <div class="row bold big"><span>TOTAL</span><span>${formatPrice(inv.total)}</span></div>
+        <div class="line"></div>
+        <p class="center">Estado: ${inv.status === 'pagado' ? 'PAGADO' : 'PENDIENTE DE PAGO'}</p>
+        <p class="center">${new Date(inv.invoiced_at).toLocaleString('es-AR')}</p>
+        <script>window.print();</script>
+      </body></html>
+    `)
+    printWindow.document.close()
   }
 
   const handleMarkPaid = async (inv: CompanyInvoice) => {
@@ -1308,6 +1375,10 @@ function BillingTab({ clients }: { clients: CompanyClient[] }) {
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="font-black text-gray-800 text-sm">{formatPrice(inv.total)}</span>
+                  <button onClick={() => handlePrintExisting(inv)} disabled={printingId === inv.id} title="Ver / imprimir recibo"
+                    className="p-1.5 text-gray-300 hover:text-indigo-500 rounded-lg hover:bg-indigo-50 transition-colors disabled:opacity-40">
+                    {printingId === inv.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
+                  </button>
                   {inv.status === 'pagado' ? (
                     <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full flex items-center gap-1">
                       <CheckCircle2 className="w-3 h-3" /> Pagado
