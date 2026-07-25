@@ -36,7 +36,8 @@ interface SidebarProps {
 
 export default function Sidebar({ isOpen, onClose, storeSlug }: SidebarProps) {
   const { logout, isSuperadmin, subscription } = useAuth()
-  const isEmpresas = storeSlug === 'empresas'
+  // Tiendas que operan sin mostrador propio (venden por despacho a empresas / packs semanales)
+  const isEmpresas = storeSlug === 'empresas' || storeSlug === 'laplata'
   const hasPro = ['pro', 'vip', 'ultra'].includes(subscription?.plan_type || '')
   const navigate = useNavigate()
   const isImpersonating = !!localStorage.getItem('vendexchat_impersonated_store')
@@ -174,11 +175,6 @@ export default function Sidebar({ isOpen, onClose, storeSlug }: SidebarProps) {
                       Importador IA
                       <span className="ml-auto text-[8px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded font-black uppercase">PRO</span>
                     </NavLink>
-                    <NavLink to="/expenses" className={linkClass} onClick={onClose}>
-                      <TrendingDown className="w-5 h-5" />
-                      Gastos & Proveedores
-                      <span className="ml-auto text-[8px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded font-black uppercase">PRO</span>
-                    </NavLink>
                     <NavLink to="/cash" className={linkClass} onClick={onClose}>
                       <Landmark className="w-5 h-5" />
                       Caja
@@ -186,6 +182,11 @@ export default function Sidebar({ isOpen, onClose, storeSlug }: SidebarProps) {
                     </NavLink>
                   </>
                 )}
+                <NavLink to="/expenses" className={linkClass} onClick={onClose}>
+                  <TrendingDown className="w-5 h-5" />
+                  Gastos & Proveedores
+                  <span className="ml-auto text-[8px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded font-black uppercase">PRO</span>
+                </NavLink>
               </div>
 
               {!isEmpresas && (
