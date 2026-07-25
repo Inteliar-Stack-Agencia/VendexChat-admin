@@ -82,19 +82,42 @@ export const expensesApi = {
     return combined as Expense[]
   },
 
-  // Ingresos mensuales desde orders (para P&L)
+  // Ingresos mensuales para P&L.
+  // Tiendas que facturan por despachos (módulo Empresas): el ingreso real es lo facturado en
+  // company_invoices (precio pactado por empresa, despachos + pedidos web ya combinados), no
+  // el total de mostrador de cada pedido web suelto.
+  // Resto de tiendas: ventas de `orders`, calculadas siempre desde los items — la columna
+  // `orders.total` puede haber quedado desactualizada (0 en pedidos B2B, por ejemplo).
   getMonthlyRevenue: async (year: number) => {
     const storeId = await getStoreId()
     const from = `${year}-01-01T00:00:00`
     const to = `${year}-12-31T23:59:59`
+
+    const { data: invoices, error: invError } = await supabase
+      .from('company_invoices')
+      .select('total, invoiced_at')
+      .eq('store_id', storeId)
+      .gte('invoiced_at', from)
+      .lte('invoiced_at', to)
+    if (invError) throw invError
+    if (invoices && invoices.length > 0) {
+      return invoices.map(i => ({ total: Number(i.total), created_at: i.invoiced_at })) as { total: number; created_at: string }[]
+    }
+
     const { data, error } = await supabase
       .from('orders')
-      .select('total, created_at, status')
+      .select('created_at, status, order_items(quantity, unit_price, subtotal)')
       .eq('store_id', storeId)
       .gte('created_at', from)
       .lte('created_at', to)
     if (error) throw error
-    return (data || []).filter((o) => o.status !== 'cancelled') as { total: number; created_at: string }[]
+    return (data || [])
+      .filter((o) => o.status !== 'cancelled')
+      .map((o) => ({
+        created_at: o.created_at,
+        total: (o.order_items || []).reduce((s: number, it: { quantity: number; unit_price: number; subtotal: number | null }) =>
+          s + Number(it.subtotal ?? it.quantity * it.unit_price), 0),
+      })) as { total: number; created_at: string }[]
   },
 
   createExpense: async (expense: Omit<Expense, 'id' | 'store_id' | 'created_at' | 'supplier'>) => {

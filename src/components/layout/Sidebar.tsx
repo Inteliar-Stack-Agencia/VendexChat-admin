@@ -127,10 +127,16 @@ export default function Sidebar({ isOpen, onClose, storeSlug }: SidebarProps) {
                   Productos
                 </NavLink>
                 {isEmpresas && (
-                  <NavLink to="/company-dispatch" className={linkClass} onClick={onClose}>
-                    <Building2 className="w-5 h-5" />
-                    Despachos
-                  </NavLink>
+                  <>
+                    <NavLink to="/company-dispatch" className={linkClass} onClick={onClose}>
+                      <Building2 className="w-5 h-5" />
+                      Despachos
+                    </NavLink>
+                    <NavLink to="/balance" className={linkClass} onClick={onClose}>
+                      <BarChart3 className="w-5 h-5" />
+                      Balance & P&L
+                    </NavLink>
+                  </>
                 )}
                 <NavLink to="/scan" className={linkClass} onClick={onClose}>
                   <Tag className="w-5 h-5" />
