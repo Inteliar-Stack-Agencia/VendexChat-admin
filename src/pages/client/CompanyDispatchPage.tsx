@@ -1299,13 +1299,24 @@ export default function CompanyDispatchPage() {
   const [editingClient, setEditingClient] = useState<CompanyClient | undefined>()
   const [showDispatchModal, setShowDispatchModal] = useState(false)
   const [editingDispatch, setEditingDispatch] = useState<CompanyDispatch | undefined>()
-  const [weekOffset, setWeekOffset] = useState(0)
+  const [summaryFrom, setSummaryFrom] = useState(() => getWeekBounds(0).from)
+  const [summaryTo, setSummaryTo] = useState(() => getWeekBounds(0).to)
   const [summaryDispatches, setSummaryDispatches] = useState<CompanyDispatch[]>([])
   const [summaryLoading, setSummaryLoading] = useState(false)
   const [summaryView, setSummaryView] = useState<'empleado' | 'producto'>('empleado')
   const [exportClientId, setExportClientId] = useState<string>('')
 
-  const week = getWeekBounds(weekOffset)
+  const shiftSummaryWeek = (deltaDays: number) => {
+    const shift = (iso: string) => {
+      const d = new Date(iso + 'T00:00:00')
+      d.setDate(d.getDate() + deltaDays)
+      return d.toISOString().split('T')[0]
+    }
+    setSummaryFrom(f => shift(f))
+    setSummaryTo(t => shift(t))
+  }
+
+  const week = { from: summaryFrom, to: summaryTo }
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -1582,16 +1593,22 @@ export default function CompanyDispatchPage() {
           {/* ── TAB: Resumen semanal ── */}
           {tab === 'resumen' && (
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <button onClick={() => setWeekOffset(wo => wo - 1)} className="p-2 hover:bg-gray-100 rounded-lg">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <button onClick={() => shiftSummaryWeek(-7)} className="p-2 hover:bg-gray-100 rounded-lg shrink-0" title="Semana anterior">
                   <ChevronLeft className="w-5 h-5 text-gray-500" />
                 </button>
-                <div className="text-center">
-                  <p className="text-sm font-bold text-gray-800">{week.label}</p>
-                  <p className="text-xs text-gray-400">Semana de despachos</p>
+                <div className="flex items-center gap-2">
+                  <input type="date" value={summaryFrom} onChange={e => setSummaryFrom(e.target.value)}
+                    className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+                  <span className="text-gray-400 text-xs">a</span>
+                  <input type="date" value={summaryTo} onChange={e => setSummaryTo(e.target.value)}
+                    className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+                  <button onClick={() => { const w = getWeekBounds(0); setSummaryFrom(w.from); setSummaryTo(w.to) }}
+                    className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 px-2 py-1.5 rounded-lg hover:bg-indigo-50">
+                    Esta semana
+                  </button>
                 </div>
-                <button onClick={() => setWeekOffset(wo => wo + 1)} disabled={weekOffset >= 0}
-                  className="p-2 hover:bg-gray-100 rounded-lg disabled:opacity-30">
+                <button onClick={() => shiftSummaryWeek(7)} className="p-2 hover:bg-gray-100 rounded-lg shrink-0" title="Semana siguiente">
                   <ChevronRight className="w-5 h-5 text-gray-500" />
                 </button>
               </div>
