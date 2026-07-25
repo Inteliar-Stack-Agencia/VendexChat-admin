@@ -1,7 +1,10 @@
 import { supabase } from '../supabaseClient'
 import { getStoreId } from './coreApi'
 
-export type PriceMode = 'iva_incluido' | 'mas_iva'
+// iva_incluido: el precio cargado ya es el final que paga la empresa
+// mas_iva: el precio cargado es neto, se le suma el IVA al facturar
+// mostrador_menos_iva: no hay precio propio — paga el precio de mostrador con el IVA descontado (sin volver a sumarlo)
+export type PriceMode = 'iva_incluido' | 'mas_iva' | 'mostrador_menos_iva'
 
 export interface CompanyClient {
   id: string
@@ -75,7 +78,9 @@ export interface CompanyWebOrder {
   date: string
   status: string
   total: number
-  items: { name: string; quantity: number; unit_price: number; subtotal: number }[]
+  // false si algún item se facturó al precio de mostrador por no tener precio pactado para su categoría
+  allNegotiated: boolean
+  items: { name: string; quantity: number; unit_price: number; subtotal: number; negotiated: boolean }[]
 }
 
 // Normaliza texto para matchear "AVSA", "avsa", "AVSA Argentina Valores", "Argentina Valores SA"
@@ -258,13 +263,14 @@ export const companyDispatchApi = {
     (dispatch.items || []).reduce((s, it) => s + Number(it.subtotal), 0),
 
   // Pedidos web de la tienda Empresas para un cliente en un período, sin facturar todavía.
-  // El total se calcula siempre desde los items — la columna orders.total no se mantiene
-  // actualizada para pedidos B2B.
-  getWebOrdersForClient: async (clientName: string, from: string, to: string): Promise<CompanyWebOrder[]> => {
+  // El precio de cada item se recalcula con el precio pactado por categoría de esa empresa
+  // (el mismo que se usa en despachos) — el pedido web trae el precio de mostrador, que no
+  // es el que le corresponde pagar a la empresa.
+  getWebOrdersForClient: async (client: CompanyClient, from: string, to: string): Promise<CompanyWebOrder[]> => {
     const storeId = await getStoreId()
     const { data, error } = await supabase
       .from('orders')
-      .select('id, public_id, customer_name, status, created_at, metadata, order_items(name, product_name, quantity, unit_price, subtotal)')
+      .select('id, public_id, customer_name, status, created_at, metadata, order_items(name, product_name, quantity, unit_price, subtotal, product_id, products(category_id))')
       .eq('store_id', storeId)
       .is('invoice_id', null)
       .neq('status', 'cancelled')
@@ -272,51 +278,72 @@ export const companyDispatchApi = {
       .lte('created_at', `${to}T23:59:59`)
     if (error) throw error
 
+    const priceByCategory = new Map((client.prices || []).map(p => [p.category_id, Number(p.price)]))
+
     type Row = {
       id: string; public_id: string; customer_name: string; status: string; created_at: string
       metadata: Record<string, unknown> | null
-      order_items: { name: string | null; product_name: string | null; quantity: number; unit_price: number; subtotal: number | null }[]
+      order_items: { name: string | null; product_name: string | null; quantity: number; unit_price: number; subtotal: number | null; product_id: string | null; products: { category_id: string } | null }[]
     }
     return ((data || []) as unknown as Row[])
       .map(o => ({ ...o, companyName: String(o.metadata?.company_name || '') }))
-      .filter(o => matchesClient(o.companyName, clientName))
+      .filter(o => matchesClient(o.companyName, client.name))
       .map(o => {
-        const items = (o.order_items || []).map(it => ({
-          name: it.name || it.product_name || 'Producto',
-          quantity: it.quantity,
-          unit_price: Number(it.unit_price),
-          subtotal: Number(it.subtotal ?? it.quantity * it.unit_price),
-        }))
+        const items = (o.order_items || []).map(it => {
+          const categoryId = it.products?.category_id
+          const negotiatedPrice = categoryId ? priceByCategory.get(categoryId) : undefined
+          const unitPrice = negotiatedPrice ?? Number(it.unit_price)
+          return {
+            name: it.name || it.product_name || 'Producto',
+            quantity: it.quantity,
+            unit_price: unitPrice,
+            subtotal: unitPrice * it.quantity,
+            negotiated: negotiatedPrice != null,
+          }
+        })
         return {
           id: o.id, public_id: o.public_id, customer_name: o.customer_name,
           company_name: o.companyName, date: o.created_at.split('T')[0], status: o.status,
           total: items.reduce((s, it) => s + it.subtotal, 0),
+          allNegotiated: items.every(it => it.negotiated),
           items,
         }
       })
   },
 
-  // Compute subtotal/IVA/total for a combined amount, given the client's price mode
+  // Compute subtotal/IVA/total for a combined amount, given the client's price mode.
+  // `sum` es siempre la suma de los unit_price cargados (precio de mostrador si no hay
+  // precio propio pactado para esa categoría).
   computeInvoiceAmounts: (sum: number, priceMode: PriceMode, ivaRate: number) => {
     if (priceMode === 'iva_incluido') {
       const subtotal = sum / (1 + ivaRate / 100)
       return { subtotal, iva_amount: sum - subtotal, total: sum }
     }
+    if (priceMode === 'mostrador_menos_iva') {
+      // Se le descuenta el IVA al precio de mostrador y eso es lo que se factura, sin sumarlo de nuevo
+      const subtotal = sum / (1 + ivaRate / 100)
+      return { subtotal, iva_amount: 0, total: subtotal }
+    }
     const iva_amount = sum * (ivaRate / 100)
     return { subtotal: sum, iva_amount, total: sum + iva_amount }
   },
 
-  createInvoice: async (clientId: string, from: string, to: string, notes?: string): Promise<CompanyInvoice> => {
+  // Genera la factura SOLO con los despachos y pedidos que se le pasan explícitamente —
+  // no todo lo que haya sin facturar en el período. Así cada empresa puede elegir qué
+  // cuenta (por ejemplo: solo lo cargado a mano en Entrada rápida, dejando afuera pedidos
+  // web que fueron solo un aviso a cocina y no reflejan quién realmente comió ese día).
+  createInvoice: async (
+    clientId: string, from: string, to: string,
+    selection: { dispatches: CompanyDispatch[]; webOrders: CompanyWebOrder[] },
+    notes?: string,
+  ): Promise<CompanyInvoice> => {
     const storeId = await getStoreId()
     const { data: client, error: clientError } = await supabase
-      .from('company_clients').select('name, price_mode, iva_rate').eq('id', clientId).single()
+      .from('company_clients').select('price_mode, iva_rate').eq('id', clientId).single()
     if (clientError) throw clientError
 
-    const [dispatches, webOrders] = await Promise.all([
-      companyDispatchApi.getUninvoicedDispatches(clientId, from, to),
-      companyDispatchApi.getWebOrdersForClient(client.name, from, to),
-    ])
-    if (dispatches.length === 0 && webOrders.length === 0) throw new Error('No hay despachos ni pedidos web sin facturar en ese período')
+    const { dispatches, webOrders } = selection
+    if (dispatches.length === 0 && webOrders.length === 0) throw new Error('Seleccioná al menos un despacho o pedido para facturar')
 
     const sum = dispatches.reduce((s, d) => s + companyDispatchApi.dispatchTotal(d), 0)
       + webOrders.reduce((s, o) => s + o.total, 0)
