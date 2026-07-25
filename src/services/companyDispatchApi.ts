@@ -21,6 +21,11 @@ export interface CompanyClient {
   prices?: CompanyClientPrice[]
 }
 
+export interface CompanyInvoiceExtraItem {
+  description: string
+  amount: number
+}
+
 export interface CompanyInvoice {
   id: string
   store_id: string
@@ -30,6 +35,7 @@ export interface CompanyInvoice {
   subtotal: number
   iva_amount: number
   total: number
+  extra_items: CompanyInvoiceExtraItem[]
   status: 'facturado' | 'pagado'
   invoiced_at: string
   paid_at: string | null
@@ -334,7 +340,7 @@ export const companyDispatchApi = {
   // web que fueron solo un aviso a cocina y no reflejan quién realmente comió ese día).
   createInvoice: async (
     clientId: string, from: string, to: string,
-    selection: { dispatches: CompanyDispatch[]; webOrders: CompanyWebOrder[] },
+    selection: { dispatches: CompanyDispatch[]; webOrders: CompanyWebOrder[]; extraItems?: CompanyInvoiceExtraItem[] },
     notes?: string,
   ): Promise<CompanyInvoice> => {
     const storeId = await getStoreId()
@@ -342,18 +348,21 @@ export const companyDispatchApi = {
       .from('company_clients').select('price_mode, iva_rate').eq('id', clientId).single()
     if (clientError) throw clientError
 
-    const { dispatches, webOrders } = selection
-    if (dispatches.length === 0 && webOrders.length === 0) throw new Error('Seleccioná al menos un despacho o pedido para facturar')
+    const { dispatches, webOrders, extraItems = [] } = selection
+    if (dispatches.length === 0 && webOrders.length === 0 && extraItems.length === 0) {
+      throw new Error('Seleccioná al menos un despacho, pedido o ítem manual para facturar')
+    }
 
     const sum = dispatches.reduce((s, d) => s + companyDispatchApi.dispatchTotal(d), 0)
       + webOrders.reduce((s, o) => s + o.total, 0)
+      + extraItems.reduce((s, i) => s + i.amount, 0)
     const { subtotal, iva_amount, total } = companyDispatchApi.computeInvoiceAmounts(
       sum, client.price_mode as PriceMode, Number(client.iva_rate),
     )
 
     const { data: invoice, error } = await supabase
       .from('company_invoices')
-      .insert({ store_id: storeId, client_id: clientId, period_from: from, period_to: to, subtotal, iva_amount, total, notes: notes || null })
+      .insert({ store_id: storeId, client_id: clientId, period_from: from, period_to: to, subtotal, iva_amount, total, extra_items: extraItems, notes: notes || null })
       .select()
       .single()
     if (error) throw error

@@ -3,7 +3,7 @@ import { Building2, Plus, Trash2, X, Loader2, ChevronLeft, ChevronRight, Edit2, 
 import * as XLSX from 'xlsx'
 import { Card, Button } from '../../components/common'
 import { showToast } from '../../components/common/Toast'
-import { companyDispatchApi, type CompanyClient, type CompanyDispatch, type CompanyInvoice, type CompanyWebOrder, type PriceMode } from '../../services/companyDispatchApi'
+import { companyDispatchApi, type CompanyClient, type CompanyDispatch, type CompanyInvoice, type CompanyInvoiceExtraItem, type CompanyWebOrder, type PriceMode } from '../../services/companyDispatchApi'
 import { labelsApi } from '../../services/labelsApi'
 import { productsApi } from '../../services/productsApi'
 import { categoriesApi } from '../../services/categoriesApi'
@@ -1038,6 +1038,9 @@ function BillingTab({ clients }: { clients: CompanyClient[] }) {
   const [preview, setPreview] = useState<{ dispatches: CompanyDispatch[]; webOrders: CompanyWebOrder[] } | null>(null)
   const [selectedDispatchIds, setSelectedDispatchIds] = useState<Set<string>>(new Set())
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set())
+  const [extraItems, setExtraItems] = useState<CompanyInvoiceExtraItem[]>([])
+  const [extraDesc, setExtraDesc] = useState('')
+  const [extraAmount, setExtraAmount] = useState('')
   const [loadingPreview, setLoadingPreview] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [invoices, setInvoices] = useState<CompanyInvoice[]>([])
@@ -1075,6 +1078,7 @@ function BillingTab({ clients }: { clients: CompanyClient[] }) {
       // reflejan quién finalmente recibió comida ese día.
       setSelectedDispatchIds(new Set(dispatches.map(d => d.id)))
       setSelectedOrderIds(new Set())
+      setExtraItems([])
     } catch {
       showToast('error', 'Error al calcular el período')
     } finally {
@@ -1097,17 +1101,27 @@ function BillingTab({ clients }: { clients: CompanyClient[] }) {
   const selectedOrders = preview?.webOrders.filter(o => selectedOrderIds.has(o.id)) ?? []
   const selectedSum = selectedDispatches.reduce((s, d) => s + companyDispatchApi.dispatchTotal(d), 0)
     + selectedOrders.reduce((s, o) => s + o.total, 0)
+    + extraItems.reduce((s, i) => s + i.amount, 0)
   const amounts = selectedClient ? companyDispatchApi.computeInvoiceAmounts(selectedSum, selectedClient.price_mode, selectedClient.iva_rate) : null
+
+  const addExtraItem = () => {
+    const amount = parseFloat(extraAmount)
+    if (!extraDesc.trim() || isNaN(amount) || amount === 0) { showToast('error', 'Cargá una descripción y un monto válido'); return }
+    setExtraItems(prev => [...prev, { description: extraDesc.trim(), amount }])
+    setExtraDesc('')
+    setExtraAmount('')
+  }
+  const removeExtraItem = (idx: number) => setExtraItems(prev => prev.filter((_, i) => i !== idx))
 
   const handleGenerate = async () => {
     if (!selectedClientId || !preview) return
-    if (selectedDispatches.length === 0 && selectedOrders.length === 0) {
-      showToast('error', 'Tildá al menos un despacho o pedido')
+    if (selectedDispatches.length === 0 && selectedOrders.length === 0 && extraItems.length === 0) {
+      showToast('error', 'Tildá al menos un despacho, pedido, o agregá un ítem manual')
       return
     }
     setGenerating(true)
     try {
-      await companyDispatchApi.createInvoice(selectedClientId, periodFrom, periodTo, { dispatches: selectedDispatches, webOrders: selectedOrders })
+      await companyDispatchApi.createInvoice(selectedClientId, periodFrom, periodTo, { dispatches: selectedDispatches, webOrders: selectedOrders, extraItems })
       showToast('success', 'Factura generada')
       setPreview(null)
       loadInvoices()
@@ -1226,6 +1240,33 @@ function BillingTab({ clients }: { clients: CompanyClient[] }) {
               </div>
             )}
 
+            <div>
+              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Ítems manuales (envío, ajustes, etc.)</p>
+              {extraItems.length > 0 && (
+                <div className="bg-white rounded-lg border border-gray-200 divide-y divide-gray-100 mb-2">
+                  {extraItems.map((item, idx) => (
+                    <div key={idx} className="flex items-center gap-2 px-3 py-1.5 text-xs">
+                      <span className="flex-1 text-gray-600">{item.description}</span>
+                      <span className="font-bold text-gray-700">{formatPrice(item.amount)}</span>
+                      <button onClick={() => removeExtraItem(idx)} className="text-gray-300 hover:text-rose-500 transition-colors">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="flex gap-2">
+                <input type="text" value={extraDesc} onChange={e => setExtraDesc(e.target.value)} placeholder="Ej: Costo de envío"
+                  className="flex-1 border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+                <input type="number" value={extraAmount} onChange={e => setExtraAmount(e.target.value)} placeholder="Monto"
+                  className="w-28 border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+                <button onClick={addExtraItem} type="button"
+                  className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg text-xs font-bold transition-colors">
+                  Agregar
+                </button>
+              </div>
+            </div>
+
             {amounts && (
               <>
                 <div className="flex justify-between text-sm pt-1"><span className="text-gray-500">Subtotal (neto)</span><span className="font-bold text-gray-800">{formatPrice(amounts.subtotal)}</span></div>
@@ -1261,6 +1302,9 @@ function BillingTab({ clients }: { clients: CompanyClient[] }) {
                 <div>
                   <p className="text-sm font-bold text-gray-800">{inv.client?.name || 'Empresa'}</p>
                   <p className="text-[11px] text-gray-400">{inv.period_from} → {inv.period_to}</p>
+                  {inv.extra_items?.length > 0 && (
+                    <p className="text-[10px] text-gray-400">+ {inv.extra_items.map(i => i.description).join(', ')}</p>
+                  )}
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="font-black text-gray-800 text-sm">{formatPrice(inv.total)}</span>
