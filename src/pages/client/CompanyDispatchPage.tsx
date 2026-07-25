@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { Building2, Plus, Trash2, X, Loader2, ChevronLeft, ChevronRight, Edit2, FileSpreadsheet, Users, Download, Check, Zap, ChevronDown } from 'lucide-react'
+import { Building2, Plus, Trash2, X, Loader2, ChevronLeft, ChevronRight, Edit2, FileSpreadsheet, Users, Download, Check, Zap, ChevronDown, Receipt, CheckCircle2, Tag } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { Card, Button } from '../../components/common'
 import { showToast } from '../../components/common/Toast'
-import { companyDispatchApi, type CompanyClient, type CompanyDispatch } from '../../services/companyDispatchApi'
+import { companyDispatchApi, type CompanyClient, type CompanyDispatch, type CompanyInvoice, type PriceMode } from '../../services/companyDispatchApi'
+import { labelsApi } from '../../services/labelsApi'
 import { productsApi } from '../../services/productsApi'
 import { categoriesApi } from '../../services/categoriesApi'
 import { supabase } from '../../supabaseClient'
@@ -49,6 +50,8 @@ function ClientModal({
   const [phone, setPhone] = useState(client?.phone || '')
   const [email, setEmail] = useState(client?.email || '')
   const [notes, setNotes] = useState(client?.notes || '')
+  const [priceMode, setPriceMode] = useState<PriceMode>(client?.price_mode || 'iva_incluido')
+  const [ivaRate, setIvaRate] = useState(String(client?.iva_rate ?? 21))
   const [prices, setPrices] = useState<Record<string, string>>(() => {
     const init: Record<string, string> = {}
     for (const p of client?.prices || []) init[p.category_id] = String(p.price)
@@ -61,10 +64,11 @@ function ClientModal({
     setSaving(true)
     try {
       let id = client?.id
+      const ratePayload = { price_mode: priceMode, iva_rate: parseFloat(ivaRate) || 21 }
       if (id) {
-        await companyDispatchApi.updateClient(id, { name: name.trim(), contact_name: contactName || null, phone: phone || null, email: email || null, notes: notes || null })
+        await companyDispatchApi.updateClient(id, { name: name.trim(), contact_name: contactName || null, phone: phone || null, email: email || null, notes: notes || null, ...ratePayload })
       } else {
-        const created = await companyDispatchApi.createClient({ name: name.trim(), contact_name: contactName || undefined, phone: phone || undefined, email: email || undefined, notes: notes || undefined })
+        const created = await companyDispatchApi.createClient({ name: name.trim(), contact_name: contactName || undefined, phone: phone || undefined, email: email || undefined, notes: notes || undefined, ...ratePayload })
         id = created.id
       }
       const priceEntries = Object.entries(prices)
@@ -129,8 +133,34 @@ function ClientModal({
           </div>
 
           <div>
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Trato de facturación</p>
+            <p className="text-[11px] text-gray-400 mb-3">Cómo se interpreta el precio cargado abajo al generar la factura quincenal.</p>
+            <div className="flex items-center gap-3 bg-gray-50 rounded-xl px-3 py-2.5">
+              <div className="flex-1 grid grid-cols-2 gap-2">
+                <button type="button" onClick={() => setPriceMode('iva_incluido')}
+                  className={`px-3 py-2 rounded-lg text-xs font-bold border transition-colors ${priceMode === 'iva_incluido' ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-gray-200 text-gray-500'}`}>
+                  IVA incluido
+                </button>
+                <button type="button" onClick={() => setPriceMode('mas_iva')}
+                  className={`px-3 py-2 rounded-lg text-xs font-bold border transition-colors ${priceMode === 'mas_iva' ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-gray-200 text-gray-500'}`}>
+                  + IVA
+                </button>
+              </div>
+              <div className="relative shrink-0">
+                <input type="number" min="0" step="0.5" value={ivaRate} onChange={e => setIvaRate(e.target.value)}
+                  className="w-20 pr-6 pl-2 py-2 text-xs font-bold text-indigo-600 border border-indigo-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-400 bg-white text-right" />
+                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs">%</span>
+              </div>
+            </div>
+          </div>
+
+          <div>
             <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Precios acordados por categoría</p>
-            <p className="text-[11px] text-gray-400 mb-3">Todos los productos de esa categoría tendrán ese precio para esta empresa.</p>
+            <p className="text-[11px] text-gray-400 mb-3">
+              {priceMode === 'iva_incluido'
+                ? 'Precio final que paga la empresa (ya incluye el IVA).'
+                : 'Precio neto (sin IVA); se le suma el % de arriba al facturar.'}
+            </p>
             <div className="space-y-2">
               {activeCategories.map(cat => (
                 <div key={cat.id} className="flex items-center gap-3 bg-gray-50 rounded-xl px-3 py-2.5">
@@ -994,9 +1024,195 @@ function QuickEntryTab({ clients, products, onSaved }: { clients: CompanyClient[
   )
 }
 
+// ─── Facturación / cuenta corriente ───────────────────────────────────────────
+
+function BillingTab({ clients }: { clients: CompanyClient[] }) {
+  const fifteenDaysAgo = new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+  const [selectedClientId, setSelectedClientId] = useState('')
+  const [periodFrom, setPeriodFrom] = useState(fifteenDaysAgo)
+  const [periodTo, setPeriodTo] = useState(today)
+  const [preview, setPreview] = useState<{ dispatches: CompanyDispatch[]; subtotal: number; iva_amount: number; total: number } | null>(null)
+  const [loadingPreview, setLoadingPreview] = useState(false)
+  const [generating, setGenerating] = useState(false)
+  const [invoices, setInvoices] = useState<CompanyInvoice[]>([])
+  const [loadingInvoices, setLoadingInvoices] = useState(true)
+  const [payingId, setPayingId] = useState<string | null>(null)
+
+  const activeClients = clients.filter(c => c.is_active)
+
+  const loadInvoices = useCallback(async () => {
+    setLoadingInvoices(true)
+    try {
+      setInvoices(await companyDispatchApi.listInvoices())
+    } catch {
+      showToast('error', 'Error al cargar facturas')
+    } finally {
+      setLoadingInvoices(false)
+    }
+  }, [])
+
+  useEffect(() => { loadInvoices() }, [loadInvoices])
+
+  const loadPreview = async () => {
+    const client = clients.find(c => c.id === selectedClientId)
+    if (!client) return
+    setLoadingPreview(true)
+    try {
+      const dispatches = await companyDispatchApi.getUninvoicedDispatches(selectedClientId, periodFrom, periodTo)
+      const amounts = companyDispatchApi.computeInvoiceAmounts(dispatches, client.price_mode, client.iva_rate)
+      setPreview({ dispatches, ...amounts })
+    } catch {
+      showToast('error', 'Error al calcular el período')
+    } finally {
+      setLoadingPreview(false)
+    }
+  }
+
+  const handleGenerate = async () => {
+    if (!selectedClientId) return
+    setGenerating(true)
+    try {
+      await companyDispatchApi.createInvoice(selectedClientId, periodFrom, periodTo)
+      showToast('success', 'Factura generada')
+      setPreview(null)
+      loadInvoices()
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : 'Error al generar factura')
+    } finally {
+      setGenerating(false)
+    }
+  }
+
+  const handleMarkPaid = async (inv: CompanyInvoice) => {
+    const amountStr = prompt(`Monto cobrado de ${inv.client?.name || 'la empresa'}:`, String(inv.total))
+    if (amountStr === null) return
+    const amount = parseFloat(amountStr)
+    if (isNaN(amount)) { showToast('error', 'Monto inválido'); return }
+    setPayingId(inv.id)
+    try {
+      await companyDispatchApi.markInvoicePaid(inv.id, amount)
+      showToast('success', 'Factura marcada como pagada')
+      loadInvoices()
+    } catch {
+      showToast('error', 'Error al marcar como pagada')
+    } finally {
+      setPayingId(null)
+    }
+  }
+
+  const pendingInvoices = invoices.filter(i => i.status === 'facturado')
+  const totalPendiente = pendingInvoices.reduce((s, i) => s + i.total, 0)
+  const balanceByClient = pendingInvoices.reduce((acc, i) => {
+    const name = i.client?.name || 'Desconocido'
+    acc[name] = (acc[name] || 0) + i.total
+    return acc
+  }, {} as Record<string, number>)
+
+  return (
+    <div className="space-y-6">
+      <Card className="bg-indigo-50 border-indigo-100">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-xs font-bold text-indigo-500 uppercase tracking-widest">Total a cobrar (sin pagar)</p>
+          <p className="text-2xl font-black text-indigo-700">{formatPrice(totalPendiente)}</p>
+        </div>
+        {Object.keys(balanceByClient).length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {Object.entries(balanceByClient).map(([name, amount]) => (
+              <span key={name} className="text-[11px] bg-white border border-indigo-200 text-indigo-700 font-semibold px-2.5 py-1 rounded-full">
+                {name}: {formatPrice(amount)}
+              </span>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <Card>
+        <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-3">Generar factura de período</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
+          <div className="sm:col-span-2">
+            <label className="block text-xs font-semibold text-gray-500 mb-1">Empresa</label>
+            <select value={selectedClientId} onChange={e => { setSelectedClientId(e.target.value); setPreview(null) }}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300">
+              <option value="">Elegir empresa...</option>
+              {activeClients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 mb-1">Desde</label>
+            <input type="date" value={periodFrom} onChange={e => setPeriodFrom(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 mb-1">Hasta</label>
+            <input type="date" value={periodTo} onChange={e => setPeriodTo(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+          </div>
+        </div>
+        <div className="mt-3">
+          <Button variant="secondary" onClick={loadPreview} disabled={!selectedClientId || loadingPreview}>
+            {loadingPreview ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Calcular período'}
+          </Button>
+        </div>
+
+        {preview && (
+          <div className="mt-4 bg-gray-50 rounded-xl p-4 space-y-2">
+            <div className="flex justify-between text-sm"><span className="text-gray-500">Despachos incluidos</span><span className="font-bold text-gray-800">{preview.dispatches.length}</span></div>
+            <div className="flex justify-between text-sm"><span className="text-gray-500">Subtotal (neto)</span><span className="font-bold text-gray-800">{formatPrice(preview.subtotal)}</span></div>
+            <div className="flex justify-between text-sm"><span className="text-gray-500">IVA</span><span className="font-bold text-gray-800">{formatPrice(preview.iva_amount)}</span></div>
+            <div className="flex justify-between text-base border-t border-gray-200 pt-2"><span className="font-bold text-gray-700">Total a facturar</span><span className="font-black text-indigo-700">{formatPrice(preview.total)}</span></div>
+            {preview.dispatches.length === 0 ? (
+              <p className="text-xs text-gray-400">No hay despachos sin facturar en ese período.</p>
+            ) : (
+              <Button onClick={handleGenerate} disabled={generating} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white mt-2 flex items-center justify-center gap-2">
+                {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Receipt className="w-4 h-4" />}
+                Generar factura
+              </Button>
+            )}
+          </div>
+        )}
+      </Card>
+
+      <Card padding={false}>
+        <div className="p-5 border-b border-gray-100">
+          <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest">Facturas generadas</h3>
+        </div>
+        {loadingInvoices ? (
+          <div className="flex justify-center py-10"><Loader2 className="w-5 h-5 text-gray-300 animate-spin" /></div>
+        ) : invoices.length === 0 ? (
+          <div className="text-center py-10 text-gray-400 text-sm">Sin facturas generadas todavía</div>
+        ) : (
+          <div className="divide-y divide-gray-50">
+            {invoices.map(inv => (
+              <div key={inv.id} className="flex items-center justify-between px-5 py-3">
+                <div>
+                  <p className="text-sm font-bold text-gray-800">{inv.client?.name || 'Empresa'}</p>
+                  <p className="text-[11px] text-gray-400">{inv.period_from} → {inv.period_to}</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="font-black text-gray-800 text-sm">{formatPrice(inv.total)}</span>
+                  {inv.status === 'pagado' ? (
+                    <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3" /> Pagado
+                    </span>
+                  ) : (
+                    <button onClick={() => handleMarkPaid(inv)} disabled={payingId === inv.id}
+                      className="text-[10px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 px-2.5 py-1.5 rounded-full transition-colors">
+                      {payingId === inv.id ? '...' : 'Marcar pagada'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+    </div>
+  )
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
-type Tab = 'rapido' | 'clientes' | 'despachos' | 'resumen'
+type Tab = 'rapido' | 'clientes' | 'despachos' | 'resumen' | 'facturacion'
 
 export default function CompanyDispatchPage() {
   const [tab, setTab] = useState<Tab>('rapido')
@@ -1071,6 +1287,29 @@ export default function CompanyDispatchPage() {
       load()
     } catch {
       showToast('error', 'Error al eliminar')
+    }
+  }
+
+  const [generatingLabelsFor, setGeneratingLabelsFor] = useState<string | null>(null)
+
+  // Genera etiquetas (código único por unidad) para este despacho — el comensal sale del
+  // despacho ya cargado, no hay que tipearlo de nuevo.
+  const handleGenerateLabels = async (dispatch: CompanyDispatch) => {
+    setGeneratingLabelsFor(dispatch.id)
+    try {
+      const items = (dispatch.items || []).filter(it => it.quantity > 0)
+      const labels = await labelsApi.generateForDispatch(dispatch.id, dispatch.employee_name, dispatch.date, items)
+      if (labels.length === 0) { showToast('info', 'Sin items para etiquetar'); return }
+      const rows = labels.map(l => ({ plato: l.product_name, comensal: l.comensal || '', cantidad: 1, codigo: l.code }))
+      const ws = XLSX.utils.json_to_sheet(rows, { header: ['plato', 'comensal', 'cantidad', 'codigo'] })
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, 'Etiquetas')
+      XLSX.writeFile(wb, `etiquetas-despacho-${dispatch.date}-${(dispatch.employee_name || 'sin-nombre').replace(/\s+/g, '_')}.xlsx`)
+      showToast('success', `${labels.length} etiquetas generadas`)
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : 'Error al generar etiquetas')
+    } finally {
+      setGeneratingLabelsFor(null)
     }
   }
 
@@ -1172,6 +1411,7 @@ export default function CompanyDispatchPage() {
           { key: 'rapido', label: '⚡ Entrada rápida' },
           { key: 'despachos', label: 'Historial' },
           { key: 'resumen', label: 'Resumen semanal' },
+          { key: 'facturacion', label: '🧾 Facturación' },
           { key: 'clientes', label: 'Empresas' },
         ] as { key: Tab; label: string }[]).map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
@@ -1245,6 +1485,10 @@ export default function CompanyDispatchPage() {
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
                             <span className="font-black text-emerald-600 text-sm">{formatPrice((d.items || []).reduce((s, it) => s + it.subtotal, 0))}</span>
+                            <button onClick={() => handleGenerateLabels(d)} disabled={generatingLabelsFor === d.id}
+                              title="Generar etiquetas" className="p-1.5 text-gray-300 hover:text-indigo-500 rounded-lg hover:bg-indigo-50 transition-colors disabled:opacity-40">
+                              {generatingLabelsFor === d.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Tag className="w-4 h-4" />}
+                            </button>
                             <button onClick={() => setEditingDispatch(d)} className="p-1.5 text-gray-300 hover:text-amber-500 rounded-lg hover:bg-amber-50 transition-colors">
                               <Edit2 className="w-4 h-4" />
                             </button>
@@ -1439,6 +1683,9 @@ export default function CompanyDispatchPage() {
               )}
             </div>
           )}
+
+          {/* ── TAB: Facturación ── */}
+          {tab === 'facturacion' && <BillingTab clients={clients} />}
 
           {/* ── TAB: Clientes ── */}
           {tab === 'clientes' && (
