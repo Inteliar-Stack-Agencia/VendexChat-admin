@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { Eye, ShoppingCart, Printer, Archive, ArchiveRestore, Trash2 } from 'lucide-react'
-import { Card, Badge, EmptyState, Pagination, Button, ConfirmDialog, showToast } from '../../components/common'
+import { Eye, ShoppingCart, Printer, Archive, ArchiveRestore, Trash2, CheckCircle2, Circle } from 'lucide-react'
+import { Card, Badge, EmptyState, Pagination, Button, ConfirmDialog, showToast, Modal, Input } from '../../components/common'
 import { ordersApi } from '../../services/api'
+import { orderPaymentsApi } from '../../services/orderPaymentsApi'
 import { Order } from '../../types'
 import { formatPrice, formatDate, orderStatusConfig } from '../../utils/helpers'
 import { useAuth } from '../../contexts/AuthContext'
@@ -11,6 +12,13 @@ type PendingAction = {
   kind: 'archive' | 'delete'
   ids: string[]
   archiveValue?: boolean
+} | null
+
+type PaymentModal = {
+  orderId: string
+  orderTotal: number
+  currentStatus: 'pending' | 'paid' | 'partial' | undefined
+  currentAmount: number | null
 } | null
 
 export default function OrdersPage() {
@@ -26,6 +34,9 @@ export default function OrdersPage() {
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([])
   const [pendingAction, setPendingAction] = useState<PendingAction>(null)
   const [processingAction, setProcessingAction] = useState(false)
+  const [paymentModal, setPaymentModal] = useState<PaymentModal>(null)
+  const [paymentAmount, setPaymentAmount] = useState('')
+  const [savingPayment, setSavingPayment] = useState(false)
 
   const isArchived = (order: Order) => Boolean((order.metadata as Record<string, unknown> | null)?.archived)
 
@@ -183,6 +194,50 @@ export default function OrdersPage() {
     }
   }
 
+  const openPaymentModal = (order: Order) => {
+    setPaymentModal({
+      orderId: order.id,
+      orderTotal: order.total,
+      currentStatus: order.payment_status,
+      currentAmount: order.paid_amount || null,
+    })
+    setPaymentAmount(order.paid_amount?.toString() || '')
+  }
+
+  const handleSavePayment = async (status: 'paid' | 'partial' | 'pending') => {
+    if (!paymentModal) return
+    setSavingPayment(true)
+    try {
+      const amount = Number(paymentAmount) || 0
+      if (status === 'pending') {
+        await orderPaymentsApi.markAsPending(paymentModal.orderId)
+      } else if (status === 'paid') {
+        if (amount <= 0) {
+          showToast('error', 'Ingresa un monto válido')
+          setSavingPayment(false)
+          return
+        }
+        await orderPaymentsApi.markAsPaid(paymentModal.orderId, amount)
+      } else {
+        if (amount <= 0) {
+          showToast('error', 'Ingresa un monto válido')
+          setSavingPayment(false)
+          return
+        }
+        await orderPaymentsApi.markAsPartial(paymentModal.orderId, amount)
+      }
+      showToast('success', 'Pago actualizado')
+      setPaymentModal(null)
+      setPaymentAmount('')
+      await loadOrders()
+    } catch (err) {
+      console.error(err)
+      showToast('error', 'Error al guardar el pago')
+    } finally {
+      setSavingPayment(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-gray-900">Pedidos</h1>
@@ -277,12 +332,21 @@ export default function OrdersPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-200 bg-gray-50">
-                  <th className="px-4 py-3" />
+                  <th className="px-4 py-3">
+                    <input
+                      type="checkbox"
+                      checked={allVisibleSelected}
+                      onChange={toggleSelectAllVisible}
+                      className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                      title="Seleccionar visibles"
+                    />
+                  </th>
                   <th className="text-left px-4 py-3 font-medium text-gray-500">Nº Pedido</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-500">Cliente</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-500 hidden sm:table-cell">WhatsApp</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-500">Total</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-500">Estado</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-500">Pago</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-500 hidden sm:table-cell">Fecha</th>
                   <th className="text-right px-4 py-3 font-medium text-gray-500">Acciones</th>
                 </tr>
@@ -375,6 +439,29 @@ export default function OrdersPage() {
                           {archived && <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">Archivado</span>}
                         </div>
                       </td>
+                      <td className="px-4 py-3">
+                        <button
+                          onClick={() => openPaymentModal(order)}
+                          className="flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-gray-100 text-xs font-medium"
+                        >
+                          {order.payment_status === 'paid' ? (
+                            <>
+                              <CheckCircle2 className="w-4 h-4 text-green-600" />
+                              <span className="text-green-600">Pagado</span>
+                            </>
+                          ) : order.payment_status === 'partial' ? (
+                            <>
+                              <Circle className="w-4 h-4 text-amber-600" />
+                              <span className="text-amber-600">Parcial</span>
+                            </>
+                          ) : (
+                            <>
+                              <Circle className="w-4 h-4 text-gray-400" />
+                              <span className="text-gray-500">Pendiente</span>
+                            </>
+                          )}
+                        </button>
+                      </td>
                       <td className="px-4 py-3 text-gray-500 hidden sm:table-cell">{formatDate(order.created_at)}</td>
                       <td className="px-4 py-3">
                         <div className="flex justify-end gap-1">
@@ -416,6 +503,62 @@ export default function OrdersPage() {
           <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
         </Card>
       )}
+
+      {/* Payment Modal */}
+      <Modal
+        isOpen={!!paymentModal}
+        onClose={() => setPaymentModal(null)}
+        title="Registrar Pago"
+        size="sm"
+      >
+        {paymentModal && (
+          <div className="space-y-4">
+            <div className="bg-gray-50 p-3 rounded-lg">
+              <p className="text-xs text-gray-500 uppercase font-semibold">Total del pedido</p>
+              <p className="text-xl font-bold text-gray-900">{formatPrice(paymentModal.orderTotal)}</p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Monto pagado</label>
+              <Input
+                type="number"
+                placeholder="0"
+                value={paymentAmount}
+                onChange={(e) => setPaymentAmount(e.target.value)}
+                step="0.01"
+                min="0"
+              />
+              {paymentAmount && Number(paymentAmount) > paymentModal.orderTotal && (
+                <p className="text-xs text-amber-600 mt-1">⚠️ El monto supera el total del pedido</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <button
+                onClick={() => handleSavePayment('paid')}
+                disabled={savingPayment || !paymentAmount || Number(paymentAmount) <= 0}
+                className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 font-medium text-sm"
+              >
+                {savingPayment ? 'Guardando...' : 'Marcar como Pagado'}
+              </button>
+              <button
+                onClick={() => handleSavePayment('partial')}
+                disabled={savingPayment || !paymentAmount || Number(paymentAmount) <= 0}
+                className="w-full px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50 font-medium text-sm"
+              >
+                {savingPayment ? 'Guardando...' : 'Marcar como Pago Parcial'}
+              </button>
+              <button
+                onClick={() => handleSavePayment('pending')}
+                disabled={savingPayment}
+                className="w-full px-4 py-2 bg-gray-400 text-white rounded-lg hover:bg-gray-500 disabled:opacity-50 font-medium text-sm"
+              >
+                {savingPayment ? 'Guardando...' : 'Marcar como Pendiente'}
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       <ConfirmDialog
         isOpen={!!pendingAction}

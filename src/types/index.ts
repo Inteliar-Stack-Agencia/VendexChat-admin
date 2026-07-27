@@ -233,6 +233,11 @@ export interface Order {
   total: number
   items: OrderItem[]
   metadata?: OrderMetadata | null
+  payment_status?: 'pending' | 'paid' | 'partial'
+  paid_amount?: number | null
+  paid_at?: string | null
+  payment_notes?: string | null
+  invoice_id?: string | null
   created_at: string
   updated_at: string
 }
