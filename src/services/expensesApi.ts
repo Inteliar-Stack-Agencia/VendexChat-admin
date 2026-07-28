@@ -98,19 +98,23 @@ export const expensesApi = {
   // - Pedidos sueltos (sin invoice_id, venta normal de mostrador/web): si se marcó pago manual
   //   (payment_status paid/partial), usa paid_amount; si no, usa el total calculado desde items
   //   (columna `orders.total` puede haber quedado desactualizada).
+  // Cada fila trae además `mpFeeLoss`: comisión estimada (según % configurado en Ajustes → Pagos)
+  // sobre pedidos pagados con QR/tarjeta — no se resta de `total` (revenue sigue siendo el monto
+  // nominal de venta), es solo para mostrar por separado cuánto de eso no termina entrando.
   getMonthlyRevenue: async (year: number) => {
     const storeId = await getStoreId()
     const from = `${year}-01-01T00:00:00`
     const to = `${year}-12-31T23:59:59`
 
     const { data: ownStore, error: ownStoreError } = await supabase
-      .from('stores').select('slug').eq('id', storeId).single()
+      .from('stores').select('slug, metadata').eq('id', storeId).single()
     if (ownStoreError) throw ownStoreError
     const ownSlug = ownStore?.slug as string | undefined
+    const mpFeePct = Number((ownStore?.metadata as Record<string, unknown> | null)?.mp_fee_percentage) || 0
 
     // Tienda satélite (ej. Empresas): su ingreso ya se cuenta en la tienda madre.
     if (ownSlug && REVENUE_ABSORBED_INTO[ownSlug]) {
-      return [] as { total: number; created_at: string }[]
+      return [] as { total: number; created_at: string; mpFeeLoss: number }[]
     }
 
     const siblingSlugs = (ownSlug && REVENUE_SIBLING_SLUGS[ownSlug]) || []
@@ -130,14 +134,16 @@ export const expensesApi = {
       .gte('paid_at', from)
       .lte('paid_at', to)
     if (invError) throw invError
+    // Las facturas a empresas se cobran por transferencia/efectivo, no por QR/tarjeta — sin comisión.
     const invoiceRevenue = (invoices || []).map(i => ({
       total: Number(i.paid_amount ?? 0),
       created_at: i.paid_at as string,
+      mpFeeLoss: 0,
     }))
 
     const { data: ordersData, error: ordersError } = await supabase
       .from('orders')
-      .select('created_at, status, payment_status, paid_amount, paid_at, order_items(quantity, unit_price, subtotal)')
+      .select('created_at, status, payment_status, paid_amount, paid_at, metadata, order_items(quantity, unit_price, subtotal)')
       .eq('store_id', storeId)
       .is('invoice_id', null)
       .gte('created_at', from)
@@ -146,17 +152,19 @@ export const expensesApi = {
     const orderRevenue = (ordersData || [])
       .filter((o) => o.status !== 'cancelled')
       .map((o) => {
+        const paymentMethod = (o.metadata as Record<string, unknown> | null)?.payment_method
+        const hasMpFee = mpFeePct > 0 && (paymentMethod === 'qr' || paymentMethod === 'tarjeta')
+
         if ((o.payment_status === 'paid' || o.payment_status === 'partial') && o.paid_amount != null) {
-          return { created_at: o.paid_at || o.created_at, total: Number(o.paid_amount) }
+          const total = Number(o.paid_amount)
+          return { created_at: o.paid_at || o.created_at, total, mpFeeLoss: hasMpFee ? total * mpFeePct / 100 : 0 }
         }
-        return {
-          created_at: o.created_at,
-          total: (o.order_items || []).reduce((s: number, it: { quantity: number; unit_price: number; subtotal: number | null }) =>
-            s + Number(it.subtotal ?? it.quantity * it.unit_price), 0),
-        }
+        const total = (o.order_items || []).reduce((s: number, it: { quantity: number; unit_price: number; subtotal: number | null }) =>
+          s + Number(it.subtotal ?? it.quantity * it.unit_price), 0)
+        return { created_at: o.created_at, total, mpFeeLoss: hasMpFee ? total * mpFeePct / 100 : 0 }
       })
 
-    return [...invoiceRevenue, ...orderRevenue] as { total: number; created_at: string }[]
+    return [...invoiceRevenue, ...orderRevenue] as { total: number; created_at: string; mpFeeLoss: number }[]
   },
 
   createExpense: async (expense: Omit<Expense, 'id' | 'store_id' | 'created_at' | 'supplier'>) => {

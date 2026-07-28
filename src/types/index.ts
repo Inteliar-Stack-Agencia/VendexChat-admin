@@ -11,6 +11,8 @@ export interface TenantMetadata {
   plan_type?: string;
   payment_methods?: Record<string, boolean>;
   currency?: string;
+  // % que se descuenta del monto nominal cuando se paga con QR/tarjeta (comisión Mercado Pago)
+  mp_fee_percentage?: number;
   [key: string]: unknown;
 }
 

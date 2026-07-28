@@ -390,7 +390,7 @@ function PnLTable({ rows, year, onExport }: { rows: MonthlyRow[]; year: number; 
 
 export default function BalancePage() {
   const [expenses, setExpenses] = useState<{ amount: number; date: string; expense_type: string }[]>([])
-  const [revenueOrders, setRevenueOrders] = useState<{ total: number; created_at: string }[]>([])
+  const [revenueOrders, setRevenueOrders] = useState<{ total: number; created_at: string; mpFeeLoss?: number }[]>([])
   const [partners, setPartners] = useState<Partner[]>([])
   const [loading, setLoading] = useState(true)
   const [dbError, setDbError] = useState(false)
@@ -439,6 +439,7 @@ export default function BalancePage() {
   }, [expenses, revenueOrders])
 
   const netResult = rows.reduce((s, r) => s + r.result, 0)
+  const totalMpFeeLoss = revenueOrders.reduce((s, o) => s + (o.mpFeeLoss || 0), 0)
 
   const handleExport = () => {
     const data = rows.map((r) => ({
@@ -511,6 +512,20 @@ export default function BalancePage() {
           </div>
         ) : (
           <div className="space-y-6">
+            {totalMpFeeLoss > 0 && (
+              <Card className="bg-rose-50 border-rose-100">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-bold text-rose-500 uppercase tracking-widest">Comisión estimada QR / Tarjeta — {year}</p>
+                    <p className="text-[11px] text-rose-400 mt-0.5">
+                      Según el % configurado en Ajustes → Pagos, sobre lo vendido con QR/tarjeta. No se resta de Ingresos — es lo que Mercado Pago se queda antes de depositar.
+                    </p>
+                  </div>
+                  <p className="text-2xl font-black text-rose-600">-{formatPrice(totalMpFeeLoss)}</p>
+                </div>
+              </Card>
+            )}
+
             <PnLTable rows={rows} year={year} onExport={handleExport} />
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

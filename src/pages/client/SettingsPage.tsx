@@ -110,6 +110,11 @@ export default function SettingsPage() {
     plin_details: ''
   })
 
+  // Comisión estimada de Mercado Pago (u otra pasarela QR/tarjeta) — % que se descuenta
+  // del monto nominal de venta al liquidar. Se usa para estimar cuánto entra realmente
+  // en pagos QR/tarjeta vs. lo facturado, en el P&L.
+  const [mpFeePercentage, setMpFeePercentage] = useState('0')
+
   useEffect(() => {
     setLoading(true)
     setLocalTenant(null)
@@ -172,6 +177,7 @@ export default function SettingsPage() {
           plin: metadata.payment_methods?.plin ?? false,
           plin_details: metadata.plin_details || ''
         })
+        setMpFeePercentage(String(metadata.mp_fee_percentage ?? 0))
       } catch (err) {
         console.error(err)
       } finally {
@@ -440,6 +446,33 @@ export default function SettingsPage() {
       toast.success('Métodos manuales actualizados')
     } catch (err: unknown) {
       console.error('Error saving manual payments:', err)
+      toast.error(err instanceof Error ? err.message : 'Error al guardar')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleSaveMpFee = async (e: FormEvent) => {
+    e.preventDefault()
+    setSaving(true)
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const currentMetadata = (tenant as any)?.metadata || {}
+      const updatedMetadata = {
+        ...currentMetadata,
+        mp_fee_percentage: Number(mpFeePercentage) || 0,
+      }
+
+      await tenantApi.updateMe({
+        metadata: updatedMetadata
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any)
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      handleUpdateTenantState({ metadata: updatedMetadata } as any)
+      toast.success('Comisión actualizada')
+    } catch (err: unknown) {
+      console.error('Error saving MP fee:', err)
       toast.error(err instanceof Error ? err.message : 'Error al guardar')
     } finally {
       setSaving(false)
@@ -1039,6 +1072,29 @@ export default function SettingsPage() {
       {
         activeTab === 'payments' && (
           <div className="space-y-6">
+            <Card>
+              <h2 className="text-sm font-semibold text-gray-500 uppercase mb-4 flex items-center gap-2">
+                <CreditCard className="w-4 h-4 text-blue-500" />
+                Comisión QR / Tarjeta (Mercado Pago)
+              </h2>
+              <p className="text-xs text-slate-400 mb-4 font-medium">
+                % que se descuenta del monto de venta cuando el cliente paga con QR o tarjeta (comisión de Mercado Pago + retenciones). No afecta el precio que ve el cliente — solo se usa para estimar cuánto entra realmente en el P&L, separado de lo vendido en efectivo o transferencia.
+              </p>
+              <form onSubmit={handleSaveMpFee} className="flex items-end gap-3 max-w-xs">
+                <div className="flex-1">
+                  <Input
+                    label="Comisión estimada (%)"
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.1"
+                    value={mpFeePercentage}
+                    onChange={(e) => setMpFeePercentage(e.target.value)}
+                  />
+                </div>
+                <Button type="submit" loading={saving}>Guardar</Button>
+              </form>
+            </Card>
             <Card>
               <h2 className="text-sm font-semibold text-gray-500 uppercase mb-4 flex items-center gap-2">
                 <Info className="w-4 h-4 text-blue-500" />
