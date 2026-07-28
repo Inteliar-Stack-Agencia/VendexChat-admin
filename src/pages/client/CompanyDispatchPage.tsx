@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useOutletContext } from 'react-router-dom'
 import { Building2, Plus, Trash2, X, Loader2, ChevronLeft, ChevronRight, Edit2, FileSpreadsheet, Users, Download, Check, Zap, ChevronDown, Receipt, CheckCircle2, Tag, Printer } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { Card, Button } from '../../components/common'
@@ -9,8 +10,9 @@ import { productsApi } from '../../services/productsApi'
 import { categoriesApi } from '../../services/categoriesApi'
 import { supabase } from '../../supabaseClient'
 import { getStoreId } from '../../services/coreApi'
+import { callAI } from '../../services/aiService'
 import { formatPrice } from '../../utils/helpers'
-import type { Product, Category } from '../../types'
+import type { Product, Category, Tenant } from '../../types'
 
 const today = new Date().toISOString().split('T')[0]
 
@@ -1034,6 +1036,402 @@ function QuickEntryTab({ clients, products, onSaved }: { clients: CompanyClient[
   )
 }
 
+// ─── IA · Ingreso masivo (multi-empresa) ──────────────────────────────────────
+// Pegás (o subís .txt/.xlsx) los pedidos semanales tal cual los mandan las empresas
+// por WhatsApp — texto libre, un bloque por empresa con sus empleados y el plato de
+// cada día. La IA lo estructura, lo revisás/corregís acá y recién ahí se guarda.
+
+const DAY_OFFSETS: Record<string, number> = {
+  lunes: 0, martes: 1, miercoles: 2, miércoles: 2, jueves: 3, viernes: 4, sabado: 5, sábado: 5, domingo: 6,
+}
+const DAY_LABELS: Record<string, string> = {
+  lunes: 'Lunes', martes: 'Martes', miercoles: 'Miércoles', miércoles: 'Miércoles',
+  jueves: 'Jueves', viernes: 'Viernes', sabado: 'Sábado', sábado: 'Sábado', domingo: 'Domingo',
+}
+
+function normalizeMatch(s: string): string {
+  return s.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+}
+
+function nextMondayISO(): string {
+  const d = new Date()
+  const day = d.getDay() // 0=domingo, 1=lunes, ...
+  const diff = day === 0 ? 1 : day === 1 ? 0 : 8 - day
+  d.setDate(d.getDate() + diff)
+  return d.toISOString().split('T')[0]
+}
+
+function dayToDate(weekStartISO: string, day: string): string {
+  const offset = DAY_OFFSETS[normalizeMatch(day)] ?? 0
+  const d = new Date(weekStartISO + 'T00:00:00')
+  d.setDate(d.getDate() + offset)
+  return d.toISOString().split('T')[0]
+}
+
+function findProductByName(name: string | null, products: Product[]): Product | null {
+  if (!name) return null
+  const norm = normalizeMatch(name)
+  return (
+    products.find(p => normalizeMatch(p.name) === norm) ||
+    products.find(p => normalizeMatch(p.name).includes(norm) || norm.includes(normalizeMatch(p.name))) ||
+    null
+  )
+}
+
+function findClientByName(name: string | null, clients: CompanyClient[]): CompanyClient | null {
+  if (!name) return null
+  const norm = normalizeMatch(name)
+  return (
+    clients.find(c => normalizeMatch(c.name) === norm) ||
+    clients.find(c => normalizeMatch(c.name).includes(norm) || norm.includes(normalizeMatch(c.name))) ||
+    null
+  )
+}
+
+interface AIOrderRow {
+  day: string
+  date: string
+  dish_raw: string
+  product_id: string | null
+  product_name: string
+  quantity: number
+  unit_price: number
+}
+
+interface AIEmployeeGroup {
+  employee_name: string
+  orders: AIOrderRow[]
+}
+
+interface AICompanyGroup {
+  key: string
+  company_raw: string
+  client_id: string | null
+  employees: AIEmployeeGroup[]
+}
+
+function AIBulkEntryTab({ clients, products, onSaved }: { clients: CompanyClient[]; products: Product[]; onSaved: () => void }) {
+  const [weekStart, setWeekStart] = useState(nextMondayISO)
+  const [rawText, setRawText] = useState('')
+  const [processing, setProcessing] = useState(false)
+  const [groups, setGroups] = useState<AICompanyGroup[]>([])
+  const [saving, setSaving] = useState(false)
+  const [savedCompanyIds, setSavedCompanyIds] = useState<Set<string>>(new Set())
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const priceForProduct = (client: CompanyClient | null, product: Product | null): number => {
+    if (!product) return 0
+    const catPrice = client?.prices?.find(p => p.category_id === product.category_id)?.price
+    return catPrice ?? product.price
+  }
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.name.endsWith('.txt') || file.type === 'text/plain') {
+      const reader = new FileReader()
+      reader.onload = (ev) => setRawText(String(ev.target?.result || ''))
+      reader.readAsText(file)
+    } else {
+      const reader = new FileReader()
+      reader.onload = (ev) => {
+        const wb = XLSX.read(ev.target?.result, { type: 'binary' })
+        const ws = wb.Sheets[wb.SheetNames[0]]
+        const csv = XLSX.utils.sheet_to_csv(ws)
+        setRawText(csv)
+      }
+      reader.readAsBinaryString(file)
+    }
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  const handleProcess = async () => {
+    if (!rawText.trim()) { showToast('error', 'Pegá o subí el texto de los pedidos'); return }
+    setProcessing(true)
+    try {
+      const activeProducts = products.filter(p => p.is_active).map(p => p.name).join(', ')
+      const clientNames = clients.filter(c => c.is_active).map(c => c.name).join(', ')
+
+      const systemPrompt = `Sos un asistente que convierte pedidos semanales de comida, mandados por WhatsApp en texto libre y desprolijo, a JSON estructurado.
+
+El texto puede tener pedidos de VARIAS empresas mezclados. Cada bloque de empresa suele empezar con el nombre de la empresa o de un empleado, seguido de líneas con el día de la semana y el plato elegido ese día. El formato de cada línea varía (con o sin dos puntos, mayúsculas/minúsculas, abreviaturas como "c/" por "con", "j y queso" por "jamón y queso").
+
+Empresas ya registradas (elegí la más parecida para "matched_company"; si el texto no menciona ninguna empresa reconocible en ese bloque, usá null):
+${clientNames || '(ninguna registrada todavía)'}
+
+Catálogo de productos disponibles (elegí el más parecido al plato para "matched_product"; si ninguno se parece, usá null):
+${activeProducts || '(sin productos activos)'}
+
+Devolvé SOLO un JSON válido, sin texto adicional ni bloques de código markdown, con este formato exacto:
+{"companies": [{"company_raw": "texto que identifica a la empresa en el mensaje, o \\"Sin identificar\\" si no hay ninguno", "matched_company": "nombre EXACTO de una empresa de la lista, o null", "employees": [{"employee_name": "string", "orders": [{"day": "lunes|martes|miercoles|jueves|viernes|sabado|domingo", "dish_raw": "texto original del plato tal cual aparece", "matched_product": "nombre EXACTO de un producto del catálogo, o null"}]}]}]}`
+
+      const response = await callAI([
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: rawText },
+      ])
+
+      const cleaned = response.replace(/```json\s*|```/g, '').trim()
+      const parsed = JSON.parse(cleaned) as {
+        companies: {
+          company_raw: string
+          matched_company: string | null
+          employees: { employee_name: string; orders: { day: string; dish_raw: string; matched_product: string | null }[] }[]
+        }[]
+      }
+
+      const newGroups: AICompanyGroup[] = (parsed.companies || []).map((c, ci) => {
+        const matchedClient = findClientByName(c.matched_company, clients)
+        return {
+          key: `${ci}-${c.company_raw}`,
+          company_raw: c.company_raw || 'Sin identificar',
+          client_id: matchedClient?.id || null,
+          employees: (c.employees || []).map(e => ({
+            employee_name: e.employee_name.trim(),
+            orders: (e.orders || []).map(o => {
+              const matchedProduct = findProductByName(o.matched_product, products)
+              return {
+                day: o.day,
+                date: dayToDate(weekStart, o.day),
+                dish_raw: o.dish_raw,
+                product_id: matchedProduct?.id || null,
+                product_name: matchedProduct?.name || o.dish_raw,
+                quantity: 1,
+                unit_price: priceForProduct(matchedClient, matchedProduct),
+              }
+            }),
+          })),
+        }
+      })
+      setGroups(newGroups)
+      setSavedCompanyIds(new Set())
+      const totalOrders = newGroups.reduce((s, g) => s + g.employees.reduce((s2, e) => s2 + e.orders.length, 0), 0)
+      showToast('success', `${totalOrders} pedidos detectados en ${newGroups.length} empresa${newGroups.length !== 1 ? 's' : ''} — revisá antes de guardar`)
+    } catch (err) {
+      console.error(err)
+      showToast('error', 'No se pudo procesar el texto. Revisá el formato o cargá manual en "Entrada rápida".')
+    } finally {
+      setProcessing(false)
+    }
+  }
+
+  const setGroupClient = (key: string, clientId: string) => {
+    setGroups(prev => prev.map(g => {
+      if (g.key !== key) return g
+      const client = clients.find(c => c.id === clientId) || null
+      return {
+        ...g,
+        client_id: clientId || null,
+        employees: g.employees.map(e => ({
+          ...e,
+          orders: e.orders.map(o => ({
+            ...o,
+            unit_price: priceForProduct(client, o.product_id ? products.find(p => p.id === o.product_id) || null : null),
+          })),
+        })),
+      }
+    }))
+  }
+
+  const updateOrderRow = (groupKey: string, employeeIdx: number, orderIdx: number, patch: Partial<AIOrderRow>) => {
+    setGroups(prev => prev.map(g => {
+      if (g.key !== groupKey) return g
+      return {
+        ...g,
+        employees: g.employees.map((e, ei) => {
+          if (ei !== employeeIdx) return e
+          return { ...e, orders: e.orders.map((o, oi) => oi === orderIdx ? { ...o, ...patch } : o) }
+        }),
+      }
+    }))
+  }
+
+  const removeOrderRow = (groupKey: string, employeeIdx: number, orderIdx: number) => {
+    setGroups(prev => prev.map(g => {
+      if (g.key !== groupKey) return g
+      return {
+        ...g,
+        employees: g.employees.map((e, ei) => {
+          if (ei !== employeeIdx) return e
+          return { ...e, orders: e.orders.filter((_, oi) => oi !== orderIdx) }
+        }).filter(e => e.orders.length > 0),
+      }
+    }))
+  }
+
+  const groupTotal = (g: AICompanyGroup) =>
+    g.employees.reduce((s, e) => s + e.orders.reduce((s2, o) => s2 + o.quantity * o.unit_price, 0), 0)
+
+  const sendWhatsAppSummary = (client: CompanyClient, group: AICompanyGroup) => {
+    if (!client.phone) { showToast('error', 'Esta empresa no tiene WhatsApp cargado'); return }
+    let text = `Pedido semanal — ${client.name}\n\n`
+    for (const emp of group.employees) {
+      text += `*${emp.employee_name}*\n`
+      const sorted = [...emp.orders].sort((a, b) => (DAY_OFFSETS[normalizeMatch(a.day)] ?? 0) - (DAY_OFFSETS[normalizeMatch(b.day)] ?? 0))
+      for (const o of sorted) text += `${DAY_LABELS[normalizeMatch(o.day)] || o.day}: ${o.product_name}\n`
+      text += '\n'
+    }
+    text += `Total: ${formatPrice(groupTotal(group))}`
+    const phone = client.phone.replace(/\D/g, '')
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank')
+  }
+
+  const handleSaveGroup = async (group: AICompanyGroup) => {
+    if (!group.client_id) { showToast('error', 'Elegí a qué empresa corresponde este bloque'); return }
+    setSaving(true)
+    try {
+      for (const emp of group.employees) {
+        for (const o of emp.orders) {
+          await companyDispatchApi.createDispatch({
+            client_id: group.client_id,
+            date: o.date,
+            employee_name: emp.employee_name,
+            items: [{ product_id: o.product_id, product_name: o.product_name, quantity: o.quantity, unit_price: o.unit_price, subtotal: o.quantity * o.unit_price }],
+          })
+        }
+      }
+      showToast('success', `Pedidos de ${clients.find(c => c.id === group.client_id)?.name || 'la empresa'} guardados`)
+      setSavedCompanyIds(prev => new Set(prev).add(group.key))
+      onSaved()
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : 'Error al guardar')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const grandTotal = groups.reduce((s, g) => s + groupTotal(g), 0)
+
+  return (
+    <div className="space-y-4">
+      <Card className="p-4 space-y-3">
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Semana (lunes)</label>
+            <input type="date" value={weekStart} onChange={e => setWeekStart(e.target.value)}
+              className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300" />
+          </div>
+          <div className="flex items-center gap-2">
+            <input ref={fileInputRef} type="file" accept=".txt,.xlsx,.xls,.csv" className="hidden" onChange={handleFile} />
+            <Button variant="outline" onClick={() => fileInputRef.current?.click()} className="flex items-center gap-2">
+              <FileSpreadsheet className="w-4 h-4" /> Subir .txt / Excel
+            </Button>
+          </div>
+        </div>
+        <textarea
+          value={rawText}
+          onChange={e => setRawText(e.target.value)}
+          placeholder={'Pegá acá los pedidos tal cual te los mandan por WhatsApp, de una o varias empresas:\n\nNutrihone\nSabri\nLunes: canelones\nMartes: pollo\n...'}
+          rows={10}
+          className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-300"
+        />
+        <Button onClick={handleProcess} disabled={processing || !rawText.trim()}
+          className="bg-violet-600 hover:bg-violet-700 text-white flex items-center gap-2">
+          {processing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+          {processing ? 'Procesando con IA...' : 'Procesar con IA'}
+        </Button>
+      </Card>
+
+      {groups.length > 0 && (
+        <>
+          <div className="flex items-center justify-between px-1">
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Revisá antes de guardar</p>
+            <p className="text-sm font-black text-gray-700">Total general: {formatPrice(grandTotal)}</p>
+          </div>
+
+          {groups.map(group => {
+            const client = clients.find(c => c.id === group.client_id) || null
+            const alreadySaved = savedCompanyIds.has(group.key)
+            return (
+              <Card key={group.key} padding={false} className={`overflow-hidden ${alreadySaved ? 'opacity-60' : ''}`}>
+                <div className="p-4 bg-gray-50 border-b border-gray-100 flex items-center justify-between flex-wrap gap-3">
+                  <div>
+                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Detectado como: "{group.company_raw}"</p>
+                    <select
+                      value={group.client_id || ''}
+                      onChange={e => setGroupClient(group.key, e.target.value)}
+                      className={`mt-1 border rounded-lg px-2 py-1.5 text-sm font-bold bg-white ${group.client_id ? 'border-gray-200' : 'border-amber-300 ring-1 ring-amber-200'}`}
+                    >
+                      <option value="">⚠ Elegí la empresa...</option>
+                      {clients.filter(c => c.is_active).map(c => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-black text-gray-800">{formatPrice(groupTotal(group))}</span>
+                    {client?.phone && (
+                      <Button variant="outline" onClick={() => sendWhatsAppSummary(client, group)} className="text-xs">
+                        Enviar resumen WhatsApp
+                      </Button>
+                    )}
+                    <Button
+                      onClick={() => handleSaveGroup(group)}
+                      disabled={saving || !group.client_id || alreadySaved}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs flex items-center gap-1.5"
+                    >
+                      {alreadySaved ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Check className="w-3.5 h-3.5" />}
+                      {alreadySaved ? 'Guardado' : 'Guardar pedidos'}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="divide-y divide-gray-50">
+                  {group.employees.map((emp, ei) => (
+                    <div key={ei} className="p-3">
+                      <p className="text-xs font-black text-gray-700 mb-2">{emp.employee_name}</p>
+                      <div className="space-y-1.5">
+                        {emp.orders.map((o, oi) => (
+                          <div key={oi} className="flex items-center gap-2 text-sm">
+                            <span className="w-20 shrink-0 text-[11px] font-bold text-gray-400 uppercase">{DAY_LABELS[normalizeMatch(o.day)] || o.day}</span>
+                            <select
+                              value={o.product_id || '__custom__'}
+                              onChange={e => {
+                                if (e.target.value === '__custom__') {
+                                  updateOrderRow(group.key, ei, oi, { product_id: null, product_name: o.dish_raw })
+                                } else {
+                                  const p = products.find(pr => pr.id === e.target.value) || null
+                                  updateOrderRow(group.key, ei, oi, {
+                                    product_id: p?.id || null,
+                                    product_name: p?.name || o.dish_raw,
+                                    unit_price: priceForProduct(client, p),
+                                  })
+                                }
+                              }}
+                              className={`flex-1 border rounded-lg px-2 py-1 text-sm bg-white ${o.product_id ? 'border-gray-200' : 'border-amber-300'}`}
+                            >
+                              <option value="__custom__">"{o.dish_raw}" (sin match — texto libre)</option>
+                              {products.filter(p => p.is_active).map(p => (
+                                <option key={p.id} value={p.id}>{p.name}</option>
+                              ))}
+                            </select>
+                            <input
+                              type="number" min="1" value={o.quantity}
+                              onChange={e => updateOrderRow(group.key, ei, oi, { quantity: parseInt(e.target.value) || 1 })}
+                              className="w-14 border border-gray-200 rounded-lg px-2 py-1 text-sm text-center"
+                            />
+                            <input
+                              type="number" min="0" value={o.unit_price}
+                              onChange={e => updateOrderRow(group.key, ei, oi, { unit_price: parseFloat(e.target.value) || 0 })}
+                              className="w-24 border border-gray-200 rounded-lg px-2 py-1 text-sm text-right"
+                            />
+                            <button onClick={() => removeOrderRow(group.key, ei, oi)} className="p-1 text-gray-300 hover:text-red-500 shrink-0">
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            )
+          })}
+        </>
+      )}
+    </div>
+  )
+}
+
 // ─── Facturación / cuenta corriente ───────────────────────────────────────────
 
 function BillingTab({ clients }: { clients: CompanyClient[] }) {
@@ -1438,9 +1836,13 @@ function BillingTab({ clients }: { clients: CompanyClient[] }) {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
-type Tab = 'rapido' | 'clientes' | 'despachos' | 'resumen' | 'facturacion'
+type Tab = 'rapido' | 'ia' | 'clientes' | 'despachos' | 'resumen' | 'facturacion'
 
 export default function CompanyDispatchPage() {
+  // El ingreso masivo con IA solo aplica a La Plata por ahora (Empresas no lo usa).
+  const { tenant } = useOutletContext<{ tenant: Tenant | null }>()
+  const isLaPlata = tenant?.slug === 'laplata'
+
   const [tab, setTab] = useState<Tab>('rapido')
   const [clients, setClients] = useState<CompanyClient[]>([])
   const [dispatches, setDispatches] = useState<CompanyDispatch[]>([])
@@ -1646,6 +2048,7 @@ export default function CompanyDispatchPage() {
       <div className="flex bg-gray-100 rounded-xl p-1 gap-1 w-fit flex-wrap">
         {([
           { key: 'rapido', label: '⚡ Entrada rápida' },
+          ...(isLaPlata ? [{ key: 'ia', label: '🤖 IA · Ingreso masivo' }] : []),
           { key: 'despachos', label: 'Historial' },
           { key: 'resumen', label: 'Resumen semanal' },
           { key: 'facturacion', label: '🧾 Facturación' },
@@ -1671,6 +2074,18 @@ export default function CompanyDispatchPage() {
               </Card>
             ) : (
               <QuickEntryTab clients={clients} products={products} onSaved={load} />
+            )
+          )}
+
+          {/* ── TAB: IA · Ingreso masivo ── */}
+          {tab === 'ia' && isLaPlata && (
+            clients.length === 0 ? (
+              <Card className="p-12 text-center">
+                <Zap className="w-10 h-10 text-gray-200 mx-auto mb-3" />
+                <p className="text-gray-400 font-semibold">Primero creá empresas en el tab "Empresas"</p>
+              </Card>
+            ) : (
+              <AIBulkEntryTab clients={clients} products={products} onSaved={load} />
             )
           )}
 
