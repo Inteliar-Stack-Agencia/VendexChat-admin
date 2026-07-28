@@ -1383,27 +1383,38 @@ Devolvé SOLO un JSON válido, sin texto adicional ni bloques de código markdow
                         {emp.orders.map((o, oi) => (
                           <div key={oi} className="flex items-center gap-2 text-sm">
                             <span className="w-20 shrink-0 text-[11px] font-bold text-gray-400 uppercase">{DAY_LABELS[normalizeMatch(o.day)] || o.day}</span>
-                            <select
-                              value={o.product_id || '__custom__'}
-                              onChange={e => {
-                                if (e.target.value === '__custom__') {
-                                  updateOrderRow(group.key, ei, oi, { product_id: null, product_name: o.dish_raw })
-                                } else {
-                                  const p = products.find(pr => pr.id === e.target.value) || null
-                                  updateOrderRow(group.key, ei, oi, {
-                                    product_id: p?.id || null,
-                                    product_name: p?.name || o.dish_raw,
-                                    unit_price: priceForProduct(client, p),
-                                  })
-                                }
-                              }}
-                              className={`flex-1 border rounded-lg px-2 py-1 text-sm bg-white ${o.product_id ? 'border-gray-200' : 'border-amber-300'}`}
-                            >
-                              <option value="__custom__">"{o.dish_raw}" (sin match — texto libre)</option>
-                              {products.filter(p => p.is_active).map(p => (
-                                <option key={p.id} value={p.id}>{p.name}</option>
-                              ))}
-                            </select>
+                            <div className="flex-1 flex items-center gap-1.5 min-w-0">
+                              <select
+                                value={o.product_id || '__custom__'}
+                                onChange={e => {
+                                  if (e.target.value === '__custom__') {
+                                    updateOrderRow(group.key, ei, oi, { product_id: null, product_name: o.dish_raw })
+                                  } else {
+                                    const p = products.find(pr => pr.id === e.target.value) || null
+                                    updateOrderRow(group.key, ei, oi, {
+                                      product_id: p?.id || null,
+                                      product_name: p?.name || o.dish_raw,
+                                      unit_price: priceForProduct(client, p),
+                                    })
+                                  }
+                                }}
+                                className={`shrink-0 w-40 border rounded-lg px-2 py-1 text-sm bg-white ${o.product_id ? 'border-gray-200' : 'border-amber-300'}`}
+                              >
+                                <option value="__custom__">✏️ Escribir manual</option>
+                                {products.filter(p => p.is_active).map(p => (
+                                  <option key={p.id} value={p.id}>{p.name}</option>
+                                ))}
+                              </select>
+                              {!o.product_id && (
+                                <input
+                                  type="text"
+                                  value={o.product_name}
+                                  onChange={e => updateOrderRow(group.key, ei, oi, { product_name: e.target.value })}
+                                  placeholder="Nombre del plato"
+                                  className="flex-1 min-w-0 border border-amber-300 rounded-lg px-2 py-1 text-sm"
+                                />
+                              )}
+                            </div>
                             <input
                               type="number" min="1" value={o.quantity}
                               onChange={e => updateOrderRow(group.key, ei, oi, { quantity: parseInt(e.target.value) || 1 })}
