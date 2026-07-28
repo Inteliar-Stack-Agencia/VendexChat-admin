@@ -18,6 +18,8 @@ export interface CompanyClient {
   created_at: string
   price_mode: PriceMode
   iva_rate: number
+  // Descuento pactado sobre el subtotal, ANTES del IVA (ej. Nutrihome: 6%)
+  discount_percentage: number
   prices?: CompanyClientPrice[]
 }
 
@@ -124,6 +126,7 @@ export const companyDispatchApi = {
     notes?: string
     price_mode?: PriceMode
     iva_rate?: number
+    discount_percentage?: number
   }): Promise<CompanyClient> => {
     const storeId = await getStoreId()
     const { data, error } = await supabase
@@ -320,18 +323,23 @@ export const companyDispatchApi = {
   // Compute subtotal/IVA/total for a combined amount, given the client's price mode.
   // `sum` es siempre la suma de los unit_price cargados (precio de mostrador si no hay
   // precio propio pactado para esa categoría).
-  computeInvoiceAmounts: (sum: number, priceMode: PriceMode, ivaRate: number) => {
+  // `discountPercentage`: descuento pactado con la empresa, se aplica primero sobre `sum`
+  // y recién sobre ese monto ya descontado se calcula el IVA (ej. Nutrihome: 6% de
+  // descuento y luego + 21% de IVA).
+  computeInvoiceAmounts: (sum: number, priceMode: PriceMode, ivaRate: number, discountPercentage = 0) => {
+    const discountedSum = sum * (1 - discountPercentage / 100)
+    const discount_amount = sum - discountedSum
     if (priceMode === 'iva_incluido') {
-      const subtotal = sum / (1 + ivaRate / 100)
-      return { subtotal, iva_amount: sum - subtotal, total: sum }
+      const subtotal = discountedSum / (1 + ivaRate / 100)
+      return { subtotal, iva_amount: discountedSum - subtotal, discount_amount, total: discountedSum }
     }
     if (priceMode === 'mostrador_menos_iva') {
       // Se le descuenta el IVA al precio de mostrador y eso es lo que se factura, sin sumarlo de nuevo
-      const subtotal = sum / (1 + ivaRate / 100)
-      return { subtotal, iva_amount: 0, total: subtotal }
+      const subtotal = discountedSum / (1 + ivaRate / 100)
+      return { subtotal, iva_amount: 0, discount_amount, total: subtotal }
     }
-    const iva_amount = sum * (ivaRate / 100)
-    return { subtotal: sum, iva_amount, total: sum + iva_amount }
+    const iva_amount = discountedSum * (ivaRate / 100)
+    return { subtotal: discountedSum, iva_amount, discount_amount, total: discountedSum + iva_amount }
   },
 
   // Genera la factura SOLO con los despachos y pedidos que se le pasan explícitamente —
@@ -345,7 +353,7 @@ export const companyDispatchApi = {
   ): Promise<CompanyInvoice> => {
     const storeId = await getStoreId()
     const { data: client, error: clientError } = await supabase
-      .from('company_clients').select('price_mode, iva_rate').eq('id', clientId).single()
+      .from('company_clients').select('price_mode, iva_rate, discount_percentage').eq('id', clientId).single()
     if (clientError) throw clientError
 
     const { dispatches, webOrders, extraItems = [] } = selection
@@ -357,7 +365,7 @@ export const companyDispatchApi = {
       + webOrders.reduce((s, o) => s + o.total, 0)
       + extraItems.reduce((s, i) => s + i.amount, 0)
     const { subtotal, iva_amount, total } = companyDispatchApi.computeInvoiceAmounts(
-      sum, client.price_mode as PriceMode, Number(client.iva_rate),
+      sum, client.price_mode as PriceMode, Number(client.iva_rate), Number(client.discount_percentage) || 0,
     )
 
     const { data: invoice, error } = await supabase

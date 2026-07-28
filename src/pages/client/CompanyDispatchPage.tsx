@@ -60,6 +60,7 @@ function ClientModal({
   const [notes, setNotes] = useState(client?.notes || '')
   const [priceMode, setPriceMode] = useState<PriceMode>(client?.price_mode || 'iva_incluido')
   const [ivaRate, setIvaRate] = useState(String(client?.iva_rate ?? 21))
+  const [discountPercentage, setDiscountPercentage] = useState(String(client?.discount_percentage ?? 0))
   const [prices, setPrices] = useState<Record<string, string>>(() => {
     const init: Record<string, string> = {}
     for (const p of client?.prices || []) init[p.category_id] = String(p.price)
@@ -72,7 +73,7 @@ function ClientModal({
     setSaving(true)
     try {
       let id = client?.id
-      const ratePayload = { price_mode: priceMode, iva_rate: parseFloat(ivaRate) || 21 }
+      const ratePayload = { price_mode: priceMode, iva_rate: parseFloat(ivaRate) || 21, discount_percentage: parseFloat(discountPercentage) || 0 }
       if (id) {
         await companyDispatchApi.updateClient(id, { name: name.trim(), contact_name: contactName || null, phone: phone || null, email: email || null, notes: notes || null, ...ratePayload })
       } else {
@@ -161,6 +162,17 @@ function ClientModal({
               <div className="relative shrink-0">
                 <input type="number" min="0" step="0.5" value={ivaRate} onChange={e => setIvaRate(e.target.value)}
                   className="w-20 pr-6 pl-2 py-2 text-xs font-bold text-indigo-600 border border-indigo-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-400 bg-white text-right" />
+                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs">%</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 bg-gray-50 rounded-xl px-3 py-2.5 mt-2">
+              <div className="flex-1">
+                <p className="text-xs font-bold text-gray-700">Descuento sobre el total</p>
+                <p className="text-[10px] text-gray-400">Se aplica antes del IVA (ej: 6% de descuento y sobre eso el IVA)</p>
+              </div>
+              <div className="relative shrink-0">
+                <input type="number" min="0" max="100" step="0.5" value={discountPercentage} onChange={e => setDiscountPercentage(e.target.value)}
+                  className="w-20 pr-6 pl-2 py-2 text-xs font-bold text-rose-600 border border-rose-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-rose-400 bg-white text-right" />
                 <span className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs">%</span>
               </div>
             </div>
@@ -1592,7 +1604,7 @@ function BillingTab({ clients }: { clients: CompanyClient[] }) {
   const selectedSum = selectedDispatches.reduce((s, d) => s + companyDispatchApi.dispatchTotal(d), 0)
     + selectedOrders.reduce((s, o) => s + o.total, 0)
     + extraItems.reduce((s, i) => s + i.amount, 0)
-  const amounts = selectedClient ? companyDispatchApi.computeInvoiceAmounts(selectedSum, selectedClient.price_mode, selectedClient.iva_rate) : null
+  const amounts = selectedClient ? companyDispatchApi.computeInvoiceAmounts(selectedSum, selectedClient.price_mode, selectedClient.iva_rate, selectedClient.discount_percentage) : null
 
   const addExtraItem = () => {
     const amount = parseFloat(extraAmount)
@@ -1848,8 +1860,15 @@ function BillingTab({ clients }: { clients: CompanyClient[] }) {
                   <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Trato de esta empresa</span>
                   <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">
                     {PRICE_MODE_LABEL[selectedClient.price_mode]} ({selectedClient.iva_rate}%)
+                    {selectedClient.discount_percentage > 0 && ` · -${selectedClient.discount_percentage}% desc.`}
                   </span>
                 </div>
+                {selectedClient.discount_percentage > 0 && (
+                  <>
+                    <div className="flex justify-between text-sm"><span className="text-gray-500">Total bruto</span><span className="font-bold text-gray-800">{formatPrice(selectedSum)}</span></div>
+                    <div className="flex justify-between text-sm"><span className="text-rose-500">Descuento ({selectedClient.discount_percentage}%)</span><span className="font-bold text-rose-500">-{formatPrice(amounts.discount_amount)}</span></div>
+                  </>
+                )}
                 <div className="flex justify-between text-sm"><span className="text-gray-500">Subtotal (neto)</span><span className="font-bold text-gray-800">{formatPrice(amounts.subtotal)}</span></div>
                 <div className="flex justify-between text-sm"><span className="text-gray-500">IVA</span><span className="font-bold text-gray-800">{formatPrice(amounts.iva_amount)}</span></div>
                 <div className="flex justify-between text-base border-t border-gray-200 pt-2"><span className="font-bold text-gray-700">Total a facturar</span><span className="font-black text-indigo-700">{formatPrice(amounts.total)}</span></div>
