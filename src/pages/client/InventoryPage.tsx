@@ -21,7 +21,7 @@ import { productionApi } from '../../services/productionApi'
 import { companyDispatchApi } from '../../services/companyDispatchApi'
 import { labelsApi } from '../../services/labelsApi'
 import { productsApi } from '../../services/productsApi'
-import { expensesApi } from '../../services/expensesApi'
+import { expensesApi, type Expense } from '../../services/expensesApi'
 import { formatPrice } from '../../utils/helpers'
 import { showToast } from '../../components/common/Toast'
 import { callAI } from '../../services/aiService'
@@ -866,7 +866,9 @@ function ProductionGrid({ products, onCostUpdated }: { products: Product[]; onCo
   const [saving, setSaving] = useState(false)
   const [generatingLabelsFor, setGeneratingLabelsFor] = useState<string | null>(null)
   const [loadingExpense, setLoadingExpense] = useState(false)
-  const [expenseLoadedFor, setExpenseLoadedFor] = useState<string | null>(null)
+  // Gasto de producción YA cargado para esta semana (si existe) — se busca contra la
+  // base, no en memoria, para detectarlo aunque se recargue la página o pasen los días.
+  const [existingExpense, setExistingExpense] = useState<Expense | null>(null)
 
   const allWeekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
   // Only Mon–Fri (getDay: 1=Mon … 5=Fri)
@@ -891,6 +893,17 @@ function ProductionGrid({ products, onCostUpdated }: { products: Product[]; onCo
   }, [weekStartISO, weekEndISO])
 
   useEffect(() => { load() }, [load])
+
+  // Detecta si ya existe un gasto de producción cargado para esta semana (consulta la
+  // base, no memoria) — así el botón sabe si debe crear o actualizar, y sobrevive a
+  // recargar la página o volver otro día.
+  useEffect(() => {
+    let active = true
+    expensesApi.findProductionExpense(weekStartISO)
+      .then((exp) => { if (active) setExistingExpense(exp) })
+      .catch(() => { if (active) setExistingExpense(null) })
+    return () => { active = false }
+  }, [weekStartISO])
 
   // When changing week, exit edit mode
   useEffect(() => {
@@ -946,17 +959,26 @@ function ProductionGrid({ products, onCostUpdated }: { products: Product[]; onCo
     try {
       const fromLabel = weekStart.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })
       const toLabel = allWeekDays[4].toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })
-      await expensesApi.createExpense({
-        description: `Ingreso de viandas del ${fromLabel} al ${toLabel}`,
-        category: 'materia_prima',
-        expense_type: 'variable',
-        amount: totalProductionCost,
-        date: weekStartISO,
-        supplier_id: null,
-        notes: null,
-      })
-      setExpenseLoadedFor(weekStartISO)
-      showToast('success', `Gasto cargado: ${formatPrice(totalProductionCost)}`)
+      const description = `Ingreso de viandas del ${fromLabel} al ${toLabel}`
+
+      // Si ya existe un gasto de producción para esta semana, se actualiza el monto en
+      // vez de crear uno nuevo — permite cargar producción todos los días e ir
+      // apretando el botón sin duplicar el gasto.
+      const updated = existingExpense
+        ? await expensesApi.updateExpense(existingExpense.id, { description, amount: totalProductionCost })
+        : await expensesApi.createExpense({
+            description,
+            category: 'materia_prima',
+            expense_type: 'variable',
+            amount: totalProductionCost,
+            date: weekStartISO,
+            supplier_id: null,
+            notes: null,
+          })
+      setExistingExpense(updated)
+      showToast('success', existingExpense
+        ? `Gasto actualizado: ${formatPrice(totalProductionCost)}`
+        : `Gasto cargado: ${formatPrice(totalProductionCost)}`)
     } catch (err) {
       showToast('error', err instanceof Error ? err.message : 'Error al cargar el gasto')
     } finally {
@@ -1111,21 +1133,31 @@ function ProductionGrid({ products, onCostUpdated }: { products: Product[]; onCo
             <p className="text-[9px] font-bold text-orange-500 uppercase tracking-widest mb-1">Costo de esta producción</p>
             <p className="text-2xl font-black text-orange-700">{formatPrice(totalProductionCost)}</p>
           </div>
-          <button
-            onClick={handleLoadAsExpense}
-            disabled={loadingExpense || totalProductionCost <= 0 || expenseLoadedFor === weekStartISO}
-            className="shrink-0 flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-white bg-orange-600 hover:bg-orange-700 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
-            title="Crea un gasto variable de materia prima con este monto, sin tipearlo a mano"
-          >
-            {loadingExpense ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            ) : expenseLoadedFor === weekStartISO ? (
-              <CheckCircle2 className="w-3.5 h-3.5" />
-            ) : (
-              <TrendingDown className="w-3.5 h-3.5" />
-            )}
-            {expenseLoadedFor === weekStartISO ? 'Cargado' : 'Cargar como gasto'}
-          </button>
+          {(() => {
+            const isUpToDate = existingExpense != null && Number(existingExpense.amount) === totalProductionCost
+            const needsUpdate = existingExpense != null && !isUpToDate
+            return (
+              <button
+                onClick={handleLoadAsExpense}
+                disabled={loadingExpense || totalProductionCost <= 0 || isUpToDate}
+                className="shrink-0 flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-white bg-orange-600 hover:bg-orange-700 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                title={existingExpense
+                  ? 'Ya hay un gasto cargado para esta semana — actualiza el monto si sumaste más producción'
+                  : 'Crea un gasto variable de materia prima con este monto, sin tipearlo a mano'}
+              >
+                {loadingExpense ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : isUpToDate ? (
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                ) : needsUpdate ? (
+                  <RefreshCw className="w-3.5 h-3.5" />
+                ) : (
+                  <TrendingDown className="w-3.5 h-3.5" />
+                )}
+                {isUpToDate ? 'Al día' : needsUpdate ? 'Actualizar gasto' : 'Cargar como gasto'}
+              </button>
+            )
+          })()}
         </div>
       </div>
 
