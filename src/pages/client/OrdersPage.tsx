@@ -502,6 +502,9 @@ export default function OrdersPage() {
                         ) : (
                           <button
                             onClick={() => openPaymentModal(order)}
+                            title={order.paid_amount != null && order.paid_amount < order.total
+                              ? `Cobrado ${formatPrice(order.paid_amount)} · saldo perdido ${formatPrice(order.total - order.paid_amount)}`
+                              : undefined}
                             className="flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-gray-100 text-xs font-medium"
                           >
                             {order.payment_status === 'paid' ? (
@@ -510,6 +513,9 @@ export default function OrdersPage() {
                               <><Circle className="w-4 h-4 text-amber-600" /><span className="text-amber-600">Parcial</span></>
                             ) : (
                               <><Circle className="w-4 h-4 text-gray-400" /><span className="text-gray-500">Pendiente</span></>
+                            )}
+                            {order.paid_amount != null && order.paid_amount < order.total && (
+                              <span className="text-[9px] text-rose-500 font-bold">(-{formatPrice(order.total - order.paid_amount)})</span>
                             )}
                           </button>
                         )}
