@@ -21,6 +21,7 @@ import { productionApi } from '../../services/productionApi'
 import { companyDispatchApi } from '../../services/companyDispatchApi'
 import { labelsApi } from '../../services/labelsApi'
 import { productsApi } from '../../services/productsApi'
+import { expensesApi } from '../../services/expensesApi'
 import { formatPrice } from '../../utils/helpers'
 import { showToast } from '../../components/common/Toast'
 import { callAI } from '../../services/aiService'
@@ -864,6 +865,8 @@ function ProductionGrid({ products, onCostUpdated }: { products: Product[]; onCo
   const [pendingCosts, setPendingCosts] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
   const [generatingLabelsFor, setGeneratingLabelsFor] = useState<string | null>(null)
+  const [loadingExpense, setLoadingExpense] = useState(false)
+  const [expenseLoadedFor, setExpenseLoadedFor] = useState<string | null>(null)
 
   const allWeekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
   // Only Mon–Fri (getDay: 1=Mon … 5=Fri)
@@ -932,6 +935,34 @@ function ProductionGrid({ products, onCostUpdated }: { products: Product[]; onCo
 
   const grandProduced = products.reduce((s, p) => s + productTotals(p.id).produced, 0)
   const activeProducts = products.filter((p) => p.is_active)
+  const totalProductionCost = activeProducts.reduce((s, p) => s + productTotals(p.id).produced * (getWeekCost(p) ?? 0), 0)
+
+  // Carga la producción de la semana como un gasto variable de materia prima —
+  // ya se sabe cuánto salió cada unidad (costo cargado arriba), no hay que
+  // recalcularlo ni tipearlo a mano en Gastos.
+  const handleLoadAsExpense = async () => {
+    if (totalProductionCost <= 0) { showToast('error', 'No hay producción cargada esta semana'); return }
+    setLoadingExpense(true)
+    try {
+      const fromLabel = weekStart.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })
+      const toLabel = allWeekDays[4].toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })
+      await expensesApi.createExpense({
+        description: `Ingreso de viandas del ${fromLabel} al ${toLabel}`,
+        category: 'materia_prima',
+        expense_type: 'variable',
+        amount: totalProductionCost,
+        date: weekStartISO,
+        supplier_id: null,
+        notes: null,
+      })
+      setExpenseLoadedFor(weekStartISO)
+      showToast('success', `Gasto cargado: ${formatPrice(totalProductionCost)}`)
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : 'Error al cargar el gasto')
+    } finally {
+      setLoadingExpense(false)
+    }
+  }
 
   const enterEditMode = () => {
     // Pre-fill pending with current saved values so user sees what exists
@@ -1070,9 +1101,32 @@ function ProductionGrid({ products, onCostUpdated }: { products: Product[]; onCo
       </div>
 
       {/* Grand totals banner */}
-      <div className="bg-teal-50 rounded-xl p-3 text-center">
-        <p className="text-[9px] font-bold text-teal-500 uppercase tracking-widest mb-1">Total producido semana</p>
-        <p className="text-2xl font-black text-teal-700">{grandProduced}</p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="bg-teal-50 rounded-xl p-3 text-center">
+          <p className="text-[9px] font-bold text-teal-500 uppercase tracking-widest mb-1">Total producido semana</p>
+          <p className="text-2xl font-black text-teal-700">{grandProduced}</p>
+        </div>
+        <div className="bg-orange-50 rounded-xl p-3 flex items-center justify-between gap-3">
+          <div className="text-left">
+            <p className="text-[9px] font-bold text-orange-500 uppercase tracking-widest mb-1">Costo de esta producción</p>
+            <p className="text-2xl font-black text-orange-700">{formatPrice(totalProductionCost)}</p>
+          </div>
+          <button
+            onClick={handleLoadAsExpense}
+            disabled={loadingExpense || totalProductionCost <= 0 || expenseLoadedFor === weekStartISO}
+            className="shrink-0 flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-white bg-orange-600 hover:bg-orange-700 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+            title="Crea un gasto variable de materia prima con este monto, sin tipearlo a mano"
+          >
+            {loadingExpense ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : expenseLoadedFor === weekStartISO ? (
+              <CheckCircle2 className="w-3.5 h-3.5" />
+            ) : (
+              <TrendingDown className="w-3.5 h-3.5" />
+            )}
+            {expenseLoadedFor === weekStartISO ? 'Cargado' : 'Cargar como gasto'}
+          </button>
+        </div>
       </div>
 
       {/* Grid */}
