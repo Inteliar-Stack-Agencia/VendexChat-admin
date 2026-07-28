@@ -139,10 +139,12 @@ export default function Sidebar({ isOpen, onClose, storeSlug }: SidebarProps) {
                     )}
                   </>
                 )}
-                <NavLink to="/scan" className={linkClass} onClick={onClose}>
-                  <Tag className="w-5 h-5" />
-                  Escanear stock
-                </NavLink>
+                {isEmpresas && (
+                  <NavLink to="/scan" className={linkClass} onClick={onClose}>
+                    <Tag className="w-5 h-5" />
+                    Escanear stock
+                  </NavLink>
+                )}
                 {!isEmpresas && (
                   <>
                     <NavLink to="/categories" className={linkClass} onClick={onClose}>
@@ -192,6 +194,11 @@ export default function Sidebar({ isOpen, onClose, storeSlug }: SidebarProps) {
               {!isEmpresas && (
                 <div className="pt-2 pb-2">
                   <p className="px-4 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Módulos VIP</p>
+                  <NavLink to="/scan" className={linkClass} onClick={onClose}>
+                    <Tag className="w-5 h-5" />
+                    Escanear stock
+                    <span className="ml-auto text-[8px] bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded font-black uppercase">VIP</span>
+                  </NavLink>
                   <NavLink to="/bot" className={linkClass} onClick={onClose}>
                     <Bot className="w-5 h-5" />
                     Asistente Tienda
