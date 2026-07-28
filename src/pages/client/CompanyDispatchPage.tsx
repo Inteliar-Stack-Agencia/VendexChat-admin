@@ -1230,6 +1230,12 @@ function BillingTab({ clients }: { clients: CompanyClient[] }) {
     return acc
   }, {} as Record<string, number>)
 
+  // Saldo perdido: diferencia entre lo facturado y lo realmente cobrado (descuentos,
+  // negociación al pagar). No se suma como ingreso en ningún lado — queda registrado
+  // acá para tener visibilidad de cuánto se "pierde" por factura pagada de menos.
+  const paidInvoicesWithGap = invoices.filter(i => i.status === 'pagado' && i.paid_amount != null && i.paid_amount < i.total)
+  const totalSaldoPerdido = paidInvoicesWithGap.reduce((s, i) => s + (i.total - (i.paid_amount ?? 0)), 0)
+
   return (
     <div className="space-y-6">
       <Card className="bg-indigo-50 border-indigo-100">
@@ -1247,6 +1253,18 @@ function BillingTab({ clients }: { clients: CompanyClient[] }) {
           </div>
         )}
       </Card>
+
+      {totalSaldoPerdido > 0 && (
+        <Card className="bg-rose-50 border-rose-100">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-bold text-rose-500 uppercase tracking-widest">Saldo perdido en cobros</p>
+              <p className="text-[11px] text-rose-400 mt-0.5">Diferencia entre lo facturado y lo realmente cobrado en {paidInvoicesWithGap.length} factura{paidInvoicesWithGap.length !== 1 ? 's' : ''}</p>
+            </div>
+            <p className="text-2xl font-black text-rose-600">-{formatPrice(totalSaldoPerdido)}</p>
+          </div>
+        </Card>
+      )}
 
       <Card>
         <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-3">Generar factura de período</h3>
@@ -1386,7 +1404,14 @@ function BillingTab({ clients }: { clients: CompanyClient[] }) {
                   )}
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="font-black text-gray-800 text-sm">{formatPrice(inv.total)}</span>
+                  <div className="text-right">
+                    <span className="font-black text-gray-800 text-sm block">{formatPrice(inv.total)}</span>
+                    {inv.status === 'pagado' && inv.paid_amount != null && inv.paid_amount < inv.total && (
+                      <span className="text-[10px] font-bold text-rose-500">
+                        cobrado {formatPrice(inv.paid_amount)} · -{formatPrice(inv.total - inv.paid_amount)}
+                      </span>
+                    )}
+                  </div>
                   <button onClick={() => handlePrintExisting(inv)} disabled={printingId === inv.id} title="Ver / imprimir recibo"
                     className="p-1.5 text-gray-300 hover:text-indigo-500 rounded-lg hover:bg-indigo-50 transition-colors disabled:opacity-40">
                     {printingId === inv.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
