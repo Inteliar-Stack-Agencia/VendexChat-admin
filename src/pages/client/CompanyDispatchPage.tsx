@@ -1952,6 +1952,7 @@ export default function CompanyDispatchPage() {
       d.setDate(d.getDate() + deltaDays)
       return d.toISOString().split('T')[0]
     }
+    setManualNav(true)
     setSummaryFrom(f => shift(f))
     setSummaryTo(t => shift(t))
   }
@@ -1993,12 +1994,14 @@ export default function CompanyDispatchPage() {
   useEffect(() => { load() }, [load])
   useEffect(() => { if (tab === 'resumen') loadSummary() }, [tab, loadSummary])
 
-  // Si la semana por defecto (la actual) no tiene despachos pero hay datos cargados en
-  // otra semana (ej. pedidos futuros cargados con la IA), salta una sola vez a la semana
-  // con despachos más cercana a hoy, en vez de dejar el resumen vacío sin explicación.
-  const [autoJumped, setAutoJumped] = useState(false)
+  // Si la semana elegida no tiene despachos pero hay datos cargados en otra semana (ej.
+  // pedidos en otra fecha, o cargados desde otra tienda hermana), salta a la semana con
+  // despachos más cercana a hoy en vez de dejar el resumen vacío sin explicación. Se
+  // desactiva en cuanto el usuario navega manualmente (flechas, fechas, o "Esta semana"),
+  // para no pelearle la navegación una vez que ya está mirando lo que quiere.
+  const [manualNav, setManualNav] = useState(false)
   useEffect(() => {
-    if (autoJumped || tab !== 'resumen' || summaryLoading) return
+    if (manualNav || tab !== 'resumen' || summaryLoading) return
     if (summaryDispatches.length > 0 || dispatches.length === 0) return
     const todayMs = Date.now()
     let closestDate = dispatches[0].date
@@ -2013,11 +2016,13 @@ export default function CompanyDispatchPage() {
     monday.setDate(monday.getDate() + (day === 0 ? -6 : 1 - day))
     const sunday = new Date(monday)
     sunday.setDate(sunday.getDate() + 6)
-    setSummaryFrom(monday.toISOString().split('T')[0])
-    setSummaryTo(sunday.toISOString().split('T')[0])
-    setAutoJumped(true)
+    const newFrom = monday.toISOString().split('T')[0]
+    const newTo = sunday.toISOString().split('T')[0]
+    if (newFrom === summaryFrom && newTo === summaryTo) return
+    setSummaryFrom(newFrom)
+    setSummaryTo(newTo)
     showToast('success', 'No había despachos esta semana — te llevamos a la semana con pedidos más cercana a hoy')
-  }, [tab, summaryDispatches, summaryLoading, dispatches, autoJumped])
+  }, [tab, summaryDispatches, summaryLoading, dispatches, manualNav, summaryFrom, summaryTo])
 
   const handleDeleteClient = async (id: string) => {
     if (!confirm('¿Eliminar esta empresa?')) return
@@ -2277,12 +2282,12 @@ export default function CompanyDispatchPage() {
                   <ChevronLeft className="w-5 h-5 text-gray-500" />
                 </button>
                 <div className="flex items-center gap-2">
-                  <input type="date" value={summaryFrom} onChange={e => setSummaryFrom(e.target.value)}
+                  <input type="date" value={summaryFrom} onChange={e => { setManualNav(true); setSummaryFrom(e.target.value) }}
                     className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-300" />
                   <span className="text-gray-400 text-xs">a</span>
-                  <input type="date" value={summaryTo} onChange={e => setSummaryTo(e.target.value)}
+                  <input type="date" value={summaryTo} onChange={e => { setManualNav(true); setSummaryTo(e.target.value) }}
                     className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-300" />
-                  <button onClick={() => { const w = getWeekBounds(0); setSummaryFrom(w.from); setSummaryTo(w.to) }}
+                  <button onClick={() => { setManualNav(true); const w = getWeekBounds(0); setSummaryFrom(w.from); setSummaryTo(w.to) }}
                     className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 px-2 py-1.5 rounded-lg hover:bg-indigo-50">
                     Esta semana
                   </button>
@@ -2309,6 +2314,11 @@ export default function CompanyDispatchPage() {
               ) : Object.keys(summaryByClient).length === 0 ? (
                 <Card className="p-12 text-center">
                   <p className="text-gray-400 font-semibold">Sin despachos esta semana</p>
+                  {dispatches.length > 0 && (
+                    <button onClick={() => setManualNav(false)} className="mt-3 text-xs font-semibold text-indigo-600 hover:text-indigo-700">
+                      Ir a la semana con pedidos más cercana a hoy
+                    </button>
+                  )}
                 </Card>
               ) : (
                 <>
