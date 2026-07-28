@@ -4,18 +4,18 @@ import {
   Download,
   Target,
   ChevronDown,
-  ChevronUp,
   Loader2,
   Plus,
   Trash2,
   X,
   AlertCircle,
+  ArrowLeft,
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { Card, Button } from '../../components/common'
 import FeatureGuard from '../../components/FeatureGuard'
-import { expensesApi, type Partner } from '../../services/expensesApi'
-import { formatPrice } from '../../utils/helpers'
+import { expensesApi, type Partner, type Expense, type RevenueEntry } from '../../services/expensesApi'
+import { formatPrice, formatDate } from '../../utils/helpers'
 import { showToast } from '../../components/common/Toast'
 
 const MONTHS = [
@@ -240,9 +240,7 @@ function DistributionTable({ partners, netResult }: { partners: Partner[]; netRe
 
 // ─── P&L Table ──────────────────────────────────────────────────────────────────
 
-function PnLTable({ rows, year, onExport }: { rows: MonthlyRow[]; year: number; onExport: () => void }) {
-  const [expanded, setExpanded] = useState<number | null>(null)
-
+function PnLTable({ rows, year, onExport, onSelectMonth }: { rows: MonthlyRow[]; year: number; onExport: () => void; onSelectMonth: (month: number) => void }) {
   const totals = rows.reduce(
     (acc, r) => ({
       grossSales: acc.grossSales + r.grossSales,
@@ -354,8 +352,8 @@ function PnLTable({ rows, year, onExport }: { rows: MonthlyRow[]; year: number; 
                     </td>
                     <td className="px-4 py-3 text-center">
                       {!isEmpty && (
-                        <button onClick={() => setExpanded(expanded === r.month ? null : r.month)} className="text-gray-400 hover:text-gray-700 p-1 rounded">
-                          {expanded === r.month ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                        <button onClick={() => onSelectMonth(r.month)} title="Ver informe detallado del mes" className="text-gray-400 hover:text-gray-700 p-1 rounded">
+                          <ChevronDown className="w-4 h-4" />
                         </button>
                       )}
                     </td>
@@ -398,15 +396,156 @@ function PnLTable({ rows, year, onExport }: { rows: MonthlyRow[]; year: number; 
   )
 }
 
+// ─── Informe Detallado de un Mes ─────────────────────────────────────────────────
+
+function MonthDetailView({ month, year, revenueEntries, expenses, onBack }: {
+  month: number
+  year: number
+  revenueEntries: RevenueEntry[]
+  expenses: Expense[]
+  onBack: () => void
+}) {
+  const monthRevenue = useMemo(
+    () => revenueEntries.filter((e) => new Date(e.created_at).getMonth() + 1 === month),
+    [revenueEntries, month]
+  )
+  const invoices = monthRevenue.filter((e) => e.type === 'invoice')
+  const orders = monthRevenue.filter((e) => e.type === 'order')
+  const monthExpenses = useMemo(
+    () => expenses.filter((e) => new Date(e.date + 'T00:00:00').getMonth() + 1 === month),
+    [expenses, month]
+  )
+  const fixedExpenses = monthExpenses.filter((e) => e.expense_type === 'fijo')
+  const variableExpenses = monthExpenses.filter((e) => e.expense_type === 'variable')
+
+  const totalGross = monthRevenue.reduce((s, e) => s + e.grossAmount, 0)
+  const totalLost = monthRevenue.reduce((s, e) => s + e.lostBalance + e.mpFeeLoss, 0)
+  const totalNet = monthRevenue.reduce((s, e) => s + e.total, 0)
+  const totalFixed = fixedExpenses.reduce((s, e) => s + e.amount, 0)
+  const totalVariable = variableExpenses.reduce((s, e) => s + e.amount, 0)
+  const result = totalNet - totalFixed - totalVariable
+
+  return (
+    <div className="space-y-5">
+      <button onClick={onBack} className="text-xs font-semibold text-gray-500 hover:text-gray-800 flex items-center gap-1.5">
+        <ArrowLeft className="w-3.5 h-3.5" /> Volver al resumen anual — {year}
+      </button>
+
+      <Card>
+        <p className="font-black text-gray-900 text-lg">{MONTHS[month - 1]} {year}</p>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
+          <div>
+            <p className="text-[10px] text-gray-400 uppercase font-bold tracking-widest">Ventas totales</p>
+            <p className="font-black text-gray-700">{formatPrice(totalGross)}</p>
+          </div>
+          <div>
+            <p className="text-[10px] text-rose-400 uppercase font-bold tracking-widest">Saldo perdido</p>
+            <p className="font-black text-rose-600">{totalLost > 0 ? `-${formatPrice(totalLost)}` : '—'}</p>
+          </div>
+          <div>
+            <p className="text-[10px] text-emerald-500 uppercase font-bold tracking-widest">Ingresos netos</p>
+            <p className="font-black text-emerald-700">{formatPrice(totalNet)}</p>
+          </div>
+          <div>
+            <p className="text-[10px] text-gray-400 uppercase font-bold tracking-widest">Resultado</p>
+            <p className={`font-black ${result >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{result >= 0 ? '+' : ''}{formatPrice(result)}</p>
+          </div>
+        </div>
+      </Card>
+
+      {invoices.length > 0 && (
+        <Card padding={false}>
+          <div className="p-4 border-b border-gray-100">
+            <p className="text-xs font-black text-gray-400 uppercase tracking-widest">Facturas de empresas cobradas</p>
+          </div>
+          <div className="divide-y divide-gray-50">
+            {invoices.map((inv, i) => (
+              <div key={i} className="flex items-center justify-between px-4 py-3">
+                <div>
+                  <p className="text-sm font-semibold text-gray-800">{inv.label}</p>
+                  <p className="text-[11px] text-gray-400">{formatDate(inv.created_at)} · Facturado {formatPrice(inv.grossAmount)}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-black text-emerald-700">{formatPrice(inv.total)}</p>
+                  {inv.lostBalance > 0 && <p className="text-[11px] text-rose-500 font-semibold">saldo perdido -{formatPrice(inv.lostBalance)}</p>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {orders.length > 0 && (
+        <Card padding={false}>
+          <div className="p-4 border-b border-gray-100">
+            <p className="text-xs font-black text-gray-400 uppercase tracking-widest">Pedidos propios ({orders.length})</p>
+          </div>
+          <div className="divide-y divide-gray-50 max-h-96 overflow-y-auto">
+            {orders.map((o, i) => (
+              <div key={i} className="flex items-center justify-between px-4 py-2 text-sm">
+                <p className="text-gray-700 truncate pr-3">{o.label || 'Pedido'}</p>
+                <div className="text-right shrink-0">
+                  <span className="font-semibold text-gray-800">{formatPrice(o.total)}</span>
+                  {(o.lostBalance + o.mpFeeLoss) > 0 && (
+                    <span className="text-[11px] text-rose-500 ml-2">-{formatPrice(o.lostBalance + o.mpFeeLoss)}</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {monthRevenue.length === 0 && (
+        <Card className="text-center py-10 text-gray-400 text-sm">Sin ingresos registrados este mes</Card>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card padding={false}>
+          <div className="p-4 border-b border-gray-100">
+            <p className="text-xs font-black text-indigo-400 uppercase tracking-widest">Gastos fijos — {formatPrice(totalFixed)}</p>
+          </div>
+          <div className="divide-y divide-gray-50">
+            {fixedExpenses.length === 0 ? (
+              <p className="px-4 py-4 text-xs text-gray-400">Sin gastos fijos este mes</p>
+            ) : fixedExpenses.map((e) => (
+              <div key={e.id} className="flex justify-between px-4 py-2 text-sm">
+                <span className="text-gray-700">{e.description}</span>
+                <span className="font-semibold text-indigo-600">{formatPrice(e.amount)}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+        <Card padding={false}>
+          <div className="p-4 border-b border-gray-100">
+            <p className="text-xs font-black text-amber-400 uppercase tracking-widest">Gastos variables — {formatPrice(totalVariable)}</p>
+          </div>
+          <div className="divide-y divide-gray-50">
+            {variableExpenses.length === 0 ? (
+              <p className="px-4 py-4 text-xs text-gray-400">Sin gastos variables este mes</p>
+            ) : variableExpenses.map((e) => (
+              <div key={e.id} className="flex justify-between px-4 py-2 text-sm">
+                <span className="text-gray-700">{e.description}</span>
+                <span className="font-semibold text-amber-600">{formatPrice(e.amount)}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      </div>
+    </div>
+  )
+}
+
 // ─── Main Page ──────────────────────────────────────────────────────────────────
 
 export default function BalancePage() {
-  const [expenses, setExpenses] = useState<{ amount: number; date: string; expense_type: string }[]>([])
-  const [revenueOrders, setRevenueOrders] = useState<{ total: number; created_at: string; mpFeeLoss?: number; lostBalance?: number }[]>([])
+  const [expenses, setExpenses] = useState<Expense[]>([])
+  const [revenueOrders, setRevenueOrders] = useState<RevenueEntry[]>([])
   const [partners, setPartners] = useState<Partner[]>([])
   const [loading, setLoading] = useState(true)
   const [dbError, setDbError] = useState(false)
   const [year, setYear] = useState(currentYear)
+  const [selectedMonth, setSelectedMonth] = useState<number | null>(null)
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -521,10 +660,21 @@ export default function BalancePage() {
             <select
               className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white"
               value={year}
-              onChange={(e) => setYear(Number(e.target.value))}
+              onChange={(e) => { setYear(Number(e.target.value)); setSelectedMonth(null) }}
             >
               {[currentYear - 2, currentYear - 1, currentYear, currentYear + 1].map((y) => (
                 <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider ml-2">Mes</label>
+            <select
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white"
+              value={selectedMonth ?? 'all'}
+              onChange={(e) => setSelectedMonth(e.target.value === 'all' ? null : Number(e.target.value))}
+            >
+              <option value="all">Todos (resumen anual)</option>
+              {MONTHS.map((m, i) => (
+                <option key={m} value={i + 1}>{m}</option>
               ))}
             </select>
           </div>
@@ -536,6 +686,14 @@ export default function BalancePage() {
           <div className="flex items-center justify-center py-24">
             <Loader2 className="w-6 h-6 animate-spin text-amber-400" />
           </div>
+        ) : selectedMonth !== null ? (
+          <MonthDetailView
+            month={selectedMonth}
+            year={year}
+            revenueEntries={revenueOrders}
+            expenses={expenses}
+            onBack={() => setSelectedMonth(null)}
+          />
         ) : (
           <div className="space-y-6">
             {(totalLostBalance + totalMpFeeLoss) > 0 && (
@@ -554,7 +712,7 @@ export default function BalancePage() {
               </Card>
             )}
 
-            <PnLTable rows={rows} year={year} onExport={handleExport} />
+            <PnLTable rows={rows} year={year} onExport={handleExport} onSelectMonth={setSelectedMonth} />
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <PartnerManager

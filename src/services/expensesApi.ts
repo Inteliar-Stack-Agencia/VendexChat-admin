@@ -54,6 +54,17 @@ export interface Partner {
 const REVENUE_ABSORBED_INTO: Record<string, string> = { empresas: 'caba' }
 const REVENUE_SIBLING_SLUGS: Record<string, string[]> = { caba: ['empresas'] }
 
+// Una entrada de ingreso reconocido en el P&L (factura de empresa pagada, o pedido propio).
+export interface RevenueEntry {
+  total: number         // monto neto reconocido (lo que realmente entró)
+  created_at: string
+  mpFeeLoss: number      // comisión estimada QR/tarjeta (0 para facturas de empresas)
+  lostBalance: number    // diferencia entre lo facturado/vendido y lo cobrado
+  type: 'invoice' | 'order'
+  label: string          // nombre de la empresa, o "#N° cliente" del pedido
+  grossAmount: number    // monto facturado/teórico original (antes de descuentos)
+}
+
 export const expensesApi = {
   // Gastos — fijos siempre incluidos, variables filtrados por fecha
   listExpenses: async (params?: { from?: string; to?: string; category?: ExpenseCategory }) => {
@@ -118,7 +129,7 @@ export const expensesApi = {
 
     // Tienda satélite (ej. Empresas): su ingreso ya se cuenta en la tienda madre.
     if (ownSlug && REVENUE_ABSORBED_INTO[ownSlug]) {
-      return [] as { total: number; created_at: string; mpFeeLoss: number; lostBalance: number }[]
+      return [] as RevenueEntry[]
     }
 
     const siblingSlugs = (ownSlug && REVENUE_SIBLING_SLUGS[ownSlug]) || []
@@ -132,39 +143,45 @@ export const expensesApi = {
 
     const { data: invoices, error: invError } = await supabase
       .from('company_invoices')
-      .select('total, paid_amount, paid_at')
+      .select('total, paid_amount, paid_at, client:company_clients(name)')
       .in('store_id', [storeId, ...siblingStoreIds])
       .eq('status', 'pagado')
       .gte('paid_at', from)
       .lte('paid_at', to)
     if (invError) throw invError
     // Las facturas a empresas se cobran por transferencia/efectivo, no por QR/tarjeta — sin comisión.
-    const invoiceRevenue = (invoices || []).map(i => {
+    const invoiceRevenue: RevenueEntry[] = (invoices || []).map(i => {
       const paidAmount = Number(i.paid_amount ?? 0)
       const invoicedTotal = Number(i.total ?? 0)
+      const client = i.client as unknown as { name: string } | { name: string }[] | null
+      const clientName = Array.isArray(client) ? client[0]?.name : client?.name
       return {
         total: paidAmount,
         created_at: i.paid_at as string,
         mpFeeLoss: 0,
         lostBalance: Math.max(0, invoicedTotal - paidAmount),
+        type: 'invoice',
+        label: clientName || 'Empresa',
+        grossAmount: invoicedTotal,
       }
     })
 
     const { data: ordersData, error: ordersError } = await supabase
       .from('orders')
-      .select('created_at, status, payment_status, paid_amount, paid_at, metadata, order_items(quantity, unit_price, subtotal)')
+      .select('order_number, customer_name, created_at, status, payment_status, paid_amount, paid_at, metadata, order_items(quantity, unit_price, subtotal)')
       .eq('store_id', storeId)
       .is('invoice_id', null)
       .gte('created_at', from)
       .lte('created_at', to)
     if (ordersError) throw ordersError
-    const orderRevenue = (ordersData || [])
+    const orderRevenue: RevenueEntry[] = (ordersData || [])
       .filter((o) => o.status !== 'cancelled')
       .map((o) => {
         const paymentMethod = (o.metadata as Record<string, unknown> | null)?.payment_method
         const hasMpFee = mpFeePct > 0 && (paymentMethod === 'qr' || paymentMethod === 'tarjeta')
         const itemsTotal = (o.order_items || []).reduce((s: number, it: { quantity: number; unit_price: number; subtotal: number | null }) =>
           s + Number(it.subtotal ?? it.quantity * it.unit_price), 0)
+        const label = `#${o.order_number || ''} ${o.customer_name || ''}`.trim()
 
         if ((o.payment_status === 'paid' || o.payment_status === 'partial') && o.paid_amount != null) {
           const total = Number(o.paid_amount)
@@ -173,12 +190,23 @@ export const expensesApi = {
             total,
             mpFeeLoss: hasMpFee ? total * mpFeePct / 100 : 0,
             lostBalance: Math.max(0, itemsTotal - total),
+            type: 'order',
+            label,
+            grossAmount: itemsTotal,
           }
         }
-        return { created_at: o.created_at, total: itemsTotal, mpFeeLoss: hasMpFee ? itemsTotal * mpFeePct / 100 : 0, lostBalance: 0 }
+        return {
+          created_at: o.created_at,
+          total: itemsTotal,
+          mpFeeLoss: hasMpFee ? itemsTotal * mpFeePct / 100 : 0,
+          lostBalance: 0,
+          type: 'order',
+          label,
+          grossAmount: itemsTotal,
+        }
       })
 
-    return [...invoiceRevenue, ...orderRevenue] as { total: number; created_at: string; mpFeeLoss: number; lostBalance: number }[]
+    return [...invoiceRevenue, ...orderRevenue]
   },
 
   createExpense: async (expense: Omit<Expense, 'id' | 'store_id' | 'created_at' | 'supplier'>) => {
