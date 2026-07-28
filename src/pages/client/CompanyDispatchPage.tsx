@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useOutletContext } from 'react-router-dom'
 import { Building2, Plus, Trash2, X, Loader2, ChevronLeft, ChevronRight, Edit2, FileSpreadsheet, Users, Download, Check, Zap, ChevronDown, Receipt, CheckCircle2, Tag, Printer } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { Card, Button } from '../../components/common'
@@ -11,7 +12,7 @@ import { supabase } from '../../supabaseClient'
 import { getStoreId } from '../../services/coreApi'
 import { callAI } from '../../services/aiService'
 import { formatPrice } from '../../utils/helpers'
-import type { Product, Category } from '../../types'
+import type { Product, Category, Tenant } from '../../types'
 
 const today = new Date().toISOString().split('T')[0]
 
@@ -1838,6 +1839,10 @@ function BillingTab({ clients }: { clients: CompanyClient[] }) {
 type Tab = 'rapido' | 'ia' | 'clientes' | 'despachos' | 'resumen' | 'facturacion'
 
 export default function CompanyDispatchPage() {
+  // El ingreso masivo con IA solo aplica a La Plata por ahora (Empresas no lo usa).
+  const { tenant } = useOutletContext<{ tenant: Tenant | null }>()
+  const isLaPlata = tenant?.slug === 'laplata'
+
   const [tab, setTab] = useState<Tab>('rapido')
   const [clients, setClients] = useState<CompanyClient[]>([])
   const [dispatches, setDispatches] = useState<CompanyDispatch[]>([])
@@ -2043,7 +2048,7 @@ export default function CompanyDispatchPage() {
       <div className="flex bg-gray-100 rounded-xl p-1 gap-1 w-fit flex-wrap">
         {([
           { key: 'rapido', label: '⚡ Entrada rápida' },
-          { key: 'ia', label: '🤖 IA · Ingreso masivo' },
+          ...(isLaPlata ? [{ key: 'ia', label: '🤖 IA · Ingreso masivo' }] : []),
           { key: 'despachos', label: 'Historial' },
           { key: 'resumen', label: 'Resumen semanal' },
           { key: 'facturacion', label: '🧾 Facturación' },
@@ -2073,7 +2078,7 @@ export default function CompanyDispatchPage() {
           )}
 
           {/* ── TAB: IA · Ingreso masivo ── */}
-          {tab === 'ia' && (
+          {tab === 'ia' && isLaPlata && (
             clients.length === 0 ? (
               <Card className="p-12 text-center">
                 <Zap className="w-10 h-10 text-gray-200 mx-auto mb-3" />
