@@ -16,10 +16,7 @@ import {
   Wand2,
   BarChart3,
   Brain,
-  Cpu,
-  Crown,
   Receipt,
-  MessageSquareWarning,
   UtensilsCrossed,
   TrendingDown,
   PackageCheck,
@@ -225,33 +222,6 @@ export default function Sidebar({ isOpen, onClose, storeSlug }: SidebarProps) {
                 </div>
               )}
 
-              {!isEmpresas && (
-                <div className="pt-2 pb-2">
-                  <p className="px-4 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1">
-                    <Crown className="w-3 h-3" /> Módulos ULTRA
-                  </p>
-                  <NavLink to="/ai-intelligence" className={linkClass} onClick={onClose}>
-                    <Cpu className="w-5 h-5" />
-                    Inteligencia IA
-                    <span className="ml-auto text-[8px] bg-purple-100 text-purple-600 px-1.5 py-0.5 rounded font-black uppercase">ULTRA</span>
-                  </NavLink>
-                  <NavLink to="/stats-ia" className={linkClass} onClick={onClose}>
-                    <BarChart3 className="w-5 h-5" />
-                    Estadísticas IA
-                    <span className="ml-auto text-[8px] bg-purple-100 text-purple-600 px-1.5 py-0.5 rounded font-black uppercase">ULTRA</span>
-                  </NavLink>
-                  <NavLink to="/whatsapp-bot" className={linkClass} onClick={onClose}>
-                    <Bot className="w-5 h-5" />
-                    Bot WhatsApp
-                    <span className="ml-auto text-[8px] bg-purple-100 text-purple-600 px-1.5 py-0.5 rounded font-black uppercase">ULTRA</span>
-                  </NavLink>
-                  <NavLink to="/bot-feedback" className={linkClass} onClick={onClose}>
-                    <MessageSquareWarning className="w-5 h-5" />
-                    Feedback IA
-                    <span className="ml-auto text-[8px] bg-purple-100 text-purple-600 px-1.5 py-0.5 rounded font-black uppercase">ULTRA</span>
-                  </NavLink>
-                </div>
-              )}
             </>
           )}
         </nav>
