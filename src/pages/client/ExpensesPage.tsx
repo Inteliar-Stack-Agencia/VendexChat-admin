@@ -53,21 +53,22 @@ const currentYear = new Date().getFullYear()
 
 interface ExpenseFormProps {
   suppliers: Supplier[]
+  initial?: Expense | null
   onSave: (data: Omit<Expense, 'id' | 'store_id' | 'created_at' | 'supplier'>) => Promise<void>
   onClose: () => void
 }
 
-function ExpenseForm({ suppliers, onSave, onClose }: ExpenseFormProps) {
+function ExpenseForm({ suppliers, initial, onSave, onClose }: ExpenseFormProps) {
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({
-    description: '',
-    category: 'otros' as ExpenseCategory,
-    expense_type: 'variable' as ExpenseType,
-    amount: '',
-    date: today,
-    fixedMonth: today.slice(0, 7), // YYYY-MM, para gastos fijos
-    supplier_id: '',
-    notes: '',
+    description: initial?.description ?? '',
+    category: (initial?.category ?? 'otros') as ExpenseCategory,
+    expense_type: (initial?.expense_type ?? 'variable') as ExpenseType,
+    amount: initial ? String(initial.amount) : '',
+    date: initial?.expense_type === 'variable' ? initial.date : today,
+    fixedMonth: initial?.expense_type === 'fijo' ? initial.date.slice(0, 7) : today.slice(0, 7), // YYYY-MM, para gastos fijos
+    supplier_id: initial?.supplier_id ?? '',
+    notes: initial?.notes ?? '',
   })
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -95,7 +96,7 @@ function ExpenseForm({ suppliers, onSave, onClose }: ExpenseFormProps) {
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
         <div className="flex items-center justify-between p-6 border-b border-gray-100">
-          <h2 className="font-bold text-gray-900">Nuevo Gasto</h2>
+          <h2 className="font-bold text-gray-900">{initial ? 'Editar Gasto' : 'Nuevo Gasto'}</h2>
           <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100">
             <X className="w-5 h-5 text-gray-500" />
           </button>
@@ -394,7 +395,13 @@ interface MonthlyExpenseRow {
   count: number
 }
 
-function MonthlyExpensesView({ expenses, year, onYearChange }: { expenses: Expense[]; year: number; onYearChange: (y: number) => void }) {
+function MonthlyExpensesView({ expenses, year, onYearChange, onEdit, onDelete }: {
+  expenses: Expense[]
+  year: number
+  onYearChange: (y: number) => void
+  onEdit: (exp: Expense) => void
+  onDelete: (id: string) => void
+}) {
   const [expandedMonth, setExpandedMonth] = useState<number | null>(null)
 
   const rows: MonthlyExpenseRow[] = useMemo(() => {
@@ -488,27 +495,67 @@ function MonthlyExpensesView({ expenses, year, onYearChange }: { expenses: Expen
                         {!isEmpty && <span className="text-gray-400 text-xs">{isExpanded ? '▲' : '▼'}</span>}
                       </td>
                     </tr>
-                    {isExpanded && (
-                      <tr>
-                        <td colSpan={5} className="px-4 pb-3 bg-gray-50/50">
-                          <div className="divide-y divide-gray-100 rounded-lg border border-gray-100 bg-white">
-                            {monthExpenses.map((e) => {
-                              const cat = getCategoryMeta(e.category)
-                              return (
-                                <div key={e.id} className="flex items-center justify-between px-3 py-2 text-xs">
-                                  <div className="flex items-center gap-2 min-w-0">
-                                    <span className="text-gray-400 shrink-0">{new Date(e.date + 'T00:00:00').toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })}</span>
-                                    <span className="font-semibold text-gray-800 truncate">{e.description}</span>
-                                    <span className={`shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-full ${cat.color}`}>{cat.label}</span>
+                    {isExpanded && (() => {
+                      const byCategory: Record<string, Expense[]> = {}
+                      for (const e of monthExpenses) {
+                        if (!byCategory[e.category]) byCategory[e.category] = []
+                        byCategory[e.category].push(e)
+                      }
+                      const categoryGroups = Object.entries(byCategory)
+                        .map(([category, items]) => ({
+                          category,
+                          items,
+                          subtotal: items.reduce((s, e) => s + e.amount, 0),
+                        }))
+                        .sort((a, b) => b.subtotal - a.subtotal)
+
+                      return (
+                        <tr>
+                          <td colSpan={5} className="px-4 pb-3 bg-gray-50/50">
+                            <div className="space-y-3">
+                              {categoryGroups.map((group) => {
+                                const cat = getCategoryMeta(group.category)
+                                return (
+                                  <div key={group.category} className="rounded-lg border border-gray-100 bg-white overflow-hidden">
+                                    <div className="flex items-center justify-between px-3 py-1.5 bg-gray-50 border-b border-gray-100">
+                                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${cat.color}`}>{cat.label}</span>
+                                      <span className="text-xs font-bold text-gray-600">{formatPrice(group.subtotal)}</span>
+                                    </div>
+                                    <div className="divide-y divide-gray-50">
+                                      {group.items.map((e) => (
+                                        <div key={e.id} className="flex items-center justify-between px-3 py-2 text-xs group">
+                                          <div className="flex items-center gap-2 min-w-0">
+                                            <span className="text-gray-400 shrink-0">{new Date(e.date + 'T00:00:00').toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })}</span>
+                                            <span className="font-semibold text-gray-800 truncate">{e.description}</span>
+                                            <span className={`shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-full ${e.expense_type === 'fijo' ? 'bg-indigo-100 text-indigo-700' : 'bg-amber-100 text-amber-700'}`}>
+                                              {e.expense_type === 'fijo' ? '📌 Fijo' : '📊 Variable'}
+                                            </span>
+                                          </div>
+                                          <div className="flex items-center gap-2 shrink-0 ml-2">
+                                            <span className="font-bold text-gray-700">{formatPrice(e.amount)}</span>
+                                            <div className="flex opacity-0 group-hover:opacity-100 transition-opacity">
+                                              <button onClick={() => onEdit(e)} className="p-1 rounded hover:bg-indigo-50 hover:text-indigo-600 text-gray-400">
+                                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                </svg>
+                                              </button>
+                                              <button onClick={() => onDelete(e.id)} className="p-1 rounded hover:bg-red-50 hover:text-red-600 text-gray-400">
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                              </button>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
                                   </div>
-                                  <span className="font-bold text-gray-700 shrink-0 ml-2">{formatPrice(e.amount)}</span>
-                                </div>
-                              )
-                            })}
-                          </div>
-                        </td>
-                      </tr>
-                    )}
+                                )
+                              })}
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })()}
                   </Fragment>
                 )
               })}
@@ -540,6 +587,7 @@ export default function ExpensesPage() {
   const [loading, setLoading] = useState(true)
   const [dbError, setDbError] = useState(false)
   const [showExpenseForm, setShowExpenseForm] = useState(false)
+  const [editExpense, setEditExpense] = useState<Expense | null>(null)
   const [showSupplierForm, setShowSupplierForm] = useState(false)
   const [editSupplier, setEditSupplier] = useState<Supplier | null>(null)
   const [search, setSearch] = useState('')
@@ -589,12 +637,23 @@ export default function ExpensesPage() {
 
   useEffect(() => { if (viewMode === 'mensual') loadMonthly() }, [viewMode, loadMonthly])
 
-  const handleCreateExpense = async (data: Parameters<typeof expensesApi.createExpense>[0]) => {
-    await expensesApi.createExpense(data)
-    showToast('success', 'Gasto registrado')
+  const handleSaveExpense = async (data: Parameters<typeof expensesApi.createExpense>[0]) => {
+    if (editExpense) {
+      await expensesApi.updateExpense(editExpense.id, data)
+      showToast('success', 'Gasto actualizado')
+    } else {
+      await expensesApi.createExpense(data)
+      showToast('success', 'Gasto registrado')
+    }
     setShowExpenseForm(false)
+    setEditExpense(null)
     loadData()
     if (viewMode === 'mensual') loadMonthly()
+  }
+
+  const openEditExpense = (exp: Expense) => {
+    setEditExpense(exp)
+    setShowExpenseForm(true)
   }
 
   const handleDeleteExpense = async (id: string) => {
@@ -657,7 +716,7 @@ export default function ExpensesPage() {
             </div>
           </div>
           <Button
-            onClick={() => tab === 'gastos' ? setShowExpenseForm(true) : (setEditSupplier(null), setShowSupplierForm(true))}
+            onClick={() => tab === 'gastos' ? (setEditExpense(null), setShowExpenseForm(true)) : (setEditSupplier(null), setShowSupplierForm(true))}
             className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm flex items-center gap-2"
           >
             <Plus className="w-4 h-4" />
@@ -704,7 +763,10 @@ export default function ExpensesPage() {
               monthlyLoading ? (
                 <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-indigo-400" /></div>
               ) : (
-                <MonthlyExpensesView expenses={monthlyExpenses} year={monthlyYear} onYearChange={setMonthlyYear} />
+                <MonthlyExpensesView
+                  expenses={monthlyExpenses} year={monthlyYear} onYearChange={setMonthlyYear}
+                  onEdit={openEditExpense} onDelete={handleDeleteExpense}
+                />
               )
             ) : (
               <>
@@ -797,10 +859,19 @@ export default function ExpensesPage() {
                             <td className="px-4 py-3 text-gray-500 text-xs">{exp.supplier?.name ?? '—'}</td>
                             <td className="px-4 py-3 text-right font-bold text-gray-900">{formatPrice(exp.amount)}</td>
                             <td className="px-4 py-3 text-right">
-                              <button onClick={() => handleDeleteExpense(exp.id)}
-                                className="p-1.5 rounded-lg hover:bg-red-50 hover:text-red-600 text-gray-400 transition-colors">
-                                <Trash2 className="w-4 h-4" />
-                              </button>
+                              <div className="flex justify-end gap-1">
+                                <button onClick={() => openEditExpense(exp)}
+                                  className="p-1.5 rounded-lg hover:bg-indigo-50 hover:text-indigo-600 text-gray-400 transition-colors">
+                                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                      d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                  </svg>
+                                </button>
+                                <button onClick={() => handleDeleteExpense(exp.id)}
+                                  className="p-1.5 rounded-lg hover:bg-red-50 hover:text-red-600 text-gray-400 transition-colors">
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         )
@@ -870,7 +941,8 @@ export default function ExpensesPage() {
       </div>
 
       {showExpenseForm && (
-        <ExpenseForm suppliers={suppliers} onSave={handleCreateExpense} onClose={() => setShowExpenseForm(false)} />
+        <ExpenseForm suppliers={suppliers} initial={editExpense} onSave={handleSaveExpense}
+          onClose={() => { setShowExpenseForm(false); setEditExpense(null) }} />
       )}
       {showSupplierForm && (
         <SupplierForm initial={editSupplier} onSave={handleSaveSupplier}

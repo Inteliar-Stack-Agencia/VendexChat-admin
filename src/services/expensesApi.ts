@@ -220,6 +220,17 @@ export const expensesApi = {
     return data as Expense
   },
 
+  updateExpense: async (id: string, patch: Partial<Omit<Expense, 'id' | 'store_id' | 'created_at' | 'supplier'>>) => {
+    const { data, error } = await supabase
+      .from('expenses')
+      .update(patch)
+      .eq('id', id)
+      .select()
+      .single()
+    if (error) throw error
+    return data as Expense
+  },
+
   deleteExpense: async (id: string) => {
     const { error } = await supabase.from('expenses').delete().eq('id', id)
     if (error) throw error
