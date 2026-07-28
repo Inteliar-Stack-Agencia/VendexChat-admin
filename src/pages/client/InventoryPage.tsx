@@ -1119,10 +1119,14 @@ function ProductionGrid({ products, onCostUpdated }: { products: Product[]; onCo
       </div>
 
       {/* Grand totals banner */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="bg-teal-50 rounded-xl p-3 text-center">
           <p className="text-[9px] font-bold text-teal-500 uppercase tracking-widest mb-1">Total producido semana</p>
           <p className="text-2xl font-black text-teal-700">{grandProduced}</p>
+        </div>
+        <div className="bg-gray-50 rounded-xl p-3 text-center">
+          <p className="text-[9px] font-bold text-gray-500 uppercase tracking-widest mb-1">Costo total producción</p>
+          <p className="text-2xl font-black text-gray-800">{formatPrice(totalProductionCost)}</p>
         </div>
         <div className="bg-orange-50 rounded-xl p-3 flex items-center justify-between gap-3">
           <div className="text-left">
