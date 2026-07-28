@@ -38,6 +38,9 @@ export default function Sidebar({ isOpen, onClose, storeSlug }: SidebarProps) {
   const { logout, isSuperadmin, subscription } = useAuth()
   // Tiendas que operan sin mostrador propio (venden por despacho a empresas / packs semanales)
   const isEmpresas = storeSlug === 'empresas' || storeSlug === 'laplata'
+  // Empresas no tiene stock/producción propia — su ingreso se contabiliza en el P&L de CABA,
+  // así que no muestra su propio Balance & P&L. La Plata sí tiene catálogo propio.
+  const showOwnPL = storeSlug !== 'empresas'
   const hasPro = ['pro', 'vip', 'ultra'].includes(subscription?.plan_type || '')
   const navigate = useNavigate()
   const isImpersonating = !!localStorage.getItem('vendexchat_impersonated_store')
@@ -133,10 +136,12 @@ export default function Sidebar({ isOpen, onClose, storeSlug }: SidebarProps) {
                       <Building2 className="w-5 h-5" />
                       Despachos
                     </NavLink>
-                    <NavLink to="/balance" className={linkClass} onClick={onClose}>
-                      <BarChart3 className="w-5 h-5" />
-                      Balance & P&L
-                    </NavLink>
+                    {showOwnPL && (
+                      <NavLink to="/balance" className={linkClass} onClick={onClose}>
+                        <BarChart3 className="w-5 h-5" />
+                        Balance & P&L
+                      </NavLink>
+                    )}
                   </>
                 )}
                 <NavLink to="/scan" className={linkClass} onClick={onClose}>

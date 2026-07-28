@@ -273,6 +273,12 @@ export interface Order {
   total: number
   items: OrderItem[]
   metadata?: OrderMetadata | null
+  // Pago manual del pedido (solo aplica a pedidos sin invoice_id — ver company_invoices para facturados)
+  payment_status?: 'pending' | 'paid' | 'partial'
+  paid_amount?: number | null
+  paid_at?: string | null
+  payment_notes?: string | null
+  invoice_id?: string | null
   created_at: string
   updated_at: string
 }

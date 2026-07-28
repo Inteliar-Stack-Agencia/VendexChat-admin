@@ -48,6 +48,12 @@ export interface Partner {
   created_at: string
 }
 
+// Tiendas B2B "satélite": despachan productos que en realidad son stock/cocina de otra
+// tienda (no tienen producción propia). Su ingreso se contabiliza en el P&L de la tienda
+// madre, no en el suyo (que quedaría vacío para no duplicar ni confundir con costos sin ingreso).
+const REVENUE_ABSORBED_INTO: Record<string, string> = { empresas: 'caba' }
+const REVENUE_SIBLING_SLUGS: Record<string, string[]> = { caba: ['empresas'] }
+
 export const expensesApi = {
   // Gastos — fijos siempre incluidos, variables filtrados por fecha
   listExpenses: async (params?: { from?: string; to?: string; category?: ExpenseCategory }) => {
@@ -82,42 +88,75 @@ export const expensesApi = {
     return combined as Expense[]
   },
 
-  // Ingresos mensuales para P&L.
-  // Tiendas que facturan por despachos (módulo Empresas): el ingreso real es lo facturado en
-  // company_invoices (precio pactado por empresa, despachos + pedidos web ya combinados), no
-  // el total de mostrador de cada pedido web suelto.
-  // Resto de tiendas: ventas de `orders`, calculadas siempre desde los items — la columna
-  // `orders.total` puede haber quedado desactualizada (0 en pedidos B2B, por ejemplo).
+  // Ingresos mensuales para P&L, en base caja (lo que realmente entró, cuando entró):
+  // - Facturas de empresas (company_invoices): solo las que están 'pagado', por paid_amount
+  //   (no el total original — puede haber descuento/negociación al cobrar) y en la fecha de
+  //   paid_at (no invoiced_at) para que coincida con el mes real de caja.
+  // - Si la tienda tiene una satélite de despacho B2B (ej. CABA ← Empresas), suma también
+  //   las facturas pagadas de esa satélite.
+  // - Si la tienda ES una satélite absorbida por otra (ej. Empresas), no muestra ingresos acá.
+  // - Pedidos sueltos (sin invoice_id, venta normal de mostrador/web): si se marcó pago manual
+  //   (payment_status paid/partial), usa paid_amount; si no, usa el total calculado desde items
+  //   (columna `orders.total` puede haber quedado desactualizada).
   getMonthlyRevenue: async (year: number) => {
     const storeId = await getStoreId()
     const from = `${year}-01-01T00:00:00`
     const to = `${year}-12-31T23:59:59`
 
-    const { data: invoices, error: invError } = await supabase
-      .from('company_invoices')
-      .select('total, invoiced_at')
-      .eq('store_id', storeId)
-      .gte('invoiced_at', from)
-      .lte('invoiced_at', to)
-    if (invError) throw invError
-    if (invoices && invoices.length > 0) {
-      return invoices.map(i => ({ total: Number(i.total), created_at: i.invoiced_at })) as { total: number; created_at: string }[]
+    const { data: ownStore, error: ownStoreError } = await supabase
+      .from('stores').select('slug').eq('id', storeId).single()
+    if (ownStoreError) throw ownStoreError
+    const ownSlug = ownStore?.slug as string | undefined
+
+    // Tienda satélite (ej. Empresas): su ingreso ya se cuenta en la tienda madre.
+    if (ownSlug && REVENUE_ABSORBED_INTO[ownSlug]) {
+      return [] as { total: number; created_at: string }[]
     }
 
-    const { data, error } = await supabase
+    const siblingSlugs = (ownSlug && REVENUE_SIBLING_SLUGS[ownSlug]) || []
+    let siblingStoreIds: string[] = []
+    if (siblingSlugs.length > 0) {
+      const { data: siblings, error: siblingsError } = await supabase
+        .from('stores').select('id').in('slug', siblingSlugs)
+      if (siblingsError) throw siblingsError
+      siblingStoreIds = (siblings || []).map(s => s.id)
+    }
+
+    const { data: invoices, error: invError } = await supabase
+      .from('company_invoices')
+      .select('paid_amount, paid_at')
+      .in('store_id', [storeId, ...siblingStoreIds])
+      .eq('status', 'pagado')
+      .gte('paid_at', from)
+      .lte('paid_at', to)
+    if (invError) throw invError
+    const invoiceRevenue = (invoices || []).map(i => ({
+      total: Number(i.paid_amount ?? 0),
+      created_at: i.paid_at as string,
+    }))
+
+    const { data: ordersData, error: ordersError } = await supabase
       .from('orders')
-      .select('created_at, status, order_items(quantity, unit_price, subtotal)')
+      .select('created_at, status, payment_status, paid_amount, paid_at, order_items(quantity, unit_price, subtotal)')
       .eq('store_id', storeId)
+      .is('invoice_id', null)
       .gte('created_at', from)
       .lte('created_at', to)
-    if (error) throw error
-    return (data || [])
+    if (ordersError) throw ordersError
+    const orderRevenue = (ordersData || [])
       .filter((o) => o.status !== 'cancelled')
-      .map((o) => ({
-        created_at: o.created_at,
-        total: (o.order_items || []).reduce((s: number, it: { quantity: number; unit_price: number; subtotal: number | null }) =>
-          s + Number(it.subtotal ?? it.quantity * it.unit_price), 0),
-      })) as { total: number; created_at: string }[]
+      .map((o) => {
+        if ((o.payment_status === 'paid' || o.payment_status === 'partial') && o.paid_amount != null) {
+          return { created_at: o.paid_at || o.created_at, total: Number(o.paid_amount) }
+        }
+        return {
+          created_at: o.created_at,
+          total: (o.order_items || []).reduce((s: number, it: { quantity: number; unit_price: number; subtotal: number | null }) =>
+            s + Number(it.subtotal ?? it.quantity * it.unit_price), 0),
+        }
+      })
+
+    return [...invoiceRevenue, ...orderRevenue] as { total: number; created_at: string }[]
   },
 
   createExpense: async (expense: Omit<Expense, 'id' | 'store_id' | 'created_at' | 'supplier'>) => {

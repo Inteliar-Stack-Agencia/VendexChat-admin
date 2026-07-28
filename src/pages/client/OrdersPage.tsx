@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Link } from 'react-router-dom'
-import { Eye, ShoppingCart, Printer, Archive, ArchiveRestore, Trash2, Search } from 'lucide-react'
-import { Card, EmptyState, Pagination, Button, ConfirmDialog, showToast } from '../../components/common'
+import { Eye, ShoppingCart, Printer, Archive, ArchiveRestore, Trash2, Search, CheckCircle2, Circle } from 'lucide-react'
+import { Card, EmptyState, Pagination, Button, ConfirmDialog, showToast, Modal, Input } from '../../components/common'
 import { ordersApi } from '../../services/api'
+import { orderPaymentsApi } from '../../services/orderPaymentsApi'
 import { getStoreId } from '../../services/coreApi'
 import { supabase } from '../../supabaseClient'
 import { Order } from '../../types'
@@ -13,6 +14,11 @@ type PendingAction = {
   kind: 'archive' | 'delete'
   ids: string[]
   archiveValue?: boolean
+} | null
+
+type PaymentModal = {
+  orderId: string
+  orderTotal: number
 } | null
 
 export default function OrdersPage() {
@@ -30,6 +36,9 @@ export default function OrdersPage() {
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([])
   const [pendingAction, setPendingAction] = useState<PendingAction>(null)
   const [processingAction, setProcessingAction] = useState(false)
+  const [paymentModal, setPaymentModal] = useState<PaymentModal>(null)
+  const [paymentAmount, setPaymentAmount] = useState('')
+  const [savingPayment, setSavingPayment] = useState(false)
 
   const isArchived = (order: Order) => Boolean((order.metadata as Record<string, unknown> | null)?.archived)
 
@@ -204,6 +213,43 @@ export default function OrdersPage() {
     }
   }
 
+  const openPaymentModal = (order: Order) => {
+    setPaymentModal({ orderId: order.id, orderTotal: order.total })
+    setPaymentAmount(order.paid_amount != null ? String(order.paid_amount) : '')
+  }
+
+  const handleSavePayment = async (status: 'paid' | 'partial' | 'pending') => {
+    if (!paymentModal) return
+    const amount = Number(paymentAmount)
+    if (status !== 'pending' && (!paymentAmount || amount <= 0)) {
+      showToast('error', 'Ingresá un monto válido')
+      return
+    }
+    setSavingPayment(true)
+    try {
+      if (status === 'pending') await orderPaymentsApi.markAsPending(paymentModal.orderId)
+      else if (status === 'paid') await orderPaymentsApi.markAsPaid(paymentModal.orderId, amount)
+      else await orderPaymentsApi.markAsPartial(paymentModal.orderId, amount)
+
+      setOrders(prev => prev.map(o => o.id === paymentModal.orderId
+        ? {
+          ...o,
+          payment_status: status,
+          paid_amount: status === 'pending' ? null : amount,
+          paid_at: status === 'pending' ? null : new Date().toISOString(),
+        }
+        : o))
+      showToast('success', 'Pago actualizado')
+      setPaymentModal(null)
+      setPaymentAmount('')
+    } catch (err) {
+      console.error(err)
+      showToast('error', 'Error al guardar el pago')
+    } finally {
+      setSavingPayment(false)
+    }
+  }
+
   const runPendingAction = async () => {
     if (!pendingAction) return
     setProcessingAction(true)
@@ -346,6 +392,7 @@ export default function OrdersPage() {
                   <th className="text-left px-4 py-3 font-medium text-gray-500 hidden sm:table-cell">WhatsApp</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-500">Total</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-500">Estado</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-500">Pago</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-500 hidden sm:table-cell">Fecha</th>
                   <th className="text-right px-4 py-3 font-medium text-gray-500">Acciones</th>
                 </tr>
@@ -359,6 +406,7 @@ export default function OrdersPage() {
                     <td className="px-4 py-4 hidden sm:table-cell"><div className="h-4 w-24 bg-slate-100 rounded" /></td>
                     <td className="px-4 py-4"><div className="h-4 w-20 bg-slate-100 rounded" /></td>
                     <td className="px-4 py-4"><div className="h-6 w-24 bg-slate-100 rounded-full" /></td>
+                    <td className="px-4 py-4"><div className="h-4 w-16 bg-slate-100 rounded" /></td>
                     <td className="px-4 py-4 hidden sm:table-cell"><div className="h-4 w-24 bg-slate-100 rounded" /></td>
                     <td className="px-4 py-4"><div className="h-8 w-8 bg-slate-50 rounded ml-auto" /></td>
                   </tr>
@@ -395,6 +443,7 @@ export default function OrdersPage() {
                   <th className="text-left px-4 py-3 font-medium text-gray-500 hidden sm:table-cell">WhatsApp</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-500">Total</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-500">Estado</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-500">Pago</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-500 hidden sm:table-cell">Fecha</th>
                   <th className="text-right px-4 py-3 font-medium text-gray-500">Acciones</th>
                 </tr>
@@ -445,6 +494,26 @@ export default function OrdersPage() {
                           {archived && <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">Archivado</span>}
                         </div>
                       </td>
+                      <td className="px-4 py-3">
+                        {order.invoice_id ? (
+                          <span className="text-[10px] px-2 py-1 rounded-lg bg-blue-50 text-blue-600 font-semibold" title="Se paga y controla desde la factura de la empresa">
+                            Facturado
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => openPaymentModal(order)}
+                            className="flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-gray-100 text-xs font-medium"
+                          >
+                            {order.payment_status === 'paid' ? (
+                              <><CheckCircle2 className="w-4 h-4 text-green-600" /><span className="text-green-600">Pagado</span></>
+                            ) : order.payment_status === 'partial' ? (
+                              <><Circle className="w-4 h-4 text-amber-600" /><span className="text-amber-600">Parcial</span></>
+                            ) : (
+                              <><Circle className="w-4 h-4 text-gray-400" /><span className="text-gray-500">Pendiente</span></>
+                            )}
+                          </button>
+                        )}
+                      </td>
                       <td className="px-4 py-3 text-gray-500 hidden sm:table-cell">{formatDate(order.created_at)}</td>
                       <td className="px-4 py-3">
                         <div className="flex justify-end gap-1">
@@ -486,6 +555,52 @@ export default function OrdersPage() {
           <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
         </Card>
       )}
+
+      <Modal isOpen={!!paymentModal} onClose={() => setPaymentModal(null)} title="Registrar pago" size="sm">
+        {paymentModal && (
+          <div className="space-y-4">
+            <div className="bg-gray-50 p-3 rounded-lg">
+              <p className="text-xs text-gray-500 uppercase font-semibold">Total del pedido</p>
+              <p className="text-xl font-bold text-gray-900">{formatPrice(paymentModal.orderTotal)}</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Monto realmente pagado</label>
+              <Input
+                type="number"
+                placeholder="0"
+                value={paymentAmount}
+                onChange={(e) => setPaymentAmount(e.target.value)}
+                step="0.01"
+                min="0"
+              />
+              <p className="text-xs text-gray-400 mt-1">Si hubo descuento o pagó menos, poné acá el monto real — eso es lo que suma al P&L.</p>
+            </div>
+            <div className="space-y-2">
+              <button
+                onClick={() => handleSavePayment('paid')}
+                disabled={savingPayment}
+                className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 font-medium text-sm"
+              >
+                Marcar como pagado
+              </button>
+              <button
+                onClick={() => handleSavePayment('partial')}
+                disabled={savingPayment}
+                className="w-full px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50 font-medium text-sm"
+              >
+                Marcar como pago parcial
+              </button>
+              <button
+                onClick={() => handleSavePayment('pending')}
+                disabled={savingPayment}
+                className="w-full px-4 py-2 bg-gray-400 text-white rounded-lg hover:bg-gray-500 disabled:opacity-50 font-medium text-sm"
+              >
+                Marcar como pendiente
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       <ConfirmDialog
         isOpen={!!pendingAction}
