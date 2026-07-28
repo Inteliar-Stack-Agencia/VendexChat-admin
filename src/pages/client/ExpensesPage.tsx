@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo, Fragment } from 'react'
 import {
   TrendingDown,
   Plus,
@@ -10,6 +10,8 @@ import {
   Mail,
   Search,
   AlertCircle,
+  List,
+  CalendarDays,
 } from 'lucide-react'
 import { Card, Button } from '../../components/common'
 import FeatureGuard from '../../components/FeatureGuard'
@@ -38,8 +40,14 @@ const CATEGORIES: { value: ExpenseCategory; label: string; color: string }[] = [
 const getCategoryMeta = (value: string) =>
   CATEGORIES.find((c) => c.value === value) ?? { label: value, color: 'bg-gray-100 text-gray-700' }
 
+const MONTHS = [
+  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
+]
+
 const today = new Date().toISOString().split('T')[0]
 const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+const currentYear = new Date().getFullYear()
 
 // ─── Expense Form ───────────────────────────────────────────────────────────────
 
@@ -57,6 +65,7 @@ function ExpenseForm({ suppliers, onSave, onClose }: ExpenseFormProps) {
     expense_type: 'variable' as ExpenseType,
     amount: '',
     date: today,
+    fixedMonth: today.slice(0, 7), // YYYY-MM, para gastos fijos
     supplier_id: '',
     notes: '',
   })
@@ -65,6 +74,7 @@ function ExpenseForm({ suppliers, onSave, onClose }: ExpenseFormProps) {
     e.preventDefault()
     if (!form.description || !form.amount) return
     if (form.expense_type === 'variable' && !form.date) return
+    if (form.expense_type === 'fijo' && !form.fixedMonth) return
     setSaving(true)
     try {
       await onSave({
@@ -72,7 +82,7 @@ function ExpenseForm({ suppliers, onSave, onClose }: ExpenseFormProps) {
         category: form.category,
         expense_type: form.expense_type,
         amount: parseFloat(form.amount),
-        date: form.expense_type === 'fijo' ? today : form.date,
+        date: form.expense_type === 'fijo' ? `${form.fixedMonth}-01` : form.date,
         supplier_id: form.supplier_id || null,
         notes: form.notes || null,
       })
@@ -152,7 +162,7 @@ function ExpenseForm({ suppliers, onSave, onClose }: ExpenseFormProps) {
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            {form.expense_type === 'variable' && (
+            {form.expense_type === 'variable' ? (
               <div>
                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Fecha *</label>
                 <input
@@ -162,6 +172,18 @@ function ExpenseForm({ suppliers, onSave, onClose }: ExpenseFormProps) {
                   onChange={(e) => setForm({ ...form, date: e.target.value })}
                   required
                 />
+              </div>
+            ) : (
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Mes *</label>
+                <input
+                  type="month"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                  value={form.fixedMonth}
+                  onChange={(e) => setForm({ ...form, fixedMonth: e.target.value })}
+                  required
+                />
+                <p className="text-[10px] text-gray-400 mt-1">A qué mes corresponde este gasto fijo</p>
               </div>
             )}
             <div>
@@ -362,6 +384,151 @@ create policy "store owner" on partners using (store_id = my_store_id());`}
   )
 }
 
+// ─── Vista mensual ──────────────────────────────────────────────────────────────
+
+interface MonthlyExpenseRow {
+  month: number
+  fixed: number
+  variable: number
+  total: number
+  count: number
+}
+
+function MonthlyExpensesView({ expenses, year, onYearChange }: { expenses: Expense[]; year: number; onYearChange: (y: number) => void }) {
+  const [expandedMonth, setExpandedMonth] = useState<number | null>(null)
+
+  const rows: MonthlyExpenseRow[] = useMemo(() => {
+    return Array.from({ length: 12 }, (_, i) => {
+      const month = i + 1
+      const monthExpenses = expenses.filter((e) => new Date(e.date + 'T00:00:00').getMonth() + 1 === month)
+      const fixed = monthExpenses.filter((e) => e.expense_type === 'fijo').reduce((s, e) => s + e.amount, 0)
+      const variable = monthExpenses.filter((e) => e.expense_type === 'variable').reduce((s, e) => s + e.amount, 0)
+      return { month, fixed, variable, total: fixed + variable, count: monthExpenses.length }
+    })
+  }, [expenses])
+
+  const totals = rows.reduce((acc, r) => ({
+    fixed: acc.fixed + r.fixed,
+    variable: acc.variable + r.variable,
+    total: acc.total + r.total,
+    count: acc.count + r.count,
+  }), { fixed: 0, variable: 0, total: 0, count: 0 })
+
+  const avgTotal = rows.filter((r) => r.total > 0).length > 0
+    ? totals.total / rows.filter((r) => r.total > 0).length
+    : 0
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Gastos por mes</p>
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Año</label>
+          <select
+            className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white"
+            value={year}
+            onChange={(e) => onYearChange(Number(e.target.value))}
+          >
+            {[currentYear - 2, currentYear - 1, currentYear, currentYear + 1].map((y) => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <Card className="p-4">
+          <p className="text-xs text-gray-500 font-medium">Total {year}</p>
+          <p className="text-2xl font-black text-gray-900 mt-1">{formatPrice(totals.total)}</p>
+          <p className="text-[10px] text-gray-400 mt-1">{totals.count} registros</p>
+        </Card>
+        <Card className="p-4 border-indigo-100 bg-indigo-50">
+          <p className="text-xs text-indigo-600 font-semibold">📌 Fijos</p>
+          <p className="text-2xl font-black text-indigo-700 mt-1">{formatPrice(totals.fixed)}</p>
+        </Card>
+        <Card className="p-4 border-amber-100 bg-amber-50">
+          <p className="text-xs text-amber-600 font-semibold">📊 Variables</p>
+          <p className="text-2xl font-black text-amber-700 mt-1">{formatPrice(totals.variable)}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-xs text-gray-500 font-medium">Promedio mensual</p>
+          <p className="text-2xl font-black text-gray-900 mt-1">{formatPrice(avgTotal)}</p>
+          <p className="text-[10px] text-gray-400 mt-1">meses con gastos</p>
+        </Card>
+      </div>
+
+      <Card className="overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-100 text-left">
+                <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Mes</th>
+                <th className="px-4 py-3 text-xs font-semibold text-indigo-500 uppercase tracking-wider text-right">Fijos</th>
+                <th className="px-4 py-3 text-xs font-semibold text-amber-500 uppercase tracking-wider text-right">Variables</th>
+                <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-right">Total</th>
+                <th className="px-4 py-3 w-8" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {rows.map((r) => {
+                const isEmpty = r.total === 0
+                const isExpanded = expandedMonth === r.month
+                const monthExpenses = expenses
+                  .filter((e) => new Date(e.date + 'T00:00:00').getMonth() + 1 === r.month)
+                  .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                return (
+                  <Fragment key={r.month}>
+                    <tr className={`transition-colors ${isEmpty ? 'opacity-40' : 'hover:bg-gray-50 cursor-pointer'}`}
+                      onClick={() => !isEmpty && setExpandedMonth(isExpanded ? null : r.month)}>
+                      <td className="px-4 py-3 font-semibold text-gray-800">{MONTHS[r.month - 1]}</td>
+                      <td className="px-4 py-3 text-right text-indigo-600 font-medium">{formatPrice(r.fixed)}</td>
+                      <td className="px-4 py-3 text-right text-amber-600 font-medium">{formatPrice(r.variable)}</td>
+                      <td className="px-4 py-3 text-right font-black text-gray-800">{formatPrice(r.total)}</td>
+                      <td className="px-4 py-3 text-center">
+                        {!isEmpty && <span className="text-gray-400 text-xs">{isExpanded ? '▲' : '▼'}</span>}
+                      </td>
+                    </tr>
+                    {isExpanded && (
+                      <tr>
+                        <td colSpan={5} className="px-4 pb-3 bg-gray-50/50">
+                          <div className="divide-y divide-gray-100 rounded-lg border border-gray-100 bg-white">
+                            {monthExpenses.map((e) => {
+                              const cat = getCategoryMeta(e.category)
+                              return (
+                                <div key={e.id} className="flex items-center justify-between px-3 py-2 text-xs">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className="text-gray-400 shrink-0">{new Date(e.date + 'T00:00:00').toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })}</span>
+                                    <span className="font-semibold text-gray-800 truncate">{e.description}</span>
+                                    <span className={`shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-full ${cat.color}`}>{cat.label}</span>
+                                  </div>
+                                  <span className="font-bold text-gray-700 shrink-0 ml-2">{formatPrice(e.amount)}</span>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                )
+              })}
+            </tbody>
+            <tfoot>
+              <tr className="bg-gray-50 border-t-2 border-gray-200 font-black">
+                <td className="px-4 py-3 text-gray-800 uppercase text-xs tracking-wider">TOTAL</td>
+                <td className="px-4 py-3 text-right text-indigo-600">{formatPrice(totals.fixed)}</td>
+                <td className="px-4 py-3 text-right text-amber-600">{formatPrice(totals.variable)}</td>
+                <td className="px-4 py-3 text-right text-gray-800">{formatPrice(totals.total)}</td>
+                <td />
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </Card>
+    </div>
+  )
+}
+
 // ─── Main Page ──────────────────────────────────────────────────────────────────
 
 type Tab = 'gastos' | 'proveedores'
@@ -379,6 +546,10 @@ export default function ExpensesPage() {
   const [fromDate, setFromDate] = useState(thirtyDaysAgo)
   const [toDate, setToDate] = useState(today)
   const [typeFilter, setTypeFilter] = useState<'all' | 'fijo' | 'variable'>('all')
+  const [viewMode, setViewMode] = useState<'lista' | 'mensual'>('lista')
+  const [monthlyYear, setMonthlyYear] = useState(currentYear)
+  const [monthlyExpenses, setMonthlyExpenses] = useState<Expense[]>([])
+  const [monthlyLoading, setMonthlyLoading] = useState(false)
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -404,11 +575,26 @@ export default function ExpensesPage() {
 
   useEffect(() => { loadData() }, [loadData])
 
+  const loadMonthly = useCallback(async () => {
+    setMonthlyLoading(true)
+    try {
+      const exp = await expensesApi.listExpenses({ from: `${monthlyYear}-01-01`, to: `${monthlyYear}-12-31` })
+      setMonthlyExpenses(exp)
+    } catch {
+      showToast('error', 'Error al cargar gastos del año')
+    } finally {
+      setMonthlyLoading(false)
+    }
+  }, [monthlyYear])
+
+  useEffect(() => { if (viewMode === 'mensual') loadMonthly() }, [viewMode, loadMonthly])
+
   const handleCreateExpense = async (data: Parameters<typeof expensesApi.createExpense>[0]) => {
     await expensesApi.createExpense(data)
     showToast('success', 'Gasto registrado')
     setShowExpenseForm(false)
     loadData()
+    if (viewMode === 'mensual') loadMonthly()
   }
 
   const handleDeleteExpense = async (id: string) => {
@@ -416,6 +602,7 @@ export default function ExpensesPage() {
     await expensesApi.deleteExpense(id)
     showToast('success', 'Gasto eliminado')
     loadData()
+    if (viewMode === 'mensual') loadMonthly()
   }
 
   const handleSaveSupplier = async (data: Parameters<typeof expensesApi.createSupplier>[0]) => {
@@ -498,6 +685,29 @@ export default function ExpensesPage() {
         {/* ── GASTOS TAB ── */}
         {tab === 'gastos' && (
           <div className="space-y-4">
+            <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit">
+              <button onClick={() => setViewMode('lista')}
+                className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-xs font-bold transition-all ${
+                  viewMode === 'lista' ? 'bg-white shadow-sm text-gray-800' : 'text-gray-400'
+                }`}>
+                <List className="w-3.5 h-3.5" /> Lista
+              </button>
+              <button onClick={() => setViewMode('mensual')}
+                className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-xs font-bold transition-all ${
+                  viewMode === 'mensual' ? 'bg-white shadow-sm text-gray-800' : 'text-gray-400'
+                }`}>
+                <CalendarDays className="w-3.5 h-3.5" /> Por mes
+              </button>
+            </div>
+
+            {viewMode === 'mensual' ? (
+              monthlyLoading ? (
+                <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-indigo-400" /></div>
+              ) : (
+                <MonthlyExpensesView expenses={monthlyExpenses} year={monthlyYear} onYearChange={setMonthlyYear} />
+              )
+            ) : (
+              <>
             <div className="flex flex-wrap gap-3 items-center">
               <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2">
                 <Search className="w-4 h-4 text-gray-400" />
@@ -600,6 +810,8 @@ export default function ExpensesPage() {
                 </div>
               )}
             </Card>
+              </>
+            )}
           </div>
         )}
 
