@@ -36,7 +36,10 @@ const currentYear = new Date().getFullYear()
 
 interface MonthlyRow {
   month: number
-  revenue: number
+  grossSales: number   // ventas/facturación teórica del mes (antes de descuentos y comisiones)
+  lostBalance: number  // saldo perdido por acuerdos comerciales (facturado vs. cobrado)
+  mpFeeLoss: number    // comisión estimada QR/tarjeta
+  revenue: number      // ingreso neto real = grossSales - lostBalance - mpFeeLoss
   fixedCosts: number
   variableCosts: number
   result: number
@@ -242,12 +245,15 @@ function PnLTable({ rows, year, onExport }: { rows: MonthlyRow[]; year: number; 
 
   const totals = rows.reduce(
     (acc, r) => ({
+      grossSales: acc.grossSales + r.grossSales,
+      lostBalance: acc.lostBalance + r.lostBalance,
+      mpFeeLoss: acc.mpFeeLoss + r.mpFeeLoss,
       revenue: acc.revenue + r.revenue,
       fixedCosts: acc.fixedCosts + r.fixedCosts,
       variableCosts: acc.variableCosts + r.variableCosts,
       result: acc.result + r.result,
     }),
-    { revenue: 0, fixedCosts: 0, variableCosts: 0, result: 0 }
+    { grossSales: 0, lostBalance: 0, mpFeeLoss: 0, revenue: 0, fixedCosts: 0, variableCosts: 0, result: 0 }
   )
 
   const activeMonths = rows.filter((r) => r.revenue > 0 || r.fixedCosts > 0 || r.variableCosts > 0)
@@ -305,7 +311,9 @@ function PnLTable({ rows, year, onExport }: { rows: MonthlyRow[]; year: number; 
             <thead>
               <tr className="bg-gray-50 border-b border-gray-100 text-left">
                 <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Mes</th>
-                <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-right">Ingresos</th>
+                <th className="px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider text-right">Ventas totales</th>
+                <th className="px-4 py-3 text-xs font-semibold text-rose-400 uppercase tracking-wider text-right">Saldo perdido</th>
+                <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-right">Ingresos netos</th>
                 <th className="px-4 py-3 text-xs font-semibold text-indigo-500 uppercase tracking-wider text-right">G. Fijos</th>
                 <th className="px-4 py-3 text-xs font-semibold text-amber-500 uppercase tracking-wider text-right">G. Variables</th>
                 <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-right">Total Egresos</th>
@@ -322,6 +330,8 @@ function PnLTable({ rows, year, onExport }: { rows: MonthlyRow[]; year: number; 
                 return (
                   <tr key={r.month} className={`transition-colors ${isEmpty ? 'opacity-40' : 'hover:bg-gray-50'}`}>
                     <td className="px-4 py-3 font-semibold text-gray-800">{MONTHS[r.month - 1]}</td>
+                    <td className="px-4 py-3 text-right text-gray-500">{formatPrice(r.grossSales)}</td>
+                    <td className="px-4 py-3 text-right text-rose-500">{r.lostBalance + r.mpFeeLoss > 0 ? `-${formatPrice(r.lostBalance + r.mpFeeLoss)}` : '—'}</td>
                     <td className="px-4 py-3 text-right text-emerald-700 font-semibold">{formatPrice(r.revenue)}</td>
                     <td className="px-4 py-3 text-right text-indigo-600 font-medium">{formatPrice(r.fixedCosts)}</td>
                     <td className="px-4 py-3 text-right text-amber-600 font-medium">{formatPrice(r.variableCosts)}</td>
@@ -356,6 +366,8 @@ function PnLTable({ rows, year, onExport }: { rows: MonthlyRow[]; year: number; 
             <tfoot>
               <tr className="bg-gray-50 border-t-2 border-gray-200 font-black">
                 <td className="px-4 py-3 text-gray-800 uppercase text-xs tracking-wider">TOTAL</td>
+                <td className="px-4 py-3 text-right text-gray-500">{formatPrice(totals.grossSales)}</td>
+                <td className="px-4 py-3 text-right text-rose-500">{totals.lostBalance + totals.mpFeeLoss > 0 ? `-${formatPrice(totals.lostBalance + totals.mpFeeLoss)}` : '—'}</td>
                 <td className="px-4 py-3 text-right text-emerald-700">{formatPrice(totals.revenue)}</td>
                 <td className="px-4 py-3 text-right text-indigo-600">{formatPrice(totals.fixedCosts)}</td>
                 <td className="px-4 py-3 text-right text-amber-600">{formatPrice(totals.variableCosts)}</td>
@@ -390,7 +402,7 @@ function PnLTable({ rows, year, onExport }: { rows: MonthlyRow[]; year: number; 
 
 export default function BalancePage() {
   const [expenses, setExpenses] = useState<{ amount: number; date: string; expense_type: string }[]>([])
-  const [revenueOrders, setRevenueOrders] = useState<{ total: number; created_at: string; mpFeeLoss?: number }[]>([])
+  const [revenueOrders, setRevenueOrders] = useState<{ total: number; created_at: string; mpFeeLoss?: number; lostBalance?: number }[]>([])
   const [partners, setPartners] = useState<Partner[]>([])
   const [loading, setLoading] = useState(true)
   const [dbError, setDbError] = useState(false)
@@ -425,26 +437,40 @@ export default function BalancePage() {
   const rows: MonthlyRow[] = useMemo(() => {
     return Array.from({ length: 12 }, (_, i) => {
       const month = i + 1
-      const revenue = revenueOrders
-        .filter((o) => new Date(o.created_at).getMonth() + 1 === month)
-        .reduce((s, o) => s + (Number(o.total) || 0), 0)
+      const monthOrders = revenueOrders.filter((o) => new Date(o.created_at).getMonth() + 1 === month)
+      const revenue = monthOrders.reduce((s, o) => s + (Number(o.total) || 0), 0)
+      const lostBalance = monthOrders.reduce((s, o) => s + (o.lostBalance || 0), 0)
+      const mpFeeLoss = monthOrders.reduce((s, o) => s + (o.mpFeeLoss || 0), 0)
       const fixedCosts = expenses
         .filter((e) => new Date(e.date + 'T00:00:00').getMonth() + 1 === month && e.expense_type === 'fijo')
         .reduce((s, e) => s + e.amount, 0)
       const variableCosts = expenses
         .filter((e) => new Date(e.date + 'T00:00:00').getMonth() + 1 === month && e.expense_type === 'variable')
         .reduce((s, e) => s + e.amount, 0)
-      return { month, revenue, fixedCosts, variableCosts, result: revenue - fixedCosts - variableCosts }
+      return {
+        month,
+        grossSales: revenue + lostBalance + mpFeeLoss,
+        lostBalance,
+        mpFeeLoss,
+        revenue,
+        fixedCosts,
+        variableCosts,
+        result: revenue - fixedCosts - variableCosts,
+      }
     })
   }, [expenses, revenueOrders])
 
   const netResult = rows.reduce((s, r) => s + r.result, 0)
-  const totalMpFeeLoss = revenueOrders.reduce((s, o) => s + (o.mpFeeLoss || 0), 0)
+  const totalLostBalance = rows.reduce((s, r) => s + r.lostBalance, 0)
+  const totalMpFeeLoss = rows.reduce((s, r) => s + r.mpFeeLoss, 0)
 
   const handleExport = () => {
     const data = rows.map((r) => ({
       Mes: MONTHS[r.month - 1],
-      Ingresos: r.revenue,
+      'Ventas totales': r.grossSales,
+      'Saldo perdido (acuerdos comerciales)': -r.lostBalance,
+      'Saldo perdido (comisión QR/tarjeta)': -r.mpFeeLoss,
+      'Ingresos netos': r.revenue,
       'Gastos Fijos': r.fixedCosts,
       'Gastos Variables': r.variableCosts,
       'Total Egresos': r.fixedCosts + r.variableCosts,
@@ -512,17 +538,19 @@ export default function BalancePage() {
           </div>
         ) : (
           <div className="space-y-6">
-            {totalMpFeeLoss > 0 && (
+            {(totalLostBalance + totalMpFeeLoss) > 0 && (
               <Card className="bg-rose-50 border-rose-100">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-bold text-rose-500 uppercase tracking-widest">Comisión estimada QR / Tarjeta — {year}</p>
-                    <p className="text-[11px] text-rose-400 mt-0.5">
-                      Según el % configurado en Ajustes → Pagos, sobre lo vendido con QR/tarjeta. No se resta de Ingresos — es lo que Mercado Pago se queda antes de depositar.
-                    </p>
-                  </div>
-                  <p className="text-2xl font-black text-rose-600">-{formatPrice(totalMpFeeLoss)}</p>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-bold text-rose-500 uppercase tracking-widest">Saldo perdido total — {year}</p>
+                  <p className="text-2xl font-black text-rose-600">-{formatPrice(totalLostBalance + totalMpFeeLoss)}</p>
                 </div>
+                <div className="flex flex-wrap gap-4 text-[11px] text-rose-500">
+                  <span>Acuerdos comerciales con empresas: <strong>-{formatPrice(totalLostBalance)}</strong></span>
+                  <span>Comisión estimada QR/tarjeta: <strong>-{formatPrice(totalMpFeeLoss)}</strong></span>
+                </div>
+                <p className="text-[11px] text-rose-400 mt-2">
+                  Esto ya está descontado de los Ingresos netos de la tabla de abajo — se muestra separado para poder explicar la diferencia entre lo vendido y lo cobrado.
+                </p>
               </Card>
             )}
 

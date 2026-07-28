@@ -98,9 +98,13 @@ export const expensesApi = {
   // - Pedidos sueltos (sin invoice_id, venta normal de mostrador/web): si se marcó pago manual
   //   (payment_status paid/partial), usa paid_amount; si no, usa el total calculado desde items
   //   (columna `orders.total` puede haber quedado desactualizada).
-  // Cada fila trae además `mpFeeLoss`: comisión estimada (según % configurado en Ajustes → Pagos)
-  // sobre pedidos pagados con QR/tarjeta — no se resta de `total` (revenue sigue siendo el monto
-  // nominal de venta), es solo para mostrar por separado cuánto de eso no termina entrando.
+  // Cada fila trae además, sin afectar `total` (que sigue siendo el ingreso neto real):
+  // - `lostBalance`: diferencia entre lo facturado y lo cobrado en facturas de empresas
+  //   (descuentos/negociación al pagar).
+  // - `mpFeeLoss`: comisión estimada (según % configurado en Ajustes → Pagos) sobre pedidos
+  //   pagados con QR/tarjeta.
+  // Sirven para mostrar por separado, en el Balance & P&L, cuánto de lo vendido/facturado no
+  // termina entrando — así el informe a socios explica la diferencia en vez de esconderla.
   getMonthlyRevenue: async (year: number) => {
     const storeId = await getStoreId()
     const from = `${year}-01-01T00:00:00`
@@ -114,7 +118,7 @@ export const expensesApi = {
 
     // Tienda satélite (ej. Empresas): su ingreso ya se cuenta en la tienda madre.
     if (ownSlug && REVENUE_ABSORBED_INTO[ownSlug]) {
-      return [] as { total: number; created_at: string; mpFeeLoss: number }[]
+      return [] as { total: number; created_at: string; mpFeeLoss: number; lostBalance: number }[]
     }
 
     const siblingSlugs = (ownSlug && REVENUE_SIBLING_SLUGS[ownSlug]) || []
@@ -128,18 +132,23 @@ export const expensesApi = {
 
     const { data: invoices, error: invError } = await supabase
       .from('company_invoices')
-      .select('paid_amount, paid_at')
+      .select('total, paid_amount, paid_at')
       .in('store_id', [storeId, ...siblingStoreIds])
       .eq('status', 'pagado')
       .gte('paid_at', from)
       .lte('paid_at', to)
     if (invError) throw invError
     // Las facturas a empresas se cobran por transferencia/efectivo, no por QR/tarjeta — sin comisión.
-    const invoiceRevenue = (invoices || []).map(i => ({
-      total: Number(i.paid_amount ?? 0),
-      created_at: i.paid_at as string,
-      mpFeeLoss: 0,
-    }))
+    const invoiceRevenue = (invoices || []).map(i => {
+      const paidAmount = Number(i.paid_amount ?? 0)
+      const invoicedTotal = Number(i.total ?? 0)
+      return {
+        total: paidAmount,
+        created_at: i.paid_at as string,
+        mpFeeLoss: 0,
+        lostBalance: Math.max(0, invoicedTotal - paidAmount),
+      }
+    })
 
     const { data: ordersData, error: ordersError } = await supabase
       .from('orders')
@@ -154,17 +163,22 @@ export const expensesApi = {
       .map((o) => {
         const paymentMethod = (o.metadata as Record<string, unknown> | null)?.payment_method
         const hasMpFee = mpFeePct > 0 && (paymentMethod === 'qr' || paymentMethod === 'tarjeta')
+        const itemsTotal = (o.order_items || []).reduce((s: number, it: { quantity: number; unit_price: number; subtotal: number | null }) =>
+          s + Number(it.subtotal ?? it.quantity * it.unit_price), 0)
 
         if ((o.payment_status === 'paid' || o.payment_status === 'partial') && o.paid_amount != null) {
           const total = Number(o.paid_amount)
-          return { created_at: o.paid_at || o.created_at, total, mpFeeLoss: hasMpFee ? total * mpFeePct / 100 : 0 }
+          return {
+            created_at: o.paid_at || o.created_at,
+            total,
+            mpFeeLoss: hasMpFee ? total * mpFeePct / 100 : 0,
+            lostBalance: Math.max(0, itemsTotal - total),
+          }
         }
-        const total = (o.order_items || []).reduce((s: number, it: { quantity: number; unit_price: number; subtotal: number | null }) =>
-          s + Number(it.subtotal ?? it.quantity * it.unit_price), 0)
-        return { created_at: o.created_at, total, mpFeeLoss: hasMpFee ? total * mpFeePct / 100 : 0 }
+        return { created_at: o.created_at, total: itemsTotal, mpFeeLoss: hasMpFee ? itemsTotal * mpFeePct / 100 : 0, lostBalance: 0 }
       })
 
-    return [...invoiceRevenue, ...orderRevenue] as { total: number; created_at: string; mpFeeLoss: number }[]
+    return [...invoiceRevenue, ...orderRevenue] as { total: number; created_at: string; mpFeeLoss: number; lostBalance: number }[]
   },
 
   createExpense: async (expense: Omit<Expense, 'id' | 'store_id' | 'created_at' | 'supplier'>) => {
