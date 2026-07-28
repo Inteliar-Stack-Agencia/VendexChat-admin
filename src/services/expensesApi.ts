@@ -209,25 +209,23 @@ export const expensesApi = {
     return [...invoiceRevenue, ...orderRevenue]
   },
 
-  // Busca si YA existe un gasto de "producción cargada" para esa semana (por fecha +
-  // categoría + prefijo de descripción). Se usa para que "Cargar como gasto" en
-  // Inventario → Producción sea un upsert: si ya se cargó esa semana, actualiza el
-  // monto en vez de crear un duplicado cada vez que se aprieta el botón.
-  findProductionExpense: async (weekStartDate: string) => {
+  // Suma lo YA cargado como gasto de producción en un rango de fechas (por categoría +
+  // prefijo de descripción). Se usa en "Cargar como gasto" (Inventario → Producción)
+  // para cobrar solo la DIFERENCIA nueva cuando se sigue cargando producción durante
+  // la semana — no recalcula ni pisa lo ya cargado, suma una línea nueva por la parte
+  // que todavía no se había cargado.
+  sumProductionExpenses: async (from: string, to: string) => {
     const storeId = await getStoreId()
-    // order + limit(1) en vez de maybeSingle: si quedaron duplicados de antes de este
-    // fix, no debe romper — toma el más reciente y lo trata como "el" gasto de la semana.
     const { data, error } = await supabase
       .from('expenses')
-      .select('*')
+      .select('amount')
       .eq('store_id', storeId)
-      .eq('date', weekStartDate)
       .eq('category', 'materia_prima')
       .ilike('description', 'Ingreso de viandas%')
-      .order('created_at', { ascending: false })
-      .limit(1)
+      .gte('date', from)
+      .lte('date', to)
     if (error) throw error
-    return (data && data[0]) as Expense | undefined ?? null
+    return (data || []).reduce((s, e) => s + Number(e.amount), 0)
   },
 
   createExpense: async (expense: Omit<Expense, 'id' | 'store_id' | 'created_at' | 'supplier'>) => {

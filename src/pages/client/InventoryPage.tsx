@@ -21,7 +21,7 @@ import { productionApi } from '../../services/productionApi'
 import { companyDispatchApi } from '../../services/companyDispatchApi'
 import { labelsApi } from '../../services/labelsApi'
 import { productsApi } from '../../services/productsApi'
-import { expensesApi, type Expense } from '../../services/expensesApi'
+import { expensesApi } from '../../services/expensesApi'
 import { formatPrice } from '../../utils/helpers'
 import { showToast } from '../../components/common/Toast'
 import { callAI } from '../../services/aiService'
@@ -866,9 +866,10 @@ function ProductionGrid({ products, onCostUpdated }: { products: Product[]; onCo
   const [saving, setSaving] = useState(false)
   const [generatingLabelsFor, setGeneratingLabelsFor] = useState<string | null>(null)
   const [loadingExpense, setLoadingExpense] = useState(false)
-  // Gasto de producción YA cargado para esta semana (si existe) — se busca contra la
-  // base, no en memoria, para detectarlo aunque se recargue la página o pasen los días.
-  const [existingExpense, setExistingExpense] = useState<Expense | null>(null)
+  // Cuánto de la producción de esta semana ya se cargó como gasto (suma contra la base,
+  // no memoria) — así "Cargar como gasto" solo cobra la diferencia nueva si se sigue
+  // cargando producción durante la semana, en vez de recalcular o duplicar todo.
+  const [alreadyExpensed, setAlreadyExpensed] = useState(0)
 
   const allWeekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
   // Only Mon–Fri (getDay: 1=Mon … 5=Fri)
@@ -894,16 +895,15 @@ function ProductionGrid({ products, onCostUpdated }: { products: Product[]; onCo
 
   useEffect(() => { load() }, [load])
 
-  // Detecta si ya existe un gasto de producción cargado para esta semana (consulta la
-  // base, no memoria) — así el botón sabe si debe crear o actualizar, y sobrevive a
-  // recargar la página o volver otro día.
+  // Cuánto ya se cargó como gasto para esta semana (consulta la base, no memoria) —
+  // sobrevive a recargar la página o volver otro día.
   useEffect(() => {
     let active = true
-    expensesApi.findProductionExpense(weekStartISO)
-      .then((exp) => { if (active) setExistingExpense(exp) })
-      .catch(() => { if (active) setExistingExpense(null) })
+    expensesApi.sumProductionExpenses(weekStartISO, weekEndISO)
+      .then((sum) => { if (active) setAlreadyExpensed(sum) })
+      .catch(() => { if (active) setAlreadyExpensed(0) })
     return () => { active = false }
-  }, [weekStartISO])
+  }, [weekStartISO, weekEndISO])
 
   // When changing week, exit edit mode
   useEffect(() => {
@@ -949,36 +949,32 @@ function ProductionGrid({ products, onCostUpdated }: { products: Product[]; onCo
   const grandProduced = products.reduce((s, p) => s + productTotals(p.id).produced, 0)
   const activeProducts = products.filter((p) => p.is_active)
   const totalProductionCost = activeProducts.reduce((s, p) => s + productTotals(p.id).produced * (getWeekCost(p) ?? 0), 0)
+  // Lo que falta cargar: el total de producción de la semana menos lo que ya se cargó
+  // como gasto en algún click anterior. Si cargás producción día a día y vas apretando
+  // el botón, cada vez suma una línea nueva solo por la diferencia — nunca recuenta ni
+  // duplica lo que ya se cargó.
+  const pendingExpenseAmount = Math.max(0, totalProductionCost - alreadyExpensed)
 
-  // Carga la producción de la semana como un gasto variable de materia prima —
-  // ya se sabe cuánto salió cada unidad (costo cargado arriba), no hay que
+  // Carga SOLO la diferencia nueva de producción como un gasto variable de materia
+  // prima — ya se sabe cuánto salió cada unidad (costo cargado arriba), no hay que
   // recalcularlo ni tipearlo a mano en Gastos.
   const handleLoadAsExpense = async () => {
-    if (totalProductionCost <= 0) { showToast('error', 'No hay producción cargada esta semana'); return }
+    if (pendingExpenseAmount <= 0) { showToast('error', 'No hay producción nueva para cargar'); return }
     setLoadingExpense(true)
     try {
       const fromLabel = weekStart.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })
       const toLabel = allWeekDays[4].toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })
-      const description = `Ingreso de viandas del ${fromLabel} al ${toLabel}`
-
-      // Si ya existe un gasto de producción para esta semana, se actualiza el monto en
-      // vez de crear uno nuevo — permite cargar producción todos los días e ir
-      // apretando el botón sin duplicar el gasto.
-      const updated = existingExpense
-        ? await expensesApi.updateExpense(existingExpense.id, { description, amount: totalProductionCost })
-        : await expensesApi.createExpense({
-            description,
-            category: 'materia_prima',
-            expense_type: 'variable',
-            amount: totalProductionCost,
-            date: weekStartISO,
-            supplier_id: null,
-            notes: null,
-          })
-      setExistingExpense(updated)
-      showToast('success', existingExpense
-        ? `Gasto actualizado: ${formatPrice(totalProductionCost)}`
-        : `Gasto cargado: ${formatPrice(totalProductionCost)}`)
+      await expensesApi.createExpense({
+        description: `Ingreso de viandas del ${fromLabel} al ${toLabel}`,
+        category: 'materia_prima',
+        expense_type: 'variable',
+        amount: pendingExpenseAmount,
+        date: today,
+        supplier_id: null,
+        notes: null,
+      })
+      setAlreadyExpensed((prev) => prev + pendingExpenseAmount)
+      showToast('success', `Gasto cargado: ${formatPrice(pendingExpenseAmount)}`)
     } catch (err) {
       showToast('error', err instanceof Error ? err.message : 'Error al cargar el gasto')
     } finally {
@@ -1130,34 +1126,29 @@ function ProductionGrid({ products, onCostUpdated }: { products: Product[]; onCo
         </div>
         <div className="bg-orange-50 rounded-xl p-3 flex items-center justify-between gap-3">
           <div className="text-left">
-            <p className="text-[9px] font-bold text-orange-500 uppercase tracking-widest mb-1">Costo de esta producción</p>
-            <p className="text-2xl font-black text-orange-700">{formatPrice(totalProductionCost)}</p>
+            <p className="text-[9px] font-bold text-orange-500 uppercase tracking-widest mb-1">
+              {alreadyExpensed > 0 ? 'Costo nuevo sin cargar' : 'Costo de esta producción'}
+            </p>
+            <p className="text-2xl font-black text-orange-700">{formatPrice(pendingExpenseAmount)}</p>
+            {alreadyExpensed > 0 && (
+              <p className="text-[10px] text-orange-400 mt-0.5">Ya cargaste {formatPrice(alreadyExpensed)} esta semana</p>
+            )}
           </div>
-          {(() => {
-            const isUpToDate = existingExpense != null && Number(existingExpense.amount) === totalProductionCost
-            const needsUpdate = existingExpense != null && !isUpToDate
-            return (
-              <button
-                onClick={handleLoadAsExpense}
-                disabled={loadingExpense || totalProductionCost <= 0 || isUpToDate}
-                className="shrink-0 flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-white bg-orange-600 hover:bg-orange-700 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
-                title={existingExpense
-                  ? 'Ya hay un gasto cargado para esta semana — actualiza el monto si sumaste más producción'
-                  : 'Crea un gasto variable de materia prima con este monto, sin tipearlo a mano'}
-              >
-                {loadingExpense ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : isUpToDate ? (
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                ) : needsUpdate ? (
-                  <RefreshCw className="w-3.5 h-3.5" />
-                ) : (
-                  <TrendingDown className="w-3.5 h-3.5" />
-                )}
-                {isUpToDate ? 'Al día' : needsUpdate ? 'Actualizar gasto' : 'Cargar como gasto'}
-              </button>
-            )
-          })()}
+          <button
+            onClick={handleLoadAsExpense}
+            disabled={loadingExpense || pendingExpenseAmount <= 0}
+            className="shrink-0 flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-white bg-orange-600 hover:bg-orange-700 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+            title="Crea un gasto variable de materia prima solo por la producción nueva que todavía no se cargó, sin tipearlo a mano"
+          >
+            {loadingExpense ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : pendingExpenseAmount <= 0 ? (
+              <CheckCircle2 className="w-3.5 h-3.5" />
+            ) : (
+              <TrendingDown className="w-3.5 h-3.5" />
+            )}
+            {pendingExpenseAmount <= 0 ? 'Al día' : `Cargar ${formatPrice(pendingExpenseAmount)}`}
+          </button>
         </div>
       </div>
 
