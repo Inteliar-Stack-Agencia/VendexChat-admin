@@ -1179,7 +1179,7 @@ Devolvé SOLO un JSON válido, sin texto adicional ni bloques de código markdow
         }[]
       }
 
-      const newGroups: AICompanyGroup[] = (parsed.companies || []).map((c, ci) => {
+      const parsedGroups: AICompanyGroup[] = (parsed.companies || []).map((c, ci) => {
         const matchedClient = findClientByName(c.matched_company, clients)
         return {
           key: `${ci}-${c.company_raw}`,
@@ -1202,6 +1202,20 @@ Devolvé SOLO un JSON válido, sin texto adicional ni bloques de código markdow
           })),
         }
       })
+
+      // Los empleados sin empresa reconocida suelen ser bloques de la MISMA empresa
+      // (mencionada una sola vez, arriba de todos). En vez de una tarjeta por empleado
+      // — que obliga a elegir la empresa y guardar una por una — se agrupan en una sola,
+      // así se elige la empresa y se guarda todo junto.
+      const newGroups: AICompanyGroup[] = []
+      for (const g of parsedGroups) {
+        const last = newGroups[newGroups.length - 1]
+        if (!g.client_id && last && !last.client_id) {
+          last.employees.push(...g.employees)
+        } else {
+          newGroups.push({ ...g })
+        }
+      }
       setGroups(newGroups)
       setSavedCompanyIds(new Set())
       const totalOrders = newGroups.reduce((s, g) => s + g.employees.reduce((s2, e) => s2 + e.orders.length, 0), 0)
@@ -1275,22 +1289,47 @@ Devolvé SOLO un JSON válido, sin texto adicional ni bloques de código markdow
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank')
   }
 
+  const saveGroupDispatches = async (group: AICompanyGroup) => {
+    if (!group.client_id) return
+    for (const emp of group.employees) {
+      for (const o of emp.orders) {
+        await companyDispatchApi.createDispatch({
+          client_id: group.client_id,
+          date: o.date,
+          employee_name: emp.employee_name,
+          items: [{ product_id: o.product_id, product_name: o.product_name, quantity: o.quantity, unit_price: o.unit_price, subtotal: o.quantity * o.unit_price }],
+        })
+      }
+    }
+    setSavedCompanyIds(prev => new Set(prev).add(group.key))
+  }
+
   const handleSaveGroup = async (group: AICompanyGroup) => {
     if (!group.client_id) { showToast('error', 'Elegí a qué empresa corresponde este bloque'); return }
     setSaving(true)
     try {
-      for (const emp of group.employees) {
-        for (const o of emp.orders) {
-          await companyDispatchApi.createDispatch({
-            client_id: group.client_id,
-            date: o.date,
-            employee_name: emp.employee_name,
-            items: [{ product_id: o.product_id, product_name: o.product_name, quantity: o.quantity, unit_price: o.unit_price, subtotal: o.quantity * o.unit_price }],
-          })
-        }
-      }
+      await saveGroupDispatches(group)
       showToast('success', `Pedidos de ${clients.find(c => c.id === group.client_id)?.name || 'la empresa'} guardados`)
-      setSavedCompanyIds(prev => new Set(prev).add(group.key))
+      onSaved()
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : 'Error al guardar')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const pendingGroups = groups.filter(g => !savedCompanyIds.has(g.key))
+  const unresolvedGroups = pendingGroups.filter(g => !g.client_id)
+
+  const handleSaveAll = async () => {
+    if (unresolvedGroups.length > 0) {
+      showToast('error', `Elegí la empresa en ${unresolvedGroups.length} tarjeta${unresolvedGroups.length !== 1 ? 's' : ''} antes de guardar todo`)
+      return
+    }
+    setSaving(true)
+    try {
+      for (const g of pendingGroups) await saveGroupDispatches(g)
+      showToast('success', `${pendingGroups.length} empresa${pendingGroups.length !== 1 ? 's' : ''} guardadas`)
       onSaved()
     } catch (err) {
       showToast('error', err instanceof Error ? err.message : 'Error al guardar')
@@ -1333,9 +1372,21 @@ Devolvé SOLO un JSON válido, sin texto adicional ni bloques de código markdow
 
       {groups.length > 0 && (
         <>
-          <div className="flex items-center justify-between px-1">
+          <div className="flex items-center justify-between px-1 flex-wrap gap-2">
             <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Revisá antes de guardar</p>
-            <p className="text-sm font-black text-gray-700">Total general: {formatPrice(grandTotal)}</p>
+            <div className="flex items-center gap-3">
+              <p className="text-sm font-black text-gray-700">Total general: {formatPrice(grandTotal)}</p>
+              {pendingGroups.length > 1 && (
+                <Button
+                  onClick={handleSaveAll}
+                  disabled={saving}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs flex items-center gap-1.5"
+                >
+                  {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                  Guardar todo ({pendingGroups.length} empresas)
+                </Button>
+              )}
+            </div>
           </div>
 
           {groups.map(group => {
