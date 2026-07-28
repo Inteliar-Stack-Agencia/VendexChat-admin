@@ -1053,12 +1053,28 @@ function normalizeMatch(s: string): string {
   return s.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
 }
 
-function nextMondayISO(): string {
+// Lunes de la semana actual (no la próxima) — evita que el default arranque
+// ya en la semana siguiente sin que se note, sobre todo a fin de mes.
+function currentMondayISO(): string {
   const d = new Date()
   const day = d.getDay() // 0=domingo, 1=lunes, ...
-  const diff = day === 0 ? 1 : day === 1 ? 0 : 8 - day
+  const diff = day === 0 ? -6 : 1 - day
   d.setDate(d.getDate() + diff)
   return d.toISOString().split('T')[0]
+}
+
+function addDaysISO(iso: string, days: number): string {
+  const d = new Date(iso + 'T00:00:00')
+  d.setDate(d.getDate() + days)
+  return d.toISOString().split('T')[0]
+}
+
+function formatDateRange(weekStartISO: string): string {
+  const fmt = (iso: string) => {
+    const d = new Date(iso + 'T00:00:00')
+    return d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })
+  }
+  return `${fmt(weekStartISO)} al ${fmt(addDaysISO(weekStartISO, 4))}`
 }
 
 function dayToDate(weekStartISO: string, day: string): string {
@@ -1111,7 +1127,11 @@ interface AICompanyGroup {
 }
 
 function AIBulkEntryTab({ clients, products, onSaved }: { clients: CompanyClient[]; products: Product[]; onSaved: () => void }) {
-  const [weekStart, setWeekStart] = useState(nextMondayISO)
+  // Arranca en la semana actual, y no deja elegir más de 3 semanas para adelante —
+  // para no cargar despachos en una fecha equivocada por error.
+  const minWeek = currentMondayISO()
+  const maxWeek = addDaysISO(minWeek, 21)
+  const [weekStart, setWeekStart] = useState(minWeek)
   const [rawText, setRawText] = useState('')
   const [processing, setProcessing] = useState(false)
   const [groups, setGroups] = useState<AICompanyGroup[]>([])
@@ -1345,9 +1365,13 @@ Devolvé SOLO un JSON válido, sin texto adicional ni bloques de código markdow
       <Card className="p-4 space-y-3">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
-            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Semana (lunes)</label>
-            <input type="date" value={weekStart} onChange={e => setWeekStart(e.target.value)}
-              className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300" />
+            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Semana (lunes a viernes)</label>
+            <input
+              type="date" value={weekStart} min={minWeek} max={maxWeek}
+              onChange={e => setWeekStart(e.target.value)}
+              className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300"
+            />
+            <p className="text-[10px] text-gray-400 mt-1">{formatDateRange(weekStart)}</p>
           </div>
           <div className="flex items-center gap-2">
             <input ref={fileInputRef} type="file" accept=".txt,.xlsx,.xls,.csv" className="hidden" onChange={handleFile} />
@@ -1968,6 +1992,32 @@ export default function CompanyDispatchPage() {
 
   useEffect(() => { load() }, [load])
   useEffect(() => { if (tab === 'resumen') loadSummary() }, [tab, loadSummary])
+
+  // Si la semana por defecto (la actual) no tiene despachos pero hay datos cargados en
+  // otra semana (ej. pedidos futuros cargados con la IA), salta una sola vez a la semana
+  // con despachos más cercana a hoy, en vez de dejar el resumen vacío sin explicación.
+  const [autoJumped, setAutoJumped] = useState(false)
+  useEffect(() => {
+    if (autoJumped || tab !== 'resumen' || summaryLoading) return
+    if (summaryDispatches.length > 0 || dispatches.length === 0) return
+    const todayMs = Date.now()
+    let closestDate = dispatches[0].date
+    let closestDiff = Math.abs(new Date(closestDate + 'T00:00:00').getTime() - todayMs)
+    for (const d of dispatches) {
+      const diff = Math.abs(new Date(d.date + 'T00:00:00').getTime() - todayMs)
+      if (diff < closestDiff) { closestDate = d.date; closestDiff = diff }
+    }
+    const target = new Date(closestDate + 'T00:00:00')
+    const day = target.getDay()
+    const monday = new Date(target)
+    monday.setDate(monday.getDate() + (day === 0 ? -6 : 1 - day))
+    const sunday = new Date(monday)
+    sunday.setDate(sunday.getDate() + 6)
+    setSummaryFrom(monday.toISOString().split('T')[0])
+    setSummaryTo(sunday.toISOString().split('T')[0])
+    setAutoJumped(true)
+    showToast('success', 'No había despachos esta semana — te llevamos a la semana con pedidos más cercana a hoy')
+  }, [tab, summaryDispatches, summaryLoading, dispatches, autoJumped])
 
   const handleDeleteClient = async (id: string) => {
     if (!confirm('¿Eliminar esta empresa?')) return
