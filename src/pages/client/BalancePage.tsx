@@ -45,6 +45,17 @@ interface MonthlyRow {
   result: number
 }
 
+// Punto de equilibrio de un período: cuánto había que facturar (ingreso neto) para
+// cubrir gastos fijos + variables, según el margen de contribución de ESE período.
+// null cuando no se puede calcular (sin ingresos, o margen de contribución <= 0 —
+// los variables ya superan lo facturado, no hay forma de cubrir fijos vendiendo más).
+function computeBreakEven(fixedCosts: number, variableCosts: number, revenue: number): number | null {
+  if (revenue <= 0) return null
+  const marginRatio = (revenue - variableCosts) / revenue
+  if (marginRatio <= 0) return null
+  return fixedCosts / marginRatio
+}
+
 // ─── Setup Banner ───────────────────────────────────────────────────────────────
 
 function SetupBanner() {
@@ -317,6 +328,7 @@ function PnLTable({ rows, year, onExport, onSelectMonth }: { rows: MonthlyRow[];
                 <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-right">Total Egresos</th>
                 <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-right">Resultado</th>
                 <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider text-right">Margen</th>
+                <th className="px-4 py-3 text-xs font-semibold text-purple-500 uppercase tracking-wider text-right">P. Equilibrio</th>
                 <th className="px-4 py-3 w-8" />
               </tr>
             </thead>
@@ -325,6 +337,8 @@ function PnLTable({ rows, year, onExport, onSelectMonth }: { rows: MonthlyRow[];
                 const totalCosts = r.fixedCosts + r.variableCosts
                 const margin = r.revenue > 0 ? (r.result / r.revenue) * 100 : 0
                 const isEmpty = r.revenue === 0 && totalCosts === 0
+                const breakEvenMonth = computeBreakEven(r.fixedCosts, r.variableCosts, r.revenue)
+                const reachedBreakEven = breakEvenMonth !== null && r.revenue >= breakEvenMonth
                 return (
                   <tr key={r.month} className={`transition-colors ${isEmpty ? 'opacity-40' : 'hover:bg-gray-50'}`}>
                     <td className="px-4 py-3 font-semibold text-gray-800">{MONTHS[r.month - 1]}</td>
@@ -348,6 +362,17 @@ function PnLTable({ rows, year, onExport, onSelectMonth }: { rows: MonthlyRow[];
                         }`}>
                           {margin.toFixed(1)}%
                         </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      {!isEmpty && (
+                        breakEvenMonth === null ? (
+                          <span className="text-gray-300 text-xs">—</span>
+                        ) : (
+                          <span className={`font-bold ${reachedBreakEven ? 'text-emerald-600' : 'text-purple-600'}`}>
+                            {formatPrice(breakEvenMonth)}
+                          </span>
+                        )
                       )}
                     </td>
                     <td className="px-4 py-3 text-center">
@@ -385,6 +410,12 @@ function PnLTable({ rows, year, onExport, onSelectMonth }: { rows: MonthlyRow[];
                       {((totals.result / totals.revenue) * 100).toFixed(1)}%
                     </span>
                   )}
+                </td>
+                <td className="px-4 py-3 text-right text-purple-600">
+                  {(() => {
+                    const totalBreakEven = computeBreakEven(totals.fixedCosts, totals.variableCosts, totals.revenue)
+                    return totalBreakEven === null ? <span className="text-gray-300">—</span> : formatPrice(totalBreakEven)
+                  })()}
                 </td>
                 <td />
               </tr>
@@ -615,6 +646,7 @@ export default function BalancePage() {
       'Total Egresos': r.fixedCosts + r.variableCosts,
       Resultado: r.result,
       'Margen %': r.revenue > 0 ? +((r.result / r.revenue) * 100).toFixed(2) : 0,
+      'Punto de Equilibrio': computeBreakEven(r.fixedCosts, r.variableCosts, r.revenue) ?? '',
     }))
     const ws = XLSX.utils.json_to_sheet(data)
     const wb = XLSX.utils.book_new()
