@@ -914,7 +914,7 @@ function ImportProductionModal({ products, onImport, onClose }: ImportModalProps
 
 // ─── Production Grid ──────────────────────────────────────────────────────────
 
-function ProductionGrid({ products, onCostUpdated }: { products: Product[]; onCostUpdated: () => void }) {
+function ProductionGrid({ products, onCostUpdated, refreshKey }: { products: Product[]; onCostUpdated: () => void; refreshKey: number }) {
   const [weekStart, setWeekStart] = useState<Date>(() => getWeekStart(new Date()))
   const [weekData, setWeekData] = useState<Awaited<ReturnType<typeof productionApi.getWeekData>> | null>(null)
   const [loading, setLoading] = useState(true)
@@ -953,6 +953,14 @@ function ProductionGrid({ products, onCostUpdated }: { products: Product[]; onCo
   }, [weekStartISO, weekEndISO])
 
   useEffect(() => { load() }, [load])
+
+  // El modal "Importar planilla" vive fuera de este componente y guarda directo en la
+  // base — no hay forma de que lo sepa solo, así que el padre avisa incrementando
+  // refreshKey después de un import exitoso, y acá se recarga la semana actual.
+  useEffect(() => {
+    if (refreshKey > 0) load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshKey])
 
   // Cuánto ya se cargó como gasto para esta semana (consulta la base, no memoria) —
   // sobrevive a recargar la página o volver otro día.
@@ -1905,6 +1913,9 @@ export default function InventoryPage() {
   const [showForm, setShowForm] = useState(false)
   const [showEgressForm, setShowEgressForm] = useState(false)
   const [showImport, setShowImport] = useState(false)
+  // Avisa a ProductionGrid (que tiene su propio estado, cargado por semana) que
+  // recargue después de un import exitoso desde el modal.
+  const [productionRefreshKey, setProductionRefreshKey] = useState(0)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [days, setDays] = useState<string[]>([])
 
@@ -1961,6 +1972,7 @@ export default function InventoryPage() {
       showToast('success', `${rows.length} productos guardados en la planilla`)
     }
     setShowImport(false)
+    setProductionRefreshKey((k) => k + 1)
   }
 
   const handleDelete = async (entry: InventoryEntry) => {
@@ -2064,7 +2076,7 @@ export default function InventoryPage() {
           </button>
         </div>
 
-        {tab === 'produccion' && <ProductionGrid products={products} onCostUpdated={load} />}
+        {tab === 'produccion' && <ProductionGrid products={products} onCostUpdated={load} refreshKey={productionRefreshKey} />}
         {tab === 'stock' && <StockCloseGrid products={products} />}
         {tab === 'ventas' && <POSSalesGrid products={products} />}
 
