@@ -17,7 +17,7 @@ import {
   type EgressReason,
   EGRESS_REASON_LABEL,
 } from '../../services/inventoryApi'
-import { productionApi } from '../../services/productionApi'
+import { productionApi, type ManualStockSale, type ManualSaleChannel } from '../../services/productionApi'
 import { companyDispatchApi } from '../../services/companyDispatchApi'
 import { labelsApi } from '../../services/labelsApi'
 import { productsApi } from '../../services/productsApi'
@@ -1378,6 +1378,9 @@ function StockCloseGrid({ products }: { products: Product[] }) {
   const [dispatchPaymentByName, setDispatchPaymentByName] = useState<Record<string, { facturado: number; cobrado: number }>>({})
   // $ cobrado en ventas directas esta semana, agrupado por medio de pago (efectivo/qr/transferencia/tarjeta/other)
   const [paymentBreakdown, setPaymentBreakdown] = useState<Record<string, number>>({})
+  // Ventas de mostrador cargadas a mano esta semana (nunca pasaron por un Pedido)
+  const [manualSales, setManualSales] = useState<ManualStockSale[]>([])
+  const [manualSaleForProduct, setManualSaleForProduct] = useState<Product | null>(null)
   const [loading, setLoading] = useState(true)
   // weekly close: one row per product — pending[productId][field]
   const [pending, setPending] = useState<Record<string, { sobrante: string; consumo_interno: string; merma: string }>>({})
@@ -1395,13 +1398,15 @@ function StockCloseGrid({ products }: { products: Product[] }) {
     setPending({})
     setEditMode(false)
     try {
-      const [data, dispatchItems, breakdown] = await Promise.all([
+      const [data, dispatchItems, breakdown, manual] = await Promise.all([
         productionApi.getWeekData(weekStartISO, weekEndISO),
         companyDispatchApi.crossStoreDispatchItemsWithPaymentByDate(weekStartISO, weekEndISO).catch(() => []),
         productionApi.getWeekPaymentBreakdown(weekStartISO, weekEndISO).catch(() => ({})),
+        productionApi.listManualSales(weekStartISO).catch(() => []),
       ])
       setWeekData(data)
       setPaymentBreakdown(breakdown)
+      setManualSales(manual)
       const byName: Record<string, number> = {}
       const paymentByName: Record<string, { facturado: number; cobrado: number }> = {}
       for (const item of dispatchItems) {
@@ -1464,6 +1469,18 @@ function StockCloseGrid({ products }: { products: Product[] }) {
   const getDispatchPayment = (product: Product): { facturado: number; cobrado: number } =>
     dispatchPaymentByName[normalizeName(product.name)] ?? { facturado: 0, cobrado: 0 }
 
+  // Ventas de mostrador cargadas a mano para un producto — no pasaron por un Pedido,
+  // pero sí bajaron el stock, así que cuentan como "registradas" y como plata cobrada.
+  const getManualSales = (productId: string): { qty: number; amount: number } =>
+    manualSales
+      .filter((m) => m.product_id === productId)
+      .reduce((acc, m) => ({ qty: acc.qty + m.quantity, amount: acc.amount + Number(m.amount) }), { qty: 0, amount: 0 })
+
+  const manualByChannel: Record<ManualSaleChannel, number> = manualSales.reduce(
+    (acc, m) => ({ ...acc, [m.channel]: acc[m.channel] + Number(m.amount) }),
+    { efectivo: 0, transferencia: 0, qr: 0, tarjeta: 0 },
+  )
+
   const productTotals = (product: Product) => {
     const totalProduced = getTotalProduced(product.id)
     const sobrante = getField(product.id, 'sobrante')
@@ -1472,18 +1489,19 @@ function StockCloseGrid({ products }: { products: Product[] }) {
     const vendidoReal = Math.max(0, totalProduced - sobrante - consumo - merma)
     const salesQty = getSalesQty(product.id)
     const dispatchedQty = getDispatchedQty(product)
-    const registrado = salesQty + dispatchedQty
+    const manual = getManualSales(product.id)
+    const registrado = salesQty + dispatchedQty + manual.qty
     const sinExplicar = vendidoReal - registrado
     const weekCost = weekData?.costs[product.id] ?? (product.cost_price != null ? Number(product.cost_price) : null)
     const ingresos = vendidoReal * Number(product.price || 0)
     const costo = vendidoReal * (weekCost ?? 0)
     const margen = ingresos - costo
-    // Conciliación real: plata efectivamente facturada/cobrada por lo vendido (POS + empresas),
+    // Conciliación real: plata efectivamente facturada/cobrada por lo vendido (POS + empresas + mostrador manual),
     // a diferencia de "ingresos" que es teórico (vendidoReal × precio de lista).
     const salesPayment = getSalesPayment(product.id)
     const dispatchPayment = getDispatchPayment(product)
-    const facturadoReal = salesPayment.facturado + dispatchPayment.facturado
-    const cobradoReal = salesPayment.cobrado + dispatchPayment.cobrado
+    const facturadoReal = salesPayment.facturado + dispatchPayment.facturado + manual.amount
+    const cobradoReal = salesPayment.cobrado + dispatchPayment.cobrado + manual.amount
     const pendienteCobro = Math.max(0, facturadoReal - cobradoReal)
     // Costo de lo que se produjo pero no se vendió (sobrante/consumo interno/merma) —
     // separado del costo de lo vendido para que el margen no lo incluya (no generó
@@ -1493,7 +1511,7 @@ function StockCloseGrid({ products }: { products: Product[] }) {
     const costoConsumo = consumo * (weekCost ?? 0)
     const costoMerma = merma * (weekCost ?? 0)
     return {
-      totalProduced, sobrante, consumo, merma, vendidoReal, salesQty, dispatchedQty, registrado, sinExplicar,
+      totalProduced, sobrante, consumo, merma, vendidoReal, salesQty, dispatchedQty, manualQty: manual.qty, registrado, sinExplicar,
       ingresos, costo, margen, costoSobrante, costoConsumo, costoMerma,
       facturadoReal, cobradoReal, pendienteCobro,
     }
@@ -1671,22 +1689,22 @@ function StockCloseGrid({ products }: { products: Product[] }) {
       {/* Cobrado por canal: de dónde vino la plata cobrada esta semana */}
       <div>
         <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Cobrado por canal</p>
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-6 gap-2">
           <div className="bg-lime-50 rounded-xl p-2.5 text-center">
             <p className="text-[9px] font-bold text-lime-600 uppercase tracking-widest mb-0.5">Efectivo</p>
-            <p className="text-sm font-black text-lime-700">{formatPrice(paymentBreakdown.efectivo || 0)}</p>
+            <p className="text-sm font-black text-lime-700">{formatPrice((paymentBreakdown.efectivo || 0) + manualByChannel.efectivo)}</p>
           </div>
           <div className="bg-sky-50 rounded-xl p-2.5 text-center">
             <p className="text-[9px] font-bold text-sky-600 uppercase tracking-widest mb-0.5">Transferencia</p>
-            <p className="text-sm font-black text-sky-700">{formatPrice(paymentBreakdown.transferencia || 0)}</p>
+            <p className="text-sm font-black text-sky-700">{formatPrice((paymentBreakdown.transferencia || 0) + manualByChannel.transferencia)}</p>
           </div>
           <div className="bg-fuchsia-50 rounded-xl p-2.5 text-center">
             <p className="text-[9px] font-bold text-fuchsia-600 uppercase tracking-widest mb-0.5">QR / MP</p>
-            <p className="text-sm font-black text-fuchsia-700">{formatPrice(paymentBreakdown.qr || 0)}</p>
+            <p className="text-sm font-black text-fuchsia-700">{formatPrice((paymentBreakdown.qr || 0) + manualByChannel.qr)}</p>
           </div>
           <div className="bg-orange-50 rounded-xl p-2.5 text-center">
             <p className="text-[9px] font-bold text-orange-600 uppercase tracking-widest mb-0.5">Tarjeta</p>
-            <p className="text-sm font-black text-orange-700">{formatPrice(paymentBreakdown.tarjeta || 0)}</p>
+            <p className="text-sm font-black text-orange-700">{formatPrice((paymentBreakdown.tarjeta || 0) + manualByChannel.tarjeta)}</p>
           </div>
           <div className="bg-violet-50 rounded-xl p-2.5 text-center">
             <p className="text-[9px] font-bold text-violet-600 uppercase tracking-widest mb-0.5">Empresas (packs)</p>
@@ -1694,8 +1712,49 @@ function StockCloseGrid({ products }: { products: Product[] }) {
               {formatPrice(Object.values(dispatchPaymentByName).reduce((s, v) => s + v.cobrado, 0))}
             </p>
           </div>
+          {(paymentBreakdown.other || 0) > 0 && (
+            <div className="bg-gray-100 rounded-xl p-2.5 text-center">
+              <p className="text-[9px] font-bold text-gray-500 uppercase tracking-widest mb-0.5">Otro / sin especificar</p>
+              <p className="text-sm font-black text-gray-700">{formatPrice(paymentBreakdown.other || 0)}</p>
+              <p className="text-[8px] text-gray-400 mt-0.5">Pedidos sin medio de pago cargado</p>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Ventas de mostrador cargadas a mano esta semana */}
+      {manualSales.length > 0 && (
+        <div>
+          <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Ventas de mostrador (carga manual)</p>
+          <div className="rounded-xl border border-gray-100 overflow-hidden divide-y divide-gray-50">
+            {manualSales.map((m) => {
+              const product = products.find((p) => p.id === m.product_id)
+              return (
+                <div key={m.id} className="flex items-center justify-between px-3 py-2 text-xs bg-white group">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="font-semibold text-gray-800 truncate">{product?.name ?? 'Producto eliminado'}</span>
+                    <span className="text-gray-400">×{m.quantity}</span>
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600 capitalize">{m.channel}</span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="font-bold text-gray-700">{formatPrice(m.amount)}</span>
+                    <button
+                      onClick={async () => {
+                        if (!confirm('¿Eliminar esta venta cargada manualmente?')) return
+                        await productionApi.deleteManualSale(m.id)
+                        setManualSales((prev) => prev.filter((x) => x.id !== m.id))
+                      }}
+                      className="p-1 rounded hover:bg-red-50 hover:text-red-600 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Diferencia sin explicar — lo que salió de producción y no aparece ni vendido (POS), ni despachado a empresas, ni declarado como sobrante/consumo/merma */}
       <div className={`rounded-xl p-3 flex items-center justify-between ${grandTotals.sinExplicar > 0 ? 'bg-red-50 border border-red-200' : 'bg-gray-50 border border-gray-100'}`}>
@@ -1790,8 +1849,21 @@ function StockCloseGrid({ products }: { products: Product[] }) {
                             )}
                           </td>
                           <td className="px-2 py-2 text-center font-black text-emerald-600">{t.vendidoReal || '—'}</td>
-                          <td className="px-2 py-2 text-center font-bold text-cyan-600" title={`POS: ${t.salesQty} · Empresas: ${t.dispatchedQty}`}>{t.registrado || '—'}</td>
-                          <td className={`px-2 py-2 text-center font-black ${t.sinExplicar > 0 ? 'text-rose-600 bg-rose-50' : 'text-gray-300'}`}>{t.sinExplicar > 0 ? t.sinExplicar : '—'}</td>
+                          <td className="px-2 py-2 text-center font-bold text-cyan-600" title={`POS: ${t.salesQty} · Empresas: ${t.dispatchedQty} · Mostrador manual: ${t.manualQty}`}>{t.registrado || '—'}</td>
+                          <td className={`px-2 py-2 text-center font-black ${t.sinExplicar > 0 ? 'text-rose-600 bg-rose-50' : 'text-gray-300'}`}>
+                            <div className="flex items-center justify-center gap-1">
+                              <span>{t.sinExplicar > 0 ? t.sinExplicar : '—'}</span>
+                              {t.sinExplicar > 0 && (
+                                <button
+                                  onClick={() => setManualSaleForProduct(product)}
+                                  title="Cargar venta de mostrador no registrada"
+                                  className="p-0.5 rounded hover:bg-rose-200 text-rose-500"
+                                >
+                                  <Plus className="w-3 h-3" />
+                                </button>
+                              )}
+                            </div>
+                          </td>
                           <td className="px-2 py-2 text-center font-bold text-indigo-600">{t.ingresos > 0 ? formatPrice(t.ingresos) : '—'}</td>
                           <td className="px-2 py-2 text-center font-bold text-orange-500">{t.costo > 0 ? formatPrice(t.costo) : '—'}</td>
                           <td className={`px-2 py-2 text-center font-bold ${marginColor}`}>{(t.costo > 0 || t.ingresos > 0) ? formatPrice(t.margen) : '—'}</td>
@@ -1826,6 +1898,141 @@ function StockCloseGrid({ products }: { products: Product[] }) {
           </table>
         </div>
       )}
+
+      {manualSaleForProduct && (
+        <ManualSaleModal
+          product={manualSaleForProduct}
+          weekStart={weekStartISO}
+          suggestedQty={productTotals(manualSaleForProduct).sinExplicar}
+          onClose={() => setManualSaleForProduct(null)}
+          onSaved={(sale) => { setManualSales((prev) => [sale, ...prev]); setManualSaleForProduct(null) }}
+        />
+      )}
+    </div>
+  )
+}
+
+// ─── Manual Sale Modal (venta de mostrador no registrada) ─────────────────────
+
+function ManualSaleModal({ product, weekStart, suggestedQty, onClose, onSaved }: {
+  product: Product
+  weekStart: string
+  suggestedQty: number
+  onClose: () => void
+  onSaved: (sale: ManualStockSale) => void
+}) {
+  const [quantity, setQuantity] = useState(String(Math.max(suggestedQty, 0) || ''))
+  const [channel, setChannel] = useState<ManualSaleChannel>('efectivo')
+  const [amount, setAmount] = useState(() => {
+    const qty = Math.max(suggestedQty, 0)
+    return qty > 0 ? String(qty * Number(product.price || 0)) : ''
+  })
+  const [notes, setNotes] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const qty = parseInt(quantity) || 0
+    const amt = parseFloat(amount) || 0
+    if (qty <= 0 || amt <= 0) return
+    setSaving(true)
+    try {
+      await productionApi.createManualSale({
+        product_id: product.id,
+        week_start: weekStart,
+        quantity: qty,
+        channel,
+        amount: amt,
+        notes: notes || null,
+      })
+      showToast('success', 'Venta de mostrador cargada')
+      const [saved] = await productionApi.listManualSales(weekStart)
+      onSaved(saved)
+    } catch {
+      showToast('error', 'Error al cargar la venta')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm">
+        <div className="flex items-center justify-between p-5 border-b border-gray-100">
+          <div>
+            <h2 className="font-bold text-gray-900">Venta de mostrador</h2>
+            <p className="text-xs text-gray-400">{product.name} · no pasó por un Pedido, pero bajó el stock</p>
+          </div>
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100">
+            <X className="w-5 h-5 text-gray-500" />
+          </button>
+        </div>
+        <form onSubmit={handleSubmit} className="p-5 space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Cantidad *</label>
+              <input
+                type="number" min="1"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                value={quantity}
+                onChange={(e) => {
+                  setQuantity(e.target.value)
+                  const qty = parseInt(e.target.value) || 0
+                  if (qty > 0) setAmount(String(qty * Number(product.price || 0)))
+                }}
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Monto cobrado *</label>
+              <input
+                type="number" min="0" step="0.01"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                required
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Medio de pago *</label>
+            <div className="grid grid-cols-4 gap-2">
+              {([
+                { value: 'efectivo', label: 'Efectivo' },
+                { value: 'transferencia', label: 'Transfer.' },
+                { value: 'qr', label: 'QR/MP' },
+                { value: 'tarjeta', label: 'Tarjeta' },
+              ] as { value: ManualSaleChannel; label: string }[]).map((c) => (
+                <button
+                  key={c.value}
+                  type="button"
+                  onClick={() => setChannel(c.value)}
+                  className={`py-2 rounded-lg text-[10px] font-bold uppercase border-2 transition-all ${
+                    channel === c.value ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-gray-200 text-gray-400 hover:border-gray-300'
+                  }`}
+                >
+                  {c.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Notas</label>
+            <textarea
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none"
+              rows={2} placeholder="Opcional..."
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+            />
+          </div>
+          <div className="flex gap-3 pt-2">
+            <Button type="button" variant="ghost" className="flex-1" onClick={onClose}>Cancelar</Button>
+            <Button type="submit" className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white" disabled={saving}>
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Guardar'}
+            </Button>
+          </div>
+        </form>
+      </div>
     </div>
   )
 }

@@ -1,6 +1,20 @@
 import { supabase } from '../supabaseClient'
 import { getStoreId } from './coreApi'
 
+export type ManualSaleChannel = 'efectivo' | 'transferencia' | 'qr' | 'tarjeta'
+
+export interface ManualStockSale {
+  id: string
+  store_id: string
+  product_id: string
+  week_start: string
+  quantity: number
+  channel: ManualSaleChannel
+  amount: number
+  notes: string | null
+  created_at: string
+}
+
 export interface ProductionEntry {
   id: string
   store_id: string
@@ -169,6 +183,45 @@ export const productionApi = {
       totals[bucket] += cobrado
     }
     return totals
+  },
+
+  // Ventas de mostrador que bajaron el stock pero nunca se cargaron como Pedido —
+  // ajuste manual para conciliar esa plata contra "Diferencia sin explicar".
+  listManualSales: async (weekStart: string): Promise<ManualStockSale[]> => {
+    const storeId = await getStoreId()
+    const { data, error } = await supabase
+      .from('manual_stock_sales')
+      .select('*')
+      .eq('store_id', storeId)
+      .eq('week_start', weekStart)
+      .order('created_at', { ascending: false })
+    if (error) throw error
+    return data || []
+  },
+
+  createManualSale: async (input: {
+    product_id: string
+    week_start: string
+    quantity: number
+    channel: ManualSaleChannel
+    amount: number
+    notes?: string | null
+  }): Promise<void> => {
+    const storeId = await getStoreId()
+    const { error } = await supabase
+      .from('manual_stock_sales')
+      .insert({ store_id: storeId, ...input, notes: input.notes || null })
+    if (error) throw error
+  },
+
+  deleteManualSale: async (id: string): Promise<void> => {
+    const storeId = await getStoreId()
+    const { error } = await supabase
+      .from('manual_stock_sales')
+      .delete()
+      .eq('store_id', storeId)
+      .eq('id', id)
+    if (error) throw error
   },
 
   // Cantidad producida por producto en un día puntual (para generar etiquetas)
