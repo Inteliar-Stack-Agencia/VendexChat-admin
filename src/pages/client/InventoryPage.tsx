@@ -1376,6 +1376,8 @@ function StockCloseGrid({ products }: { products: Product[] }) {
   const [dispatchedByName, setDispatchedByName] = useState<Record<string, number>>({})
   // $ facturado y $ cobrado de esos despachos, agrupados por nombre de producto normalizado
   const [dispatchPaymentByName, setDispatchPaymentByName] = useState<Record<string, { facturado: number; cobrado: number }>>({})
+  // $ cobrado en ventas directas esta semana, agrupado por medio de pago (efectivo/qr/transferencia/tarjeta/other)
+  const [paymentBreakdown, setPaymentBreakdown] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
   // weekly close: one row per product — pending[productId][field]
   const [pending, setPending] = useState<Record<string, { sobrante: string; consumo_interno: string; merma: string }>>({})
@@ -1393,11 +1395,13 @@ function StockCloseGrid({ products }: { products: Product[] }) {
     setPending({})
     setEditMode(false)
     try {
-      const [data, dispatchItems] = await Promise.all([
+      const [data, dispatchItems, breakdown] = await Promise.all([
         productionApi.getWeekData(weekStartISO, weekEndISO),
         companyDispatchApi.crossStoreDispatchItemsWithPaymentByDate(weekStartISO, weekEndISO).catch(() => []),
+        productionApi.getWeekPaymentBreakdown(weekStartISO, weekEndISO).catch(() => ({})),
       ])
       setWeekData(data)
+      setPaymentBreakdown(breakdown)
       const byName: Record<string, number> = {}
       const paymentByName: Record<string, { facturado: number; cobrado: number }> = {}
       for (const item of dispatchItems) {
@@ -1661,6 +1665,35 @@ function StockCloseGrid({ products }: { products: Product[] }) {
         <div className={`rounded-xl p-3 text-center ${grandTotals.pendienteCobro > 0 ? 'bg-red-50' : 'bg-gray-50'}`}>
           <p className={`text-[9px] font-bold uppercase tracking-widest mb-1 ${grandTotals.pendienteCobro > 0 ? 'text-red-500' : 'text-gray-400'}`}>Pendiente de cobro</p>
           <p className={`text-lg font-black ${grandTotals.pendienteCobro > 0 ? 'text-red-600' : 'text-gray-400'}`}>{formatPrice(grandTotals.pendienteCobro)}</p>
+        </div>
+      </div>
+
+      {/* Cobrado por canal: de dónde vino la plata cobrada esta semana */}
+      <div>
+        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Cobrado por canal</p>
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+          <div className="bg-lime-50 rounded-xl p-2.5 text-center">
+            <p className="text-[9px] font-bold text-lime-600 uppercase tracking-widest mb-0.5">Efectivo</p>
+            <p className="text-sm font-black text-lime-700">{formatPrice(paymentBreakdown.efectivo || 0)}</p>
+          </div>
+          <div className="bg-sky-50 rounded-xl p-2.5 text-center">
+            <p className="text-[9px] font-bold text-sky-600 uppercase tracking-widest mb-0.5">Transferencia</p>
+            <p className="text-sm font-black text-sky-700">{formatPrice(paymentBreakdown.transferencia || 0)}</p>
+          </div>
+          <div className="bg-fuchsia-50 rounded-xl p-2.5 text-center">
+            <p className="text-[9px] font-bold text-fuchsia-600 uppercase tracking-widest mb-0.5">QR / MP</p>
+            <p className="text-sm font-black text-fuchsia-700">{formatPrice(paymentBreakdown.qr || 0)}</p>
+          </div>
+          <div className="bg-orange-50 rounded-xl p-2.5 text-center">
+            <p className="text-[9px] font-bold text-orange-600 uppercase tracking-widest mb-0.5">Tarjeta</p>
+            <p className="text-sm font-black text-orange-700">{formatPrice(paymentBreakdown.tarjeta || 0)}</p>
+          </div>
+          <div className="bg-violet-50 rounded-xl p-2.5 text-center">
+            <p className="text-[9px] font-bold text-violet-600 uppercase tracking-widest mb-0.5">Empresas (packs)</p>
+            <p className="text-sm font-black text-violet-700">
+              {formatPrice(Object.values(dispatchPaymentByName).reduce((s, v) => s + v.cobrado, 0))}
+            </p>
+          </div>
         </div>
       </div>
 

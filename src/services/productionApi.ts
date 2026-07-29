@@ -147,6 +147,30 @@ export const productionApi = {
     if (error) throw error
   },
 
+  // Cuánto se cobró en la semana (ventas directas, sin empresas) agrupado por medio de pago
+  getWeekPaymentBreakdown: async (weekStart: string, weekEnd: string): Promise<Record<string, number>> => {
+    const storeId = await getStoreId()
+    const { data, error } = await supabase
+      .from('orders')
+      .select('total, metadata, status, payment_status, paid_amount')
+      .eq('store_id', storeId)
+      .is('invoice_id', null)
+      .neq('status', 'cancelled')
+      .gte('created_at', `${weekStart}T00:00:00`)
+      .lte('created_at', `${weekEnd}T23:59:59`)
+    if (error) throw error
+
+    const totals: Record<string, number> = { efectivo: 0, qr: 0, transferencia: 0, tarjeta: 0, other: 0 }
+    for (const order of (data || [])) {
+      const pm = ((order.metadata as Record<string, unknown> | null)?.payment_method as string) || 'other'
+      const bucket = pm === 'mercadopago' ? 'qr' : (pm in totals ? pm : 'other')
+      const usesPaidAmount = (order.payment_status === 'paid' || order.payment_status === 'partial') && order.paid_amount != null
+      const cobrado = usesPaidAmount ? Number(order.paid_amount) : Number(order.total)
+      totals[bucket] += cobrado
+    }
+    return totals
+  },
+
   // Cantidad producida por producto en un día puntual (para generar etiquetas)
   getDayEntries: async (date: string): Promise<{ product_id: string; quantity: number }[]> => {
     const storeId = await getStoreId()
