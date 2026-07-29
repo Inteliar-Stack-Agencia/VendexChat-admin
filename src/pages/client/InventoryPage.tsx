@@ -3,7 +3,7 @@ import {
   PackageCheck, Plus, Trash2, X, Loader2, RefreshCw,
   TrendingUp, TrendingDown, ChevronDown, ChevronUp, CalendarDays, Link2,
   ArrowDownCircle, ArrowUpCircle, ChevronLeft, ChevronRight, TableProperties,
-  Upload, FileSpreadsheet, Image as ImageIcon, CheckCircle2, Tag,
+  Upload, FileSpreadsheet, Image as ImageIcon, CheckCircle2, Tag, FileText,
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import Tesseract from 'tesseract.js'
@@ -624,6 +624,12 @@ function ImportProductionModal({ products, onImport, onClose }: ImportModalProps
         rawText = await file.text()
         parsed = parseCSVDirect(rawText)
         if (parsed.length === 0) parsed = await parseWithAI(rawText)
+      } else if (file.name.match(/\.txt$/i) || file.type === 'text/plain') {
+        // Texto libre (pegado de WhatsApp, notas, etc.) — casi nunca viene tabulado,
+        // así que va directo a la IA en vez de intentar parsearlo como CSV primero.
+        rawText = await file.text()
+        if (!rawText.trim()) { showToast('error', 'El archivo está vacío'); return }
+        parsed = await parseWithAI(rawText)
       } else if (file.type.startsWith('image/') || file.name.match(/\.(png|jpg|jpeg|webp|bmp)$/i)) {
         // OCR → AI
         const result = await Tesseract.recognize(file, 'spa', {
@@ -635,7 +641,7 @@ function ImportProductionModal({ products, onImport, onClose }: ImportModalProps
         if (!rawText.trim()) { showToast('error', 'No se pudo leer texto de la imagen'); return }
         parsed = await parseWithAI(rawText)
       } else {
-        showToast('error', 'Formato no soportado. Usá imagen, Excel o CSV.')
+        showToast('error', 'Formato no soportado. Usá imagen, Excel, CSV o TXT.')
         return
       }
 
@@ -688,7 +694,7 @@ function ImportProductionModal({ products, onImport, onClose }: ImportModalProps
             </div>
             <div>
               <h2 className="font-bold text-gray-900">Importar Planilla de Producción</h2>
-              <p className="text-xs text-gray-400 mt-0.5">Captura de pantalla, Excel o CSV · la IA extrae los datos</p>
+              <p className="text-xs text-gray-400 mt-0.5">Captura de pantalla, Excel, CSV o TXT · la IA extrae los datos</p>
             </div>
           </div>
           <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100"><X className="w-5 h-5 text-gray-500" /></button>
@@ -734,15 +740,16 @@ function ImportProductionModal({ products, onImport, onClose }: ImportModalProps
                   <div className="flex justify-center gap-4 mb-4">
                     <ImageIcon className="w-8 h-8 text-gray-300 group-hover:text-indigo-400 transition-colors" />
                     <FileSpreadsheet className="w-8 h-8 text-gray-300 group-hover:text-indigo-400 transition-colors" />
+                    <FileText className="w-8 h-8 text-gray-300 group-hover:text-indigo-400 transition-colors" />
                   </div>
                   <p className="text-sm font-bold text-gray-500 group-hover:text-indigo-600 transition-colors">
                     Arrastrá o hacé clic para subir
                   </p>
-                  <p className="text-xs text-gray-400 mt-1">Captura de pantalla (PNG/JPG), Excel (.xlsx) o CSV</p>
+                  <p className="text-xs text-gray-400 mt-1">Captura de pantalla (PNG/JPG), Excel (.xlsx), CSV o TXT</p>
                   <input
                     ref={fileRef}
                     type="file"
-                    accept=".xlsx,.xls,.csv,image/*"
+                    accept=".xlsx,.xls,.csv,.txt,image/*"
                     className="hidden"
                     onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f) }}
                   />
