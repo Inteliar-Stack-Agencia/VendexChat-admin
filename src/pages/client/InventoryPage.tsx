@@ -1374,6 +1374,8 @@ function StockCloseGrid({ products }: { products: Product[] }) {
   const [weekData, setWeekData] = useState<Awaited<ReturnType<typeof productionApi.getWeekData>> | null>(null)
   // Unidades despachadas a empresas esta semana, agrupadas por nombre de producto normalizado (cross-store)
   const [dispatchedByName, setDispatchedByName] = useState<Record<string, number>>({})
+  // $ facturado y $ cobrado de esos despachos, agrupados por nombre de producto normalizado
+  const [dispatchPaymentByName, setDispatchPaymentByName] = useState<Record<string, { facturado: number; cobrado: number }>>({})
   const [loading, setLoading] = useState(true)
   // weekly close: one row per product — pending[productId][field]
   const [pending, setPending] = useState<Record<string, { sobrante: string; consumo_interno: string; merma: string }>>({})
@@ -1393,15 +1395,20 @@ function StockCloseGrid({ products }: { products: Product[] }) {
     try {
       const [data, dispatchItems] = await Promise.all([
         productionApi.getWeekData(weekStartISO, weekEndISO),
-        companyDispatchApi.crossStoreDispatchItemsByDate(weekStartISO, weekEndISO).catch(() => []),
+        companyDispatchApi.crossStoreDispatchItemsWithPaymentByDate(weekStartISO, weekEndISO).catch(() => []),
       ])
       setWeekData(data)
       const byName: Record<string, number> = {}
+      const paymentByName: Record<string, { facturado: number; cobrado: number }> = {}
       for (const item of dispatchItems) {
         const key = normalizeName(item.product_name)
         byName[key] = (byName[key] || 0) + item.quantity
+        if (!paymentByName[key]) paymentByName[key] = { facturado: 0, cobrado: 0 }
+        paymentByName[key].facturado += item.facturado
+        paymentByName[key].cobrado += item.cobrado
       }
       setDispatchedByName(byName)
+      setDispatchPaymentByName(paymentByName)
     } catch {
       showToast('error', 'Error al cargar cierre de stock')
     } finally {
@@ -1440,6 +1447,19 @@ function StockCloseGrid({ products }: { products: Product[] }) {
 
   const getDispatchedQty = (product: Product): number => dispatchedByName[normalizeName(product.name)] ?? 0
 
+  // $ real vendido en ventas directas (POS) esta semana, y cuánto de eso ya se cobró
+  const getSalesPayment = (productId: string): { facturado: number; cobrado: number } => {
+    let facturado = 0, cobrado = 0
+    for (const day of weekDays) {
+      const s = weekData?.sales[productId]?.[toISO(day)]
+      if (s) { facturado += s.revenue; cobrado += s.cobrado }
+    }
+    return { facturado, cobrado }
+  }
+
+  const getDispatchPayment = (product: Product): { facturado: number; cobrado: number } =>
+    dispatchPaymentByName[normalizeName(product.name)] ?? { facturado: 0, cobrado: 0 }
+
   const productTotals = (product: Product) => {
     const totalProduced = getTotalProduced(product.id)
     const sobrante = getField(product.id, 'sobrante')
@@ -1454,6 +1474,13 @@ function StockCloseGrid({ products }: { products: Product[] }) {
     const ingresos = vendidoReal * Number(product.price || 0)
     const costo = vendidoReal * (weekCost ?? 0)
     const margen = ingresos - costo
+    // Conciliación real: plata efectivamente facturada/cobrada por lo vendido (POS + empresas),
+    // a diferencia de "ingresos" que es teórico (vendidoReal × precio de lista).
+    const salesPayment = getSalesPayment(product.id)
+    const dispatchPayment = getDispatchPayment(product)
+    const facturadoReal = salesPayment.facturado + dispatchPayment.facturado
+    const cobradoReal = salesPayment.cobrado + dispatchPayment.cobrado
+    const pendienteCobro = Math.max(0, facturadoReal - cobradoReal)
     // Costo de lo que se produjo pero no se vendió (sobrante/consumo interno/merma) —
     // separado del costo de lo vendido para que el margen no lo incluya (no generó
     // ingreso), pero sumado a `costo` da el mismo total que "Costo total producción"
@@ -1464,6 +1491,7 @@ function StockCloseGrid({ products }: { products: Product[] }) {
     return {
       totalProduced, sobrante, consumo, merma, vendidoReal, salesQty, dispatchedQty, registrado, sinExplicar,
       ingresos, costo, margen, costoSobrante, costoConsumo, costoMerma,
+      facturadoReal, cobradoReal, pendienteCobro,
     }
   }
 
@@ -1477,9 +1505,10 @@ function StockCloseGrid({ products }: { products: Product[] }) {
       acc.registrado += t.registrado; acc.sinExplicar += t.sinExplicar
       acc.ingresos += t.ingresos; acc.costo += t.costo; acc.margen += t.margen
       acc.costoSobrante += t.costoSobrante; acc.costoConsumo += t.costoConsumo; acc.costoMerma += t.costoMerma
+      acc.facturadoReal += t.facturadoReal; acc.cobradoReal += t.cobradoReal; acc.pendienteCobro += t.pendienteCobro
       return acc
     },
-    { sobrante: 0, consumo: 0, merma: 0, produced: 0, vendido: 0, registrado: 0, sinExplicar: 0, ingresos: 0, costo: 0, margen: 0, costoSobrante: 0, costoConsumo: 0, costoMerma: 0 },
+    { sobrante: 0, consumo: 0, merma: 0, produced: 0, vendido: 0, registrado: 0, sinExplicar: 0, ingresos: 0, costo: 0, margen: 0, costoSobrante: 0, costoConsumo: 0, costoMerma: 0, facturadoReal: 0, cobradoReal: 0, pendienteCobro: 0 },
   )
   // Debe coincidir con "Costo total producción" de la pestaña Producción: el costo de
   // lo vendido más el de lo que no se vendió (sobrante + consumo interno + merma) es
@@ -1619,6 +1648,22 @@ function StockCloseGrid({ products }: { products: Product[] }) {
         <p className="text-xl font-black text-gray-700">{formatPrice(costoTotalProduccion)}</p>
       </div>
 
+      {/* Conciliación real: de lo vendido/despachado esta semana, cuánto se facturó y cuánto ya se cobró de verdad */}
+      <div className="grid grid-cols-3 gap-2">
+        <div className="bg-violet-50 rounded-xl p-3 text-center">
+          <p className="text-[9px] font-bold text-violet-500 uppercase tracking-widest mb-1">Facturado real</p>
+          <p className="text-lg font-black text-violet-700">{formatPrice(grandTotals.facturadoReal)}</p>
+        </div>
+        <div className="bg-emerald-50 rounded-xl p-3 text-center">
+          <p className="text-[9px] font-bold text-emerald-600 uppercase tracking-widest mb-1">Cobrado real</p>
+          <p className="text-lg font-black text-emerald-700">{formatPrice(grandTotals.cobradoReal)}</p>
+        </div>
+        <div className={`rounded-xl p-3 text-center ${grandTotals.pendienteCobro > 0 ? 'bg-red-50' : 'bg-gray-50'}`}>
+          <p className={`text-[9px] font-bold uppercase tracking-widest mb-1 ${grandTotals.pendienteCobro > 0 ? 'text-red-500' : 'text-gray-400'}`}>Pendiente de cobro</p>
+          <p className={`text-lg font-black ${grandTotals.pendienteCobro > 0 ? 'text-red-600' : 'text-gray-400'}`}>{formatPrice(grandTotals.pendienteCobro)}</p>
+        </div>
+      </div>
+
       {/* Diferencia sin explicar — lo que salió de producción y no aparece ni vendido (POS), ni despachado a empresas, ni declarado como sobrante/consumo/merma */}
       <div className={`rounded-xl p-3 flex items-center justify-between ${grandTotals.sinExplicar > 0 ? 'bg-red-50 border border-red-200' : 'bg-gray-50 border border-gray-100'}`}>
         <div>
@@ -1651,6 +1696,9 @@ function StockCloseGrid({ products }: { products: Product[] }) {
                 <th className="text-center px-2 py-3 font-bold text-indigo-500 uppercase tracking-wider min-w-[90px]">Ingresos</th>
                 <th className="text-center px-2 py-3 font-bold text-orange-500 uppercase tracking-wider min-w-[80px]">Costo</th>
                 <th className="text-center px-2 py-3 font-bold text-green-600 uppercase tracking-wider min-w-[80px]">Margen</th>
+                <th className="text-center px-2 py-3 font-bold text-violet-500 uppercase tracking-wider min-w-[90px]">Facturado</th>
+                <th className="text-center px-2 py-3 font-bold text-emerald-600 uppercase tracking-wider min-w-[90px]">Cobrado</th>
+                <th className="text-center px-2 py-3 font-bold text-red-500 uppercase tracking-wider min-w-[90px]">Pend. cobro</th>
               </tr>
             </thead>
             <tbody>
@@ -1668,7 +1716,7 @@ function StockCloseGrid({ products }: { products: Product[] }) {
                 return sortedGroups.map(([catKey, group]) => (
                   <>
                     <tr key={`cat-${catKey}`} className="bg-gray-100 border-t border-gray-200">
-                      <td colSpan={11} className="px-4 py-1.5 text-[10px] font-black text-gray-500 uppercase tracking-widest sticky left-0">
+                      <td colSpan={14} className="px-4 py-1.5 text-[10px] font-black text-gray-500 uppercase tracking-widest sticky left-0">
                         {group.name}
                       </td>
                     </tr>
@@ -1714,6 +1762,9 @@ function StockCloseGrid({ products }: { products: Product[] }) {
                           <td className="px-2 py-2 text-center font-bold text-indigo-600">{t.ingresos > 0 ? formatPrice(t.ingresos) : '—'}</td>
                           <td className="px-2 py-2 text-center font-bold text-orange-500">{t.costo > 0 ? formatPrice(t.costo) : '—'}</td>
                           <td className={`px-2 py-2 text-center font-bold ${marginColor}`}>{(t.costo > 0 || t.ingresos > 0) ? formatPrice(t.margen) : '—'}</td>
+                          <td className="px-2 py-2 text-center font-bold text-violet-600">{t.facturadoReal > 0 ? formatPrice(t.facturadoReal) : '—'}</td>
+                          <td className="px-2 py-2 text-center font-bold text-emerald-600">{t.cobradoReal > 0 ? formatPrice(t.cobradoReal) : '—'}</td>
+                          <td className={`px-2 py-2 text-center font-bold ${t.pendienteCobro > 0 ? 'text-red-600 bg-red-50' : 'text-gray-300'}`}>{t.pendienteCobro > 0 ? formatPrice(t.pendienteCobro) : '—'}</td>
                         </tr>
                       )
                     })}
@@ -1734,6 +1785,9 @@ function StockCloseGrid({ products }: { products: Product[] }) {
                 <td className="px-2 py-3 text-center font-black text-indigo-600">{formatPrice(grandTotals.ingresos)}</td>
                 <td className="px-2 py-3 text-center font-black text-orange-600">{formatPrice(grandTotals.costo)}</td>
                 <td className={`px-2 py-3 text-center font-black ${grandTotals.margen >= 0 ? 'text-green-700' : 'text-red-600'}`}>{formatPrice(grandTotals.margen)}</td>
+                <td className="px-2 py-3 text-center font-black text-violet-600">{formatPrice(grandTotals.facturadoReal)}</td>
+                <td className="px-2 py-3 text-center font-black text-emerald-600">{formatPrice(grandTotals.cobradoReal)}</td>
+                <td className={`px-2 py-3 text-center font-black ${grandTotals.pendienteCobro > 0 ? 'text-red-600' : 'text-gray-400'}`}>{formatPrice(grandTotals.pendienteCobro)}</td>
               </tr>
             </tfoot>
           </table>

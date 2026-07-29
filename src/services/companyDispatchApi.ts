@@ -468,4 +468,45 @@ export const companyDispatchApi = {
     }
     return rows
   },
+
+  // Igual que crossStoreDispatchItemsByDate pero con $ facturado y $ cobrado por item,
+  // prorrateando el paid_amount de la factura (si existe) sobre el subtotal de cada despacho.
+  crossStoreDispatchItemsWithPaymentByDate: async (
+    from: string,
+    to: string,
+  ): Promise<{ date: string; product_name: string; quantity: number; store_id: string; facturado: number; cobrado: number }[]> => {
+    const { data, error } = await supabase
+      .from('company_dispatches')
+      .select('date, store_id, total, invoice_id, items:company_dispatch_items(product_name, quantity, subtotal), invoice:company_invoices(status, total, paid_amount)')
+      .gte('date', from)
+      .lte('date', to)
+    if (error) throw error
+    type Row = {
+      date: string
+      store_id: string
+      total: number | null
+      invoice_id: string | null
+      items: { product_name: string; quantity: number; subtotal: number }[]
+      invoice: { status: string; total: number; paid_amount: number | null } | { status: string; total: number; paid_amount: number | null }[] | null
+    }
+    const rows: { date: string; product_name: string; quantity: number; store_id: string; facturado: number; cobrado: number }[] = []
+    for (const d of (data || []) as unknown as Row[]) {
+      const invoice = Array.isArray(d.invoice) ? d.invoice[0] : d.invoice
+      let collectedRatio = 0
+      if (invoice && invoice.status === 'pagado' && invoice.total > 0) {
+        collectedRatio = Number(invoice.paid_amount ?? 0) / invoice.total
+      }
+      for (const item of d.items || []) {
+        rows.push({
+          date: d.date,
+          product_name: item.product_name,
+          quantity: item.quantity,
+          store_id: d.store_id,
+          facturado: Number(item.subtotal ?? 0),
+          cobrado: Number(item.subtotal ?? 0) * collectedRatio,
+        })
+      }
+    }
+    return rows
+  },
 }

@@ -19,8 +19,8 @@ export interface ProductionWeekData {
   production: Record<string, Record<string, number>>
   // stock[product_id][date] = { sobrante, consumo_interno, merma }
   stock: Record<string, Record<string, { sobrante: number; consumo_interno: number; merma: number }>>
-  // sales[product_id][date] = { qty, revenue }
-  sales: Record<string, Record<string, { qty: number; revenue: number }>>
+  // sales[product_id][date] = { qty, revenue, cobrado } — revenue = facturado, cobrado = plata realmente cobrada
+  sales: Record<string, Record<string, { qty: number; revenue: number; cobrado: number }>>
   // costs[product_id] = cost_price for this week (from production_log)
   costs: Record<string, number | null>
 }
@@ -38,19 +38,28 @@ export const productionApi = {
 
     if (prodRes.error) throw prodRes.error
 
-    // Try to get sales from orders — fail silently if orders schema differs
-    let salesData: Array<{ created_at: string; items: unknown; total: number }> = []
+    // Ventas directas (no facturadas a empresas) — se excluyen las que tienen invoice_id
+    // porque esas se cobran vía company_invoices y se reconcilian por separado (dispatches).
+    type OrderRow = {
+      created_at: string
+      status: string
+      payment_status: string | null
+      paid_amount: number | null
+      order_items: { product_id: string | null; quantity: number; unit_price: number; subtotal: number | null }[]
+    }
+    let salesData: OrderRow[] = []
     try {
       const ordersRes = await supabase
         .from('orders')
-        .select('created_at, items, total')
+        .select('created_at, status, payment_status, paid_amount, order_items(product_id, quantity, unit_price, subtotal)')
         .eq('store_id', storeId)
-        .eq('status', 'completed')
+        .is('invoice_id', null)
+        .neq('status', 'cancelled')
         .gte('created_at', `${weekStart}T00:00:00`)
         .lte('created_at', `${weekEnd}T23:59:59`)
 
       if (!ordersRes.error) {
-        salesData = (ordersRes.data || []) as typeof salesData
+        salesData = (ordersRes.data || []) as unknown as OrderRow[]
       } else {
         console.warn('production: orders query failed silently', ordersRes.error.message)
       }
@@ -82,21 +91,23 @@ export const productionApi = {
       }
     }
 
-    // Build sales map from order items
-    const sales: Record<string, Record<string, { qty: number; revenue: number }>> = {}
+    // Build sales map from order items — cobrado se prorratea por el paid_amount de la orden
+    // cuando está marcada paid/partial; si no, se asume cobrada de inmediato (venta de mostrador).
+    const sales: Record<string, Record<string, { qty: number; revenue: number; cobrado: number }>> = {}
     for (const order of salesData) {
       const date = order.created_at.split('T')[0]
-      const items = (order.items || []) as Array<{
-        product_id: string
-        quantity: number
-        subtotal: number
-      }>
+      const items = order.order_items || []
+      const itemsTotal = items.reduce((s, it) => s + Number(it.subtotal ?? it.quantity * it.unit_price), 0)
+      const usesPaidAmount = (order.payment_status === 'paid' || order.payment_status === 'partial') && order.paid_amount != null
+      const collectedRatio = usesPaidAmount && itemsTotal > 0 ? Number(order.paid_amount) / itemsTotal : 1
       for (const item of items) {
         if (!item.product_id) continue
+        const subtotal = Number(item.subtotal ?? item.quantity * item.unit_price)
         if (!sales[item.product_id]) sales[item.product_id] = {}
-        if (!sales[item.product_id][date]) sales[item.product_id][date] = { qty: 0, revenue: 0 }
+        if (!sales[item.product_id][date]) sales[item.product_id][date] = { qty: 0, revenue: 0, cobrado: 0 }
         sales[item.product_id][date].qty += item.quantity
-        sales[item.product_id][date].revenue += item.subtotal
+        sales[item.product_id][date].revenue += subtotal
+        sales[item.product_id][date].cobrado += subtotal * collectedRatio
       }
     }
 
