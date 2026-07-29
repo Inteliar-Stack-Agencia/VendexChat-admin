@@ -403,6 +403,7 @@ function MonthlyExpensesView({ expenses, year, onYearChange, onEdit, onDelete }:
   onDelete: (id: string) => void
 }) {
   const [expandedMonth, setExpandedMonth] = useState<number | null>(null)
+  const [groupBy, setGroupBy] = useState<'categoria' | 'proveedor'>('categoria')
 
   const rows: MonthlyExpenseRow[] = useMemo(() => {
     return Array.from({ length: 12 }, (_, i) => {
@@ -429,17 +430,32 @@ function MonthlyExpensesView({ expenses, year, onYearChange, onEdit, onDelete }:
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Gastos por mes</p>
-        <div className="flex items-center gap-2">
-          <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Año</label>
-          <select
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white"
-            value={year}
-            onChange={(e) => onYearChange(Number(e.target.value))}
-          >
-            {[currentYear - 2, currentYear - 1, currentYear, currentYear + 1].map((y) => (
-              <option key={y} value={y}>{y}</option>
-            ))}
-          </select>
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Agrupar por</label>
+            <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+              {(['categoria', 'proveedor'] as const).map((g) => (
+                <button key={g} onClick={() => setGroupBy(g)}
+                  className={`px-3 py-1 rounded-md text-xs font-bold capitalize transition-all ${
+                    groupBy === g ? 'bg-white shadow-sm text-gray-800' : 'text-gray-400'
+                  }`}>
+                  {g}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Año</label>
+            <select
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white"
+              value={year}
+              onChange={(e) => onYearChange(Number(e.target.value))}
+            >
+              {[currentYear - 2, currentYear - 1, currentYear, currentYear + 1].map((y) => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
@@ -496,6 +512,93 @@ function MonthlyExpensesView({ expenses, year, onYearChange, onEdit, onDelete }:
                       </td>
                     </tr>
                     {isExpanded && (() => {
+                      const editDeleteButtons = (e: Expense) => (
+                        <div className="flex opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button onClick={() => onEdit(e)} className="p-1 rounded hover:bg-indigo-50 hover:text-indigo-600 text-gray-400">
+                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                          </button>
+                          <button onClick={() => onDelete(e.id)} className="p-1 rounded hover:bg-red-50 hover:text-red-600 text-gray-400">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )
+
+                      if (groupBy === 'proveedor') {
+                        const bySupplier: Record<string, { name: string; items: Expense[] }> = {}
+                        for (const e of monthExpenses) {
+                          const key = e.supplier_id || '__none__'
+                          if (!bySupplier[key]) bySupplier[key] = { name: e.supplier?.name || 'Sin proveedor', items: [] }
+                          bySupplier[key].items.push(e)
+                        }
+                        const supplierGroups = Object.entries(bySupplier)
+                          .map(([key, group]) => ({
+                            key,
+                            name: group.name,
+                            items: group.items,
+                            subtotal: group.items.reduce((s, e) => s + e.amount, 0),
+                          }))
+                          .sort((a, b) => b.subtotal - a.subtotal)
+
+                        return (
+                          <tr>
+                            <td colSpan={5} className="px-4 pb-3 bg-gray-50/50">
+                              <div className="space-y-3">
+                                {supplierGroups.map((group) => {
+                                  const byDate: Record<string, Expense[]> = {}
+                                  for (const e of group.items) {
+                                    if (!byDate[e.date]) byDate[e.date] = []
+                                    byDate[e.date].push(e)
+                                  }
+                                  const dateGroups = Object.entries(byDate)
+                                    .map(([date, items]) => ({ date, items, subtotal: items.reduce((s, e) => s + e.amount, 0) }))
+                                    .sort((a, b) => b.date.localeCompare(a.date))
+
+                                  return (
+                                    <div key={group.key} className="rounded-lg border border-gray-100 bg-white overflow-hidden">
+                                      <div className="flex items-center justify-between px-3 py-1.5 bg-gray-50 border-b border-gray-100">
+                                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-700">{group.name}</span>
+                                        <span className="text-xs font-bold text-gray-600">{formatPrice(group.subtotal)}</span>
+                                      </div>
+                                      <div className="divide-y divide-gray-50">
+                                        {dateGroups.map((dg) => (
+                                          <div key={dg.date} className="px-3 py-2">
+                                            <div className="flex items-center justify-between mb-1">
+                                              <span className="text-[10px] font-bold text-gray-400 uppercase">
+                                                {new Date(dg.date + 'T00:00:00').toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })}
+                                              </span>
+                                              {dg.items.length > 1 && <span className="text-[10px] font-bold text-gray-500">{formatPrice(dg.subtotal)}</span>}
+                                            </div>
+                                            <div className="space-y-1">
+                                              {dg.items.map((e) => (
+                                                <div key={e.id} className="flex items-center justify-between text-xs group">
+                                                  <div className="flex items-center gap-2 min-w-0">
+                                                    <span className="font-semibold text-gray-800 truncate">{e.description}</span>
+                                                    <span className={`shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-full ${e.expense_type === 'fijo' ? 'bg-indigo-100 text-indigo-700' : 'bg-amber-100 text-amber-700'}`}>
+                                                      {e.expense_type === 'fijo' ? '📌 Fijo' : '📊 Variable'}
+                                                    </span>
+                                                  </div>
+                                                  <div className="flex items-center gap-2 shrink-0 ml-2">
+                                                    <span className="font-bold text-gray-700">{formatPrice(e.amount)}</span>
+                                                    {editDeleteButtons(e)}
+                                                  </div>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      }
+
                       const byCategory: Record<string, Expense[]> = {}
                       for (const e of monthExpenses) {
                         if (!byCategory[e.category]) byCategory[e.category] = []
@@ -533,17 +636,7 @@ function MonthlyExpensesView({ expenses, year, onYearChange, onEdit, onDelete }:
                                           </div>
                                           <div className="flex items-center gap-2 shrink-0 ml-2">
                                             <span className="font-bold text-gray-700">{formatPrice(e.amount)}</span>
-                                            <div className="flex opacity-0 group-hover:opacity-100 transition-opacity">
-                                              <button onClick={() => onEdit(e)} className="p-1 rounded hover:bg-indigo-50 hover:text-indigo-600 text-gray-400">
-                                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                                                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                                </svg>
-                                              </button>
-                                              <button onClick={() => onDelete(e.id)} className="p-1 rounded hover:bg-red-50 hover:text-red-600 text-gray-400">
-                                                <Trash2 className="w-3.5 h-3.5" />
-                                              </button>
-                                            </div>
+                                            {editDeleteButtons(e)}
                                           </div>
                                         </div>
                                       ))}
