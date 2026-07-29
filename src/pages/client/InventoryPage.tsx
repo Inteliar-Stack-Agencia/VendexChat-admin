@@ -1387,7 +1387,17 @@ function StockCloseGrid({ products }: { products: Product[] }) {
     const ingresos = vendidoReal * Number(product.price || 0)
     const costo = vendidoReal * (weekCost ?? 0)
     const margen = ingresos - costo
-    return { totalProduced, sobrante, consumo, merma, vendidoReal, salesQty, dispatchedQty, registrado, sinExplicar, ingresos, costo, margen }
+    // Costo de lo que se produjo pero no se vendió (sobrante/consumo interno/merma) —
+    // separado del costo de lo vendido para que el margen no lo incluya (no generó
+    // ingreso), pero sumado a `costo` da el mismo total que "Costo total producción"
+    // en la pestaña Producción (ahí se calcula sobre TODO lo producido, no solo lo vendido).
+    const costoSobrante = sobrante * (weekCost ?? 0)
+    const costoConsumo = consumo * (weekCost ?? 0)
+    const costoMerma = merma * (weekCost ?? 0)
+    return {
+      totalProduced, sobrante, consumo, merma, vendidoReal, salesQty, dispatchedQty, registrado, sinExplicar,
+      ingresos, costo, margen, costoSobrante, costoConsumo, costoMerma,
+    }
   }
 
   const activeProducts = products.filter((p) => p.is_active)
@@ -1399,10 +1409,15 @@ function StockCloseGrid({ products }: { products: Product[] }) {
       acc.produced += t.totalProduced; acc.vendido += t.vendidoReal
       acc.registrado += t.registrado; acc.sinExplicar += t.sinExplicar
       acc.ingresos += t.ingresos; acc.costo += t.costo; acc.margen += t.margen
+      acc.costoSobrante += t.costoSobrante; acc.costoConsumo += t.costoConsumo; acc.costoMerma += t.costoMerma
       return acc
     },
-    { sobrante: 0, consumo: 0, merma: 0, produced: 0, vendido: 0, registrado: 0, sinExplicar: 0, ingresos: 0, costo: 0, margen: 0 },
+    { sobrante: 0, consumo: 0, merma: 0, produced: 0, vendido: 0, registrado: 0, sinExplicar: 0, ingresos: 0, costo: 0, margen: 0, costoSobrante: 0, costoConsumo: 0, costoMerma: 0 },
   )
+  // Debe coincidir con "Costo total producción" de la pestaña Producción: el costo de
+  // lo vendido más el de lo que no se vendió (sobrante + consumo interno + merma) es
+  // el costo de TODO lo producido esta semana.
+  const costoTotalProduccion = grandTotals.costo + grandTotals.costoSobrante + grandTotals.costoConsumo + grandTotals.costoMerma
 
   const enterEditMode = () => {
     const init: typeof pending = {}
@@ -1513,15 +1528,28 @@ function StockCloseGrid({ products }: { products: Product[] }) {
         <div className="bg-amber-50 rounded-xl p-2 text-center">
           <p className="text-[9px] font-bold text-amber-600 uppercase tracking-widest mb-0.5">Sobrante</p>
           <p className="text-lg font-black text-amber-700">{grandTotals.sobrante}</p>
+          <p className="text-[10px] text-amber-500">{formatPrice(grandTotals.costoSobrante)}</p>
         </div>
         <div className="bg-blue-50 rounded-xl p-2 text-center">
           <p className="text-[9px] font-bold text-blue-500 uppercase tracking-widest mb-0.5">C. Interno</p>
           <p className="text-lg font-black text-blue-700">{grandTotals.consumo}</p>
+          <p className="text-[10px] text-blue-400">{formatPrice(grandTotals.costoConsumo)}</p>
         </div>
         <div className="bg-red-50 rounded-xl p-2 text-center">
           <p className="text-[9px] font-bold text-red-500 uppercase tracking-widest mb-0.5">Merma</p>
           <p className="text-lg font-black text-red-600">{grandTotals.merma}</p>
+          <p className="text-[10px] text-red-400">{formatPrice(grandTotals.costoMerma)}</p>
         </div>
+      </div>
+
+      {/* Verificación: costo vendido + costo no vendido (sobrante+consumo+merma) debe dar
+          el mismo total que "Costo total producción" en la pestaña Producción */}
+      <div className="rounded-xl p-3 flex items-center justify-between bg-gray-50 border border-gray-100">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">Costo total producción</p>
+          <p className="text-[10px] text-gray-400">Vendido ({formatPrice(grandTotals.costo)}) + sobrante + consumo interno + merma — debe coincidir con la pestaña Producción</p>
+        </div>
+        <p className="text-xl font-black text-gray-700">{formatPrice(costoTotalProduccion)}</p>
       </div>
 
       {/* Diferencia sin explicar — lo que salió de producción y no aparece ni vendido (POS), ni despachado a empresas, ni declarado como sobrante/consumo/merma */}
