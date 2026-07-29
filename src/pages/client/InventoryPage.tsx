@@ -508,6 +508,7 @@ function ImportProductionModal({ products, onImport, onClose }: ImportModalProps
   const [processing, setProcessing] = useState(false)
   const [ocrProgress, setOcrProgress] = useState(0)
   const [saving, setSaving] = useState(false)
+  const [pastedText, setPastedText] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
 
   const downloadTemplate = () => {
@@ -605,6 +606,14 @@ function ImportProductionModal({ products, onImport, onClose }: ImportModalProps
     }
   }
 
+  // Intenta el parser rápido (tabulado/CSV, gratis y determinístico) primero; si no
+  // encuentra nada usable, recién ahí cae a la IA (texto libre, desprolijo, sin tabular).
+  const parseText = async (rawText: string): Promise<ImportRow[]> => {
+    const direct = parseCSVDirect(rawText)
+    if (direct.length > 0) return direct
+    return parseWithAI(rawText)
+  }
+
   const handleFile = async (file: File) => {
     setProcessing(true)
     setOcrProgress(0)
@@ -613,23 +622,18 @@ function ImportProductionModal({ products, onImport, onClose }: ImportModalProps
       let parsed: ImportRow[] = []
 
       if (file.name.match(/\.(xlsx|xls)$/i)) {
-        // Excel → parse CSV directly first, fallback to AI
         const ab = await file.arrayBuffer()
         const wb = XLSX.read(ab)
         const ws = wb.Sheets[wb.SheetNames[0]]
         rawText = XLSX.utils.sheet_to_csv(ws)
-        parsed = parseCSVDirect(rawText)
-        if (parsed.length === 0) parsed = await parseWithAI(rawText)
+        parsed = await parseText(rawText)
       } else if (file.name.match(/\.csv$/i)) {
         rawText = await file.text()
-        parsed = parseCSVDirect(rawText)
-        if (parsed.length === 0) parsed = await parseWithAI(rawText)
+        parsed = await parseText(rawText)
       } else if (file.name.match(/\.txt$/i) || file.type === 'text/plain') {
-        // Texto libre (pegado de WhatsApp, notas, etc.) — casi nunca viene tabulado,
-        // así que va directo a la IA en vez de intentar parsearlo como CSV primero.
         rawText = await file.text()
         if (!rawText.trim()) { showToast('error', 'El archivo está vacío'); return }
-        parsed = await parseWithAI(rawText)
+        parsed = await parseText(rawText)
       } else if (file.type.startsWith('image/') || file.name.match(/\.(png|jpg|jpeg|webp|bmp)$/i)) {
         // OCR → AI
         const result = await Tesseract.recognize(file, 'spa', {
@@ -655,7 +659,6 @@ function ImportProductionModal({ products, onImport, onClose }: ImportModalProps
     } catch (err) {
       console.error('Import error:', err)
       showToast('error', `Error: ${err instanceof Error ? err.message : 'No se pudo procesar el archivo'}`)
-      showToast('error', 'Error al procesar el archivo')
     } finally {
       setProcessing(false)
     }
@@ -665,6 +668,27 @@ function ImportProductionModal({ products, onImport, onClose }: ImportModalProps
     e.preventDefault()
     const file = e.dataTransfer.files[0]
     if (file) handleFile(file)
+  }
+
+  // Pegar texto directo (tabulado tipo "producto <tab> cantidad", o texto libre
+  // desprolijo) sin tener que guardarlo como archivo primero.
+  const handlePastedText = async () => {
+    if (!pastedText.trim()) return
+    setProcessing(true)
+    try {
+      const parsed = await parseText(pastedText)
+      if (parsed.length === 0) {
+        showToast('error', 'No se encontraron productos. Revisá el formato del texto.')
+        return
+      }
+      setRows(parsed.filter((r) => r.quantity > 0))
+      setStep('preview')
+    } catch (err) {
+      console.error('Paste import error:', err)
+      showToast('error', `Error: ${err instanceof Error ? err.message : 'No se pudo procesar el texto'}`)
+    } finally {
+      setProcessing(false)
+    }
   }
 
   const updateRow = (i: number, patch: Partial<ImportRow>) => {
@@ -753,6 +777,34 @@ function ImportProductionModal({ products, onImport, onClose }: ImportModalProps
                     className="hidden"
                     onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f) }}
                   />
+                </div>
+              )}
+
+              {!processing && (
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 h-px bg-gray-100" />
+                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">o pegá el texto directo</span>
+                  <div className="flex-1 h-px bg-gray-100" />
+                </div>
+              )}
+
+              {!processing && (
+                <div className="space-y-2">
+                  <textarea
+                    value={pastedText}
+                    onChange={(e) => setPastedText(e.target.value)}
+                    placeholder={'Pegá acá la lista tal cual la tengas (tabulada o texto libre):\n\nguiso de lentejas\t6\nrisotto de hongos\t5\n...'}
+                    rows={5}
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                  />
+                  <Button
+                    onClick={handlePastedText}
+                    disabled={!pastedText.trim()}
+                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white flex items-center justify-center gap-2"
+                  >
+                    <FileText className="w-4 h-4" />
+                    Procesar texto pegado
+                  </Button>
                 </div>
               )}
             </>
