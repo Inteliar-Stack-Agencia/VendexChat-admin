@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import {
   PackageCheck, Plus, Trash2, X, Loader2, RefreshCw,
   TrendingUp, TrendingDown, ChevronDown, ChevronUp, CalendarDays, Link2,
   ArrowDownCircle, ArrowUpCircle, ChevronLeft, ChevronRight, TableProperties,
-  Upload, FileSpreadsheet, Image as ImageIcon, CheckCircle2, Tag, FileText,
+  Upload, FileSpreadsheet, Image as ImageIcon, CheckCircle2, Tag, FileText, ClipboardList,
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import Tesseract from 'tesseract.js'
@@ -1452,9 +1453,105 @@ function ProductionGrid({ products, onCostUpdated, refreshKey }: { products: Pro
   )
 }
 
+// ─── Quick Stock Count Modal ────────────────────────────────────────────────────
+
+interface QuickStockCountModalProps {
+  products: Product[]
+  initialCounts: Record<string, number>
+  onSave: (counts: Record<string, number>) => Promise<void>
+  onClose: () => void
+}
+
+function QuickStockCountModal({ products, initialCounts, onSave, onClose }: QuickStockCountModalProps) {
+  const [values, setValues] = useState<Record<string, string>>(() => {
+    const init: Record<string, string> = {}
+    for (const p of products) init[p.id] = initialCounts[p.id] != null ? String(initialCounts[p.id]) : ''
+    return init
+  })
+  const [saving, setSaving] = useState(false)
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const counts: Record<string, number> = {}
+    for (const [productId, val] of Object.entries(values)) {
+      if (val.trim() === '') continue
+      const n = parseInt(val)
+      if (!isNaN(n) && n >= 0) counts[productId] = n
+    }
+    if (Object.keys(counts).length === 0) {
+      showToast('error', 'Contá al menos un producto')
+      return
+    }
+    setSaving(true)
+    try {
+      await onSave(counts)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const groups = (() => {
+    const byCategory: Record<string, Product[]> = {}
+    for (const p of products) {
+      const key = p.category_name || 'Sin categoría'
+      if (!byCategory[key]) byCategory[key] = []
+      byCategory[key].push(p)
+    }
+    return Object.entries(byCategory)
+      .map(([name, items]) => ({ name, items: items.sort((a, b) => a.name.localeCompare(b.name, 'es')) }))
+      .sort((a, b) => a.name.localeCompare(b.name, 'es'))
+  })()
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between p-5 border-b border-gray-100 shrink-0">
+          <div>
+            <h2 className="font-bold text-gray-900">Conteo rápido de stock</h2>
+            <p className="text-xs text-gray-400 mt-0.5">Cuántas unidades quedan de cada producto ahora mismo — {today}</p>
+          </div>
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100"><X className="w-5 h-5 text-gray-500" /></button>
+        </div>
+        <form onSubmit={handleSubmit} className="flex-1 flex flex-col min-h-0">
+          <div className="flex-1 overflow-y-auto p-5 space-y-4">
+            {groups.map((group) => (
+              <div key={group.name}>
+                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">{group.name}</p>
+                <div className="space-y-2">
+                  {group.items.map((p) => (
+                    <div key={p.id} className="flex items-center justify-between gap-3">
+                      <span className="text-sm font-medium text-gray-700 truncate">{p.name}</span>
+                      <input
+                        type="number" min="0" step="1"
+                        placeholder="—"
+                        value={values[p.id] ?? ''}
+                        onChange={(e) => setValues((prev) => ({ ...prev, [p.id]: e.target.value }))}
+                        className="w-24 shrink-0 border border-gray-200 rounded-lg px-3 py-1.5 text-sm font-bold text-center focus:outline-none focus:ring-2 focus:ring-teal-300"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+            {products.length === 0 && (
+              <p className="text-sm text-gray-400 text-center py-8">Sin productos activos</p>
+            )}
+          </div>
+          <div className="flex gap-3 p-5 border-t border-gray-100 shrink-0">
+            <Button type="button" variant="secondary" onClick={onClose} className="flex-1">Cancelar</Button>
+            <Button type="submit" disabled={saving} className="flex-1 bg-teal-600 hover:bg-teal-700 text-white">
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Guardar conteo'}
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 // ─── Stock Close Grid ─────────────────────────────────────────────────────────
 
-function StockCloseGrid({ products }: { products: Product[] }) {
+function StockCloseGrid({ products, autoOpenCount }: { products: Product[]; autoOpenCount?: boolean }) {
   const [weekStart, setWeekStart] = useState<Date>(() => getWeekStart(new Date()))
   const [weekData, setWeekData] = useState<Awaited<ReturnType<typeof productionApi.getWeekData>> | null>(null)
   // Unidades despachadas a empresas esta semana, agrupadas por nombre de producto normalizado (cross-store)
@@ -1468,6 +1565,10 @@ function StockCloseGrid({ products }: { products: Product[] }) {
   // Conteo rápido de stock del último día de la semana (viernes) — si existe, se usa
   // como "sobrante" en vez de tener que cargarlo de nuevo a mano en el cierre.
   const [fridayCounts, setFridayCounts] = useState<Record<string, number>>({})
+  // Conteo de HOY (no necesariamente el viernes de la semana que se está viendo) — para
+  // precargar el modal de conteo rápido con lo último cargado.
+  const [todayCounts, setTodayCounts] = useState<Record<string, number>>({})
+  const [showCountModal, setShowCountModal] = useState(false)
   const [loading, setLoading] = useState(true)
   // weekly close: one row per product — pending[productId][field]
   const [pending, setPending] = useState<Record<string, { sobrante: string; consumo_interno: string; merma: string }>>({})
@@ -1485,17 +1586,19 @@ function StockCloseGrid({ products }: { products: Product[] }) {
     setPending({})
     setEditMode(false)
     try {
-      const [data, dispatchItems, breakdown, manual, fridayCount] = await Promise.all([
+      const [data, dispatchItems, breakdown, manual, fridayCount, todayCount] = await Promise.all([
         productionApi.getWeekData(weekStartISO, weekEndISO),
         companyDispatchApi.crossStoreDispatchItemsWithPaymentByDate(weekStartISO, weekEndISO).catch(() => []),
         productionApi.getWeekPaymentBreakdown(weekStartISO, weekEndISO).catch(() => ({})),
         productionApi.listManualSales(weekStartISO).catch(() => []),
         productionApi.getDailyStockCount(toISO(weekDays[weekDays.length - 1])).catch(() => ({})),
+        productionApi.getDailyStockCount(today).catch(() => ({})),
       ])
       setWeekData(data)
       setPaymentBreakdown(breakdown)
       setManualSales(manual)
       setFridayCounts(fridayCount)
+      setTodayCounts(todayCount)
       const byName: Record<string, number> = {}
       const paymentByName: Record<string, { facturado: number; cobrado: number }> = {}
       for (const item of dispatchItems) {
@@ -1518,6 +1621,21 @@ function StockCloseGrid({ products }: { products: Product[] }) {
   }, [weekStartISO, weekEndISO])
 
   useEffect(() => { load() }, [load])
+
+  // Vengo del recordatorio del Dashboard ("Contar stock") — abrir directo el modal
+  const handledAutoOpen = useRef(false)
+  useEffect(() => {
+    if (!autoOpenCount || loading || handledAutoOpen.current) return
+    handledAutoOpen.current = true
+    setShowCountModal(true)
+  }, [autoOpenCount, loading])
+
+  const handleSaveCount = async (counts: Record<string, number>) => {
+    await productionApi.saveDailyStockCount(today, counts)
+    showToast('success', 'Conteo guardado')
+    setShowCountModal(false)
+    load()
+  }
 
   // Sum a stock field across all days of the week for a product (from saved data)
   const getSavedWeekField = (productId: string, field: 'sobrante' | 'consumo_interno' | 'merma'): number => {
@@ -1698,6 +1816,13 @@ function StockCloseGrid({ products }: { products: Product[] }) {
           {editMode ? 'Ingresá sobrante, consumo interno y merma total de la semana' : 'Cierre semanal · un registro por semana por producto'}
         </p>
         <div className="flex items-center gap-2 shrink-0">
+          {!editMode && (
+            <button onClick={() => setShowCountModal(true)}
+              className="flex items-center gap-2 px-4 py-2.5 text-sm font-bold text-teal-700 border border-teal-200 bg-teal-50 hover:bg-teal-100 rounded-xl transition-colors">
+              <ClipboardList className="w-4 h-4" />
+              {Object.keys(todayCounts).length > 0 ? 'Actualizar conteo de stock' : 'Conteo rápido de stock'}
+            </button>
+          )}
           {editMode ? (
             <>
               <button onClick={() => { setEditMode(false); setPending({}) }}
@@ -1956,6 +2081,15 @@ function StockCloseGrid({ products }: { products: Product[] }) {
           </table>
         </div>
       )}
+
+      {showCountModal && (
+        <QuickStockCountModal
+          products={activeProducts}
+          initialCounts={todayCounts}
+          onSave={handleSaveCount}
+          onClose={() => setShowCountModal(false)}
+        />
+      )}
     </div>
   )
 }
@@ -2213,7 +2347,17 @@ function SalesGrid({ products }: { products: Product[] }) {
 type Tab = 'produccion' | 'stock' | 'ventas'
 
 export default function InventoryPage() {
-  const [tab, setTab] = useState<Tab>('produccion')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [tab, setTab] = useState<Tab>(() => (searchParams.get('tab') === 'stock' ? 'stock' : 'produccion'))
+  // Vengo del recordatorio del Dashboard ("Contar stock") — abrir el modal de conteo
+  // directo en Cierre/Stock. Se consume una sola vez y se limpia de la URL.
+  const [autoOpenCount] = useState(() => searchParams.get('count') === 'today')
+  useEffect(() => {
+    if (searchParams.get('tab') || searchParams.get('count')) {
+      setSearchParams((prev) => { prev.delete('tab'); prev.delete('count'); return prev }, { replace: true })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const [entries, setEntries] = useState<InventoryEntry[]>([])
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
@@ -2384,7 +2528,7 @@ export default function InventoryPage() {
         </div>
 
         {tab === 'produccion' && <ProductionGrid products={products} onCostUpdated={load} refreshKey={productionRefreshKey} />}
-        {tab === 'stock' && <StockCloseGrid products={products} />}
+        {tab === 'stock' && <StockCloseGrid products={products} autoOpenCount={autoOpenCount} />}
         {tab === 'ventas' && <SalesGrid products={products} />}
 
         {showForm && <DayInputForm products={products} onSave={handleSaveInputs} onClose={() => setShowForm(false)} />}
