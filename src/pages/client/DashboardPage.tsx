@@ -21,11 +21,13 @@ import {
   Calendar,
   Sparkles,
   Shield,
+  Landmark,
 } from 'lucide-react'
 import { Card, Badge, Button } from '../../components/common'
 import OnboardingChecklist from '../../components/dashboard/OnboardingChecklist'
 import CurrencySelector from '../../components/dashboard/CurrencySelector'
 import { dashboardApi, tenantApi } from '../../services/api'
+import { cashApi, type CashSession } from '../../services/cashApi'
 import { DashboardStats, Tenant } from '../../types'
 import { formatPrice, orderStatusConfig } from '../../utils/helpers'
 import { useAuth } from '../../contexts/AuthContext'
@@ -72,6 +74,9 @@ const PLAN_LABELS: Record<string, string> = {
   ultra: 'ULTRA',
 }
 
+const PLAN_WEIGHT: Record<string, number> = { free: 0, pro: 1, vip: 2, ultra: 3 }
+const todayISO = new Date().toISOString().split('T')[0]
+
 export default function DashboardPage() {
   const { subscription, selectedStoreId, isSuperadmin } = useAuth()
   const [stats, setStats] = useState<DashboardStats | null>(null)
@@ -82,6 +87,9 @@ export default function DashboardPage() {
     const cycle = localStorage.getItem('pendingCycle') || 'monthly'
     return plan ? { plan, cycle } : null
   })
+
+  // Recordatorio: ¿ya se abrió la caja de hoy? (undefined = todavía no se sabe)
+  const [todayCashSession, setTodayCashSession] = useState<CashSession | null | undefined>(undefined)
 
   // Moneda de la tienda
   const [currency, setCurrency] = useState('ARS')
@@ -115,6 +123,10 @@ export default function DashboardPage() {
         // Si falla, mostramos el dashboard vacío (no infinite skeleton)
       })
       .finally(() => setLoading(false))
+
+    cashApi.getByDate(todayISO)
+      .then(setTodayCashSession)
+      .catch(() => setTodayCashSession(null))
   }, [selectedStoreId])
 
   async function handleCurrencyChange(code: string) {
@@ -130,6 +142,15 @@ export default function DashboardPage() {
       setSavingCurrency(false)
     }
   }
+
+  const hasCashAccess = isSuperadmin || (() => {
+    const plan = subscription?.plan_type || 'free'
+    const status = subscription?.status || 'active'
+    const trialEnd = subscription?.current_period_end ? new Date(subscription.current_period_end) : null
+    const isTrialExpired = status === 'trial' && trialEnd && trialEnd < new Date()
+    const weight = isTrialExpired ? 0 : (PLAN_WEIGHT[plan] ?? 0)
+    return weight >= PLAN_WEIGHT.pro
+  })()
 
   const isTrial = subscription?.status === 'trial'
 
@@ -271,6 +292,26 @@ export default function DashboardPage() {
               ✕
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Recordatorio: abrir caja del día */}
+      {hasCashAccess && todayCashSession === null && (
+        <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="p-3 rounded-xl bg-amber-100">
+              <Landmark className="w-6 h-6 text-amber-600" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-amber-800">Todavía no abriste la caja hoy</h3>
+              <p className="text-amber-700/80 text-xs mt-0.5">Registrá el efectivo inicial para poder cuadrar el cierre del día.</p>
+            </div>
+          </div>
+          <Link to="/cash?open=today">
+            <Button size="sm" className="bg-amber-600 hover:bg-amber-700 text-white font-bold uppercase tracking-widest text-[10px] px-6 py-2.5 shrink-0">
+              Abrir caja
+            </Button>
+          </Link>
         </div>
       )}
 
