@@ -1799,17 +1799,22 @@ function StockCloseGrid({ products, autoOpenCount }: { products: Product[]; auto
         })
       )
 
-      // Auto-cargar la pestaña Ventas con lo vendido real de este cierre (unidades ×
-      // precio de lista), para no tener que volver a tipearlo a mano — solo para
-      // productos que todavía no tienen nada cargado esta semana; si ya hay algo cargado
-      // a mano, se respeta y no se pisa.
+      // Auto-cargar la pestaña Ventas con lo vendido de mostrador que todavía no está
+      // explicado por ningún otro canal (Pedidos, Despachos a Empresas o carga manual) ×
+      // precio de lista — NO con vendidoReal total, porque eso incluiría unidades
+      // despachadas a empresas, que se facturan a un precio negociado por empresa (no el
+      // de lista) y se cobran vía Facturación, nunca por Caja. Solo para productos que
+      // todavía no tienen nada cargado esta semana; si ya hay algo cargado a mano, se
+      // respeta y no se pisa.
       const weekDatesISO = weekDays.map(toISO)
       const existingSales = await productionApi.getWeekSalesAmounts(weekStartISO, weekEndISO)
       const autoEntries: Record<string, Record<string, number>> = {}
       for (const p of activeProducts) {
         const alreadyLoaded = weekDatesISO.some((d) => (existingSales[p.id]?.[d] ?? 0) > 0)
         if (alreadyLoaded) continue
-        const ingresos = productTotals(p).ingresos
+        const t = productTotals(p)
+        const unidadesMostrador = Math.max(0, t.sinExplicar)
+        const ingresos = unidadesMostrador * Number(p.price || 0)
         if (ingresos <= 0) continue
         const entry: Record<string, number> = {}
         for (const d of weekDatesISO) entry[d] = d === saveDate ? ingresos : 0
