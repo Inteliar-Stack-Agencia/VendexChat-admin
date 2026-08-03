@@ -341,16 +341,29 @@ export const productionApi = {
     if (error) throw error
   },
 
+  // Se lee la fila existente primero para no pisar quantity/reingreso/cost_price ya
+  // cargados ese día — importante ahora que el cierre se puede anclar a cualquier día
+  // (ej. hoy), que puede coincidir con un día que también tiene producción real cargada.
   upsertStockClose: async (
     date: string,
     productId: string,
     fields: { sobrante?: number; consumo_interno?: number; merma?: number },
   ) => {
     const storeId = await getStoreId()
+    const { data: existing } = await supabase
+      .from('production_log')
+      .select('quantity, reingreso, cost_price')
+      .eq('store_id', storeId).eq('date', date).eq('product_id', productId)
+      .maybeSingle()
     const { error } = await supabase
       .from('production_log')
       .upsert(
-        { store_id: storeId, date, product_id: productId, quantity: 0, ...fields },
+        {
+          store_id: storeId, date, product_id: productId, ...fields,
+          quantity: existing?.quantity ?? 0,
+          reingreso: existing?.reingreso ?? 0,
+          cost_price: existing?.cost_price ?? null,
+        },
         { onConflict: 'store_id,date,product_id' },
       )
     if (error) throw error

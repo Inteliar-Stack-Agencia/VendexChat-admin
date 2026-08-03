@@ -1773,22 +1773,40 @@ function StockCloseGrid({ products, autoOpenCount }: { products: Product[]; auto
   // hay reingreso: ese solo mide lo cocinado esta semana (lo que genera gasto nuevo).
   const costoTotalDisponible = grandTotals.costo + grandTotals.costoSobrante + grandTotals.costoConsumo + grandTotals.costoMerma
 
-  const enterEditMode = () => {
+  // Consumo/merma de UN día puntual (no la suma de la semana) — para precargar el
+  // formulario con lo que ya está guardado ESE día específico. Si precargara la suma de
+  // la semana y el usuario cierra varias veces en días distintos (ej. martes y luego
+  // miércoles), reguardar el total sumado cada vez duplicaría el número — cada día tiene
+  // que aportar solo lo suyo para que la suma semanal (getSavedWeekField) dé bien.
+  const getDayField = (productId: string, date: string, field: 'consumo_interno' | 'merma'): number =>
+    weekData?.stock[productId]?.[date]?.[field] ?? 0
+
+  const prefillPending = (date: string): typeof pending => {
     const init: typeof pending = {}
     for (const p of activeProducts) {
       init[p.id] = {
         sobrante: String(getSobranteDefault(p.id) || ''),
-        consumo_interno: String(getSavedWeekField(p.id, 'consumo_interno') || ''),
-        merma: String(getSavedWeekField(p.id, 'merma') || ''),
+        consumo_interno: String(getDayField(p.id, date, 'consumo_interno') || ''),
+        merma: String(getDayField(p.id, date, 'merma') || ''),
       }
     }
-    setPending(init)
+    return init
+  }
+
+  const enterEditMode = () => {
     // Si la semana que se está viendo incluye hoy, el cierre se ancla a hoy (lo más
     // común: cerrás el mismo día que estás comparando contra Caja/Empresas). Si es una
     // semana pasada, cae al último día hábil de esa semana.
     const weekDatesISO = weekDays.map(toISO)
-    setCloseDate(weekDatesISO.includes(today) ? today : weekDatesISO[weekDatesISO.length - 1])
+    const initDate = weekDatesISO.includes(today) ? today : weekDatesISO[weekDatesISO.length - 1]
+    setCloseDate(initDate)
+    setPending(prefillPending(initDate))
     setEditMode(true)
+  }
+
+  const handleCloseDateChange = (date: string) => {
+    setCloseDate(date)
+    setPending(prefillPending(date))
   }
 
   const handleSave = async () => {
@@ -1850,7 +1868,7 @@ function StockCloseGrid({ products, autoOpenCount }: { products: Product[]; auto
       {/* Edit / Save bar */}
       <div className="flex items-center justify-between gap-3">
         <p className="text-xs text-gray-400">
-          {editMode ? 'Ingresá sobrante, consumo interno y merma total de la semana' : 'Cierre semanal · un registro por semana por producto'}
+          {editMode ? 'Sobrante: lo que hay ahora. Consumo y merma: lo de HOY (no el acumulado) — se suman solos día a día' : 'Cierre semanal · un registro por semana por producto'}
         </p>
         <div className="flex items-center gap-2 shrink-0">
           {!editMode && (
@@ -1869,7 +1887,7 @@ function StockCloseGrid({ products, autoOpenCount }: { products: Product[]; auto
                   value={closeDate}
                   min={toISO(weekDays[0])}
                   max={toISO(weekDays[weekDays.length - 1])}
-                  onChange={(e) => setCloseDate(e.target.value)}
+                  onChange={(e) => handleCloseDateChange(e.target.value)}
                   className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs font-bold text-gray-700 focus:outline-none focus:ring-1 focus:ring-amber-400"
                 />
               </label>
