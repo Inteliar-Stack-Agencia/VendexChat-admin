@@ -1383,9 +1383,12 @@ function StockCloseGrid({ products }: { products: Product[] }) {
   // Conteo rápido de stock del último día de la semana (viernes) — si existe, se usa
   // como "sobrante" en vez de tener que cargarlo de nuevo a mano en el cierre.
   const [fridayCounts, setFridayCounts] = useState<Record<string, number>>({})
+  // Conteo del viernes de la semana ANTERIOR — sugerencia de cuánto se puede reingresar
+  // a la venta esta semana (lo que sobró y sigue en buen estado).
+  const [lastWeekFridayCounts, setLastWeekFridayCounts] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
   // weekly close: one row per product — pending[productId][field]
-  const [pending, setPending] = useState<Record<string, { sobrante: string; consumo_interno: string; merma: string }>>({})
+  const [pending, setPending] = useState<Record<string, { sobrante: string; consumo_interno: string; merma: string; reingreso: string }>>({})
   const [saving, setSaving] = useState(false)
   const [editMode, setEditMode] = useState(false)
 
@@ -1400,17 +1403,19 @@ function StockCloseGrid({ products }: { products: Product[] }) {
     setPending({})
     setEditMode(false)
     try {
-      const [data, dispatchItems, breakdown, manual, fridayCount] = await Promise.all([
+      const [data, dispatchItems, breakdown, manual, fridayCount, lastFridayCount] = await Promise.all([
         productionApi.getWeekData(weekStartISO, weekEndISO),
         companyDispatchApi.crossStoreDispatchItemsWithPaymentByDate(weekStartISO, weekEndISO).catch(() => []),
         productionApi.getWeekPaymentBreakdown(weekStartISO, weekEndISO).catch(() => ({})),
         productionApi.listManualSales(weekStartISO).catch(() => []),
         productionApi.getDailyStockCount(toISO(weekDays[weekDays.length - 1])).catch(() => ({})),
+        productionApi.getDailyStockCount(toISO(addDays(weekDays[weekDays.length - 1], -7))).catch(() => ({})),
       ])
       setWeekData(data)
       setPaymentBreakdown(breakdown)
       setManualSales(manual)
       setFridayCounts(fridayCount)
+      setLastWeekFridayCounts(lastFridayCount)
       const byName: Record<string, number> = {}
       const paymentByName: Record<string, { facturado: number; cobrado: number }> = {}
       for (const item of dispatchItems) {
@@ -1461,6 +1466,23 @@ function StockCloseGrid({ products }: { products: Product[] }) {
     return getSavedWeekField(productId, field)
   }
 
+  // Reingreso guardado esta semana (si ya se confirmó). Si todavía no se cargó nada,
+  // se sugiere el conteo del viernes de la semana pasada (lo que sobró y sigue vendible).
+  const getSavedReingreso = (productId: string): number => {
+    let total = 0
+    for (const day of weekDays) total += weekData?.reingresos[productId]?.[toISO(day)] ?? 0
+    return total
+  }
+
+  const getReingresoSuggested = (productId: string): number => lastWeekFridayCounts[productId] ?? 0
+
+  const getReingreso = (productId: string): number => {
+    const pv = pending[productId]?.reingreso
+    if (pv !== undefined) return parseInt(pv) || 0
+    const saved = getSavedReingreso(productId)
+    return saved > 0 ? saved : getReingresoSuggested(productId)
+  }
+
   const getSalesQty = (productId: string): number => {
     let total = 0
     for (const day of weekDays) total += weekData?.sales[productId]?.[toISO(day)]?.qty ?? 0
@@ -1496,10 +1518,14 @@ function StockCloseGrid({ products }: { products: Product[] }) {
 
   const productTotals = (product: Product) => {
     const totalProduced = getTotalProduced(product.id)
+    // Sobrante de la semana pasada que sigue en buen estado y se reingresa a la venta —
+    // suma al stock disponible, pero no es producción nueva (ya se pagó la semana pasada).
+    const reingreso = getReingreso(product.id)
+    const totalDisponible = totalProduced + reingreso
     const sobrante = getField(product.id, 'sobrante')
     const consumo = getField(product.id, 'consumo_interno')
     const merma = getField(product.id, 'merma')
-    const vendidoReal = Math.max(0, totalProduced - sobrante - consumo - merma)
+    const vendidoReal = Math.max(0, totalDisponible - sobrante - consumo - merma)
     const salesQty = getSalesQty(product.id)
     const dispatchedQty = getDispatchedQty(product)
     const manual = getManualSales(product.id)
@@ -1523,9 +1549,10 @@ function StockCloseGrid({ products }: { products: Product[] }) {
     const costoSobrante = sobrante * (weekCost ?? 0)
     const costoConsumo = consumo * (weekCost ?? 0)
     const costoMerma = merma * (weekCost ?? 0)
+    const costoReingreso = reingreso * (weekCost ?? 0)
     return {
-      totalProduced, sobrante, consumo, merma, vendidoReal, salesQty, dispatchedQty, manualQty: manual.qty, registrado, sinExplicar,
-      ingresos, costo, margen, costoSobrante, costoConsumo, costoMerma,
+      totalProduced, reingreso, totalDisponible, sobrante, consumo, merma, vendidoReal, salesQty, dispatchedQty, manualQty: manual.qty, registrado, sinExplicar,
+      ingresos, costo, margen, costoSobrante, costoConsumo, costoMerma, costoReingreso,
       facturadoReal, cobradoReal, pendienteCobro,
     }
   }
@@ -1536,19 +1563,19 @@ function StockCloseGrid({ products }: { products: Product[] }) {
     (acc, p) => {
       const t = productTotals(p)
       acc.sobrante += t.sobrante; acc.consumo += t.consumo; acc.merma += t.merma
-      acc.produced += t.totalProduced; acc.vendido += t.vendidoReal
+      acc.produced += t.totalProduced; acc.reingreso += t.reingreso; acc.vendido += t.vendidoReal
       acc.registrado += t.registrado; acc.sinExplicar += t.sinExplicar
       acc.ingresos += t.ingresos; acc.costo += t.costo; acc.margen += t.margen
-      acc.costoSobrante += t.costoSobrante; acc.costoConsumo += t.costoConsumo; acc.costoMerma += t.costoMerma
+      acc.costoSobrante += t.costoSobrante; acc.costoConsumo += t.costoConsumo; acc.costoMerma += t.costoMerma; acc.costoReingreso += t.costoReingreso
       acc.facturadoReal += t.facturadoReal; acc.cobradoReal += t.cobradoReal; acc.pendienteCobro += t.pendienteCobro
       return acc
     },
-    { sobrante: 0, consumo: 0, merma: 0, produced: 0, vendido: 0, registrado: 0, sinExplicar: 0, ingresos: 0, costo: 0, margen: 0, costoSobrante: 0, costoConsumo: 0, costoMerma: 0, facturadoReal: 0, cobradoReal: 0, pendienteCobro: 0 },
+    { sobrante: 0, consumo: 0, merma: 0, produced: 0, reingreso: 0, vendido: 0, registrado: 0, sinExplicar: 0, ingresos: 0, costo: 0, margen: 0, costoSobrante: 0, costoConsumo: 0, costoMerma: 0, costoReingreso: 0, facturadoReal: 0, cobradoReal: 0, pendienteCobro: 0 },
   )
-  // Debe coincidir con "Costo total producción" de la pestaña Producción: el costo de
-  // lo vendido más el de lo que no se vendió (sobrante + consumo interno + merma) es
-  // el costo de TODO lo producido esta semana.
-  const costoTotalProduccion = grandTotals.costo + grandTotals.costoSobrante + grandTotals.costoConsumo + grandTotals.costoMerma
+  // Costo total de la mercadería disponible esta semana (producción nueva + reingreso de
+  // sobrante). No coincide con "Costo total producción" de la pestaña Producción cuando
+  // hay reingreso: ese solo mide lo cocinado esta semana (lo que genera gasto nuevo).
+  const costoTotalDisponible = grandTotals.costo + grandTotals.costoSobrante + grandTotals.costoConsumo + grandTotals.costoMerma
 
   const enterEditMode = () => {
     const init: typeof pending = {}
@@ -1557,6 +1584,7 @@ function StockCloseGrid({ products }: { products: Product[] }) {
         sobrante: String(getSobranteDefault(p.id) || ''),
         consumo_interno: String(getSavedWeekField(p.id, 'consumo_interno') || ''),
         merma: String(getSavedWeekField(p.id, 'merma') || ''),
+        reingreso: String(getReingreso(p.id) || ''),
       }
     }
     setPending(init)
@@ -1568,13 +1596,18 @@ function StockCloseGrid({ products }: { products: Product[] }) {
     try {
       // Save totals to the last day of the week (weekEndISO used as the anchor)
       const saveDate = toISO(weekDays[weekDays.length - 1]) // Friday
+      const mondayDate = toISO(weekDays[0])
       await Promise.all(
         activeProducts.map(async (p) => {
           const sobrante = parseInt(pending[p.id]?.sobrante || '0') || 0
           const consumo = parseInt(pending[p.id]?.consumo_interno || '0') || 0
           const merma = parseInt(pending[p.id]?.merma || '0') || 0
+          const reingreso = parseInt(pending[p.id]?.reingreso || '0') || 0
           if (sobrante > 0 || consumo > 0 || merma > 0) {
             await productionApi.upsertStockClose(saveDate, p.id, { sobrante, consumo_interno: consumo, merma })
+          }
+          if (reingreso > 0) {
+            await productionApi.upsertReingreso(mondayDate, p.id, reingreso)
           }
         })
       )
@@ -1588,8 +1621,8 @@ function StockCloseGrid({ products }: { products: Product[] }) {
     }
   }
 
-  const updateField = (productId: string, field: 'sobrante' | 'consumo_interno' | 'merma', val: string) => {
-    setPending((prev) => ({ ...prev, [productId]: { ...(prev[productId] || { sobrante: '', consumo_interno: '', merma: '' }), [field]: val } }))
+  const updateField = (productId: string, field: 'sobrante' | 'consumo_interno' | 'merma' | 'reingreso', val: string) => {
+    setPending((prev) => ({ ...prev, [productId]: { ...(prev[productId] || { sobrante: '', consumo_interno: '', merma: '', reingreso: '' }), [field]: val } }))
   }
 
   return (
@@ -1655,7 +1688,12 @@ function StockCloseGrid({ products }: { products: Product[] }) {
           <p className={`text-lg font-black ${grandTotals.margen >= 0 ? 'text-green-700' : 'text-red-600'}`}>{formatPrice(grandTotals.margen)}</p>
         </div>
       </div>
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <div className="bg-cyan-50 rounded-xl p-2 text-center">
+          <p className="text-[9px] font-bold text-cyan-600 uppercase tracking-widest mb-0.5">Reingreso</p>
+          <p className="text-lg font-black text-cyan-700">{grandTotals.reingreso}</p>
+          <p className="text-[10px] text-cyan-500">{formatPrice(grandTotals.costoReingreso)}</p>
+        </div>
         <div className="bg-amber-50 rounded-xl p-2 text-center">
           <p className="text-[9px] font-bold text-amber-600 uppercase tracking-widest mb-0.5">Sobrante</p>
           <p className="text-lg font-black text-amber-700">{grandTotals.sobrante}</p>
@@ -1674,13 +1712,17 @@ function StockCloseGrid({ products }: { products: Product[] }) {
       </div>
 
       {/* Verificación: costo vendido + costo no vendido (sobrante+consumo+merma) debe dar
-          el mismo total que "Costo total producción" en la pestaña Producción */}
+          el costo de TODO lo disponible esta semana (producción nueva + reingreso).
+          Ojo: esto ya NO es lo mismo que "Costo total producción" de la pestaña Producción
+          cuando hay reingreso — ese solo mide lo cocinado esta semana (lo que genera gasto). */}
       <div className="rounded-xl p-3 flex items-center justify-between bg-gray-50 border border-gray-100">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">Costo total producción</p>
-          <p className="text-[10px] text-gray-400">Vendido ({formatPrice(grandTotals.costo)}) + sobrante + consumo interno + merma — debe coincidir con la pestaña Producción</p>
+          <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">Costo total disponible esta semana</p>
+          <p className="text-[10px] text-gray-400">
+            Producción nueva ({formatPrice(costoTotalDisponible - grandTotals.costoReingreso)}) + Reingreso ({formatPrice(grandTotals.costoReingreso)}) — no es lo mismo que "Costo total producción" de la pestaña Producción si hubo reingreso
+          </p>
         </div>
-        <p className="text-xl font-black text-gray-700">{formatPrice(costoTotalProduccion)}</p>
+        <p className="text-xl font-black text-gray-700">{formatPrice(costoTotalDisponible)}</p>
       </div>
 
       {/* Cobrado por canal: de dónde vino la plata cobrada esta semana */}
@@ -1763,6 +1805,7 @@ function StockCloseGrid({ products }: { products: Product[] }) {
               <tr className={`border-b ${editMode ? 'bg-amber-50 border-amber-100' : 'bg-gray-50 border-gray-100'}`}>
                 <th className={`text-left px-4 py-3 font-bold text-gray-500 uppercase tracking-wider min-w-[200px] sticky left-0 z-10 ${editMode ? 'bg-amber-50' : 'bg-gray-50'}`}>Producto</th>
                 <th className="text-center px-2 py-3 font-bold text-teal-500 uppercase tracking-wider min-w-[70px]">Prod.</th>
+                <th className="text-center px-2 py-3 font-bold text-cyan-600 uppercase tracking-wider min-w-[80px]">Reingreso<br /><span className="normal-case font-normal text-[9px] text-cyan-400">sobrante semana pasada</span></th>
                 <th className="text-center px-2 py-3 font-bold text-amber-600 uppercase tracking-wider min-w-[80px]">Sobrante<br /><span className="normal-case font-normal text-[9px] text-amber-400">del conteo rápido</span></th>
                 <th className="text-center px-2 py-3 font-bold text-blue-500 uppercase tracking-wider min-w-[80px]">C. Interno</th>
                 <th className="text-center px-2 py-3 font-bold text-red-500 uppercase tracking-wider min-w-[70px]">Merma</th>
@@ -1786,18 +1829,27 @@ function StockCloseGrid({ products }: { products: Product[] }) {
                 return sortedGroups.map(([catKey, group]) => (
                   <>
                     <tr key={`cat-${catKey}`} className="bg-gray-100 border-t border-gray-200">
-                      <td colSpan={14} className="px-4 py-1.5 text-[10px] font-black text-gray-500 uppercase tracking-widest sticky left-0">
+                      <td colSpan={9} className="px-4 py-1.5 text-[10px] font-black text-gray-500 uppercase tracking-widest sticky left-0">
                         {group.name}
                       </td>
                     </tr>
                     {group.products.map((product) => {
                       const t = productTotals(product)
                       const bg = rowIdx++ % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'
-                      const pend = pending[product.id] || { sobrante: '', consumo_interno: '', merma: '' }
+                      const pend = pending[product.id] || { sobrante: '', consumo_interno: '', merma: '', reingreso: '' }
                       return (
                         <tr key={product.id} className={`border-b border-gray-50 ${bg}`}>
                           <td className={`px-4 py-2.5 font-medium text-gray-700 sticky left-0 z-10 ${bg}`}>{product.name}</td>
                           <td className="px-2 py-2 text-center font-black text-teal-600">{t.totalProduced || '—'}</td>
+                          <td className="px-2 py-2 text-center" title={lastWeekFridayCounts[product.id] ? `Sugerido: ${lastWeekFridayCounts[product.id]} (sobrante del conteo rápido de la semana pasada)` : 'Sin conteo rápido la semana pasada — cargalo a mano'}>
+                            {editMode ? (
+                              <input type="number" min="0" value={pend.reingreso} placeholder="0"
+                                onChange={(e) => updateField(product.id, 'reingreso', e.target.value)}
+                                className="w-16 text-center border border-cyan-300 rounded-lg px-1 py-1.5 text-xs font-bold text-cyan-700 focus:outline-none focus:ring-1 focus:ring-cyan-400 bg-cyan-50" />
+                            ) : (
+                              <span className="font-bold text-cyan-600">{t.reingreso || '—'}</span>
+                            )}
+                          </td>
                           <td className="px-2 py-2 text-center" title={fridayCounts[product.id] !== undefined ? 'Del conteo rápido de stock del viernes' : 'Cargado a mano — sin conteo rápido esta semana'}>
                             {editMode ? (
                               <input type="number" min="0" value={pend.sobrante} placeholder="0"
@@ -1841,6 +1893,7 @@ function StockCloseGrid({ products }: { products: Product[] }) {
               <tr className="bg-gray-100 border-t-2 border-gray-200">
                 <td className="px-4 py-3 font-black text-gray-700 sticky left-0 bg-gray-100 z-10">TOTALES</td>
                 <td className="px-2 py-3 text-center font-black text-teal-600">{grandTotals.produced}</td>
+                <td className="px-2 py-3 text-center font-black text-cyan-600">{grandTotals.reingreso}</td>
                 <td className="px-2 py-3 text-center font-black text-amber-600">{grandTotals.sobrante}</td>
                 <td className="px-2 py-3 text-center font-black text-blue-600">{grandTotals.consumo}</td>
                 <td className="px-2 py-3 text-center font-black text-red-500">{grandTotals.merma}</td>
