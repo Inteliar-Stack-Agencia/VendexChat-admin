@@ -105,15 +105,19 @@ export const productionApi = {
       }
     }
 
-    // Build sales map from order items — cobrado se prorratea por el paid_amount de la orden
-    // cuando está marcada paid/partial; si no, se asume cobrada de inmediato (venta de mostrador).
+    // Build sales map from order items. Un pedido "pending" todavía no se confirmó/entregó,
+    // así que no salió de stock — no cuenta como vendido. El monto cobrado se prorratea por
+    // el paid_amount real cuando está marcado paid/partial; si no está cobrado, es 0 (antes
+    // se asumía cobrado de inmediato, que era válido solo cuando no existía el tracking de
+    // payment_status por pedido — ahora todo pedido nuevo arranca en "pending" sin cobrar).
     const sales: Record<string, Record<string, { qty: number; revenue: number; cobrado: number }>> = {}
     for (const order of salesData) {
+      if (order.status === 'pending') continue
       const date = order.created_at.split('T')[0]
       const items = order.order_items || []
       const itemsTotal = items.reduce((s, it) => s + Number(it.subtotal ?? it.quantity * it.unit_price), 0)
       const usesPaidAmount = (order.payment_status === 'paid' || order.payment_status === 'partial') && order.paid_amount != null
-      const collectedRatio = usesPaidAmount && itemsTotal > 0 ? Number(order.paid_amount) / itemsTotal : 1
+      const collectedRatio = usesPaidAmount && itemsTotal > 0 ? Number(order.paid_amount) / itemsTotal : 0
       for (const item of items) {
         if (!item.product_id) continue
         const subtotal = Number(item.subtotal ?? item.quantity * item.unit_price)
@@ -166,10 +170,10 @@ export const productionApi = {
     const storeId = await getStoreId()
     const { data, error } = await supabase
       .from('orders')
-      .select('total, metadata, status, payment_status, paid_amount')
+      .select('total, paid_amount, metadata')
       .eq('store_id', storeId)
       .is('invoice_id', null)
-      .neq('status', 'cancelled')
+      .in('payment_status', ['paid', 'partial'])
       .gte('created_at', `${weekStart}T00:00:00`)
       .lte('created_at', `${weekEnd}T23:59:59`)
     if (error) throw error
@@ -178,8 +182,7 @@ export const productionApi = {
     for (const order of (data || [])) {
       const pm = ((order.metadata as Record<string, unknown> | null)?.payment_method as string) || 'other'
       const bucket = pm === 'mercadopago' ? 'qr' : (pm in totals ? pm : 'other')
-      const usesPaidAmount = (order.payment_status === 'paid' || order.payment_status === 'partial') && order.paid_amount != null
-      const cobrado = usesPaidAmount ? Number(order.paid_amount) : Number(order.total)
+      const cobrado = order.paid_amount != null ? Number(order.paid_amount) : Number(order.total)
       totals[bucket] += cobrado
     }
     return totals
