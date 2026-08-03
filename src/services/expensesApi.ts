@@ -106,9 +106,10 @@ export const expensesApi = {
   // - Si la tienda tiene una satélite de despacho B2B (ej. CABA ← Empresas), suma también
   //   las facturas pagadas de esa satélite.
   // - Si la tienda ES una satélite absorbida por otra (ej. Empresas), no muestra ingresos acá.
-  // - Pedidos sueltos (sin invoice_id, venta normal de mostrador/web): si se marcó pago manual
-  //   (payment_status paid/partial), usa paid_amount; si no, usa el total calculado desde items
-  //   (columna `orders.total` puede haber quedado desactualizada).
+  // - Pedidos sueltos (sin invoice_id, venta normal de mostrador/web): solo cuenta los
+  //   marcados como cobrados (payment_status paid/partial), por paid_amount (no el total
+  //   del pedido, que puede diferir por descuento/negociación) y en la fecha de paid_at.
+  //   Un pedido "pending" no cuenta como ingreso hasta que se marque cobrado de verdad.
   // Cada fila trae además, sin afectar `total` (que sigue siendo el ingreso neto real):
   // - `lostBalance`: diferencia entre lo facturado y lo cobrado en facturas de empresas
   //   (descuentos/negociación al pagar).
@@ -166,11 +167,18 @@ export const expensesApi = {
       }
     })
 
+    // Solo pedidos realmente cobrados (payment_status paid/partial con paid_amount cargado).
+    // Antes, un pedido sin marcar como pagado contaba igual como ingreso pleno en la fecha
+    // de creación — válido cuando no existía tracking de pago por pedido, pero hoy todo
+    // pedido nuevo arranca en "pending" sin cobrar, así que ese fallback inflaba ventas
+    // que en realidad seguían pendientes de cobro (ver bug de productionApi.getWeekData).
     const { data: ordersData, error: ordersError } = await supabase
       .from('orders')
       .select('order_number, customer_name, created_at, status, payment_status, paid_amount, paid_at, metadata, order_items(quantity, unit_price, subtotal)')
       .eq('store_id', storeId)
       .is('invoice_id', null)
+      .in('payment_status', ['paid', 'partial'])
+      .not('paid_amount', 'is', null)
       .gte('created_at', from)
       .lte('created_at', to)
     if (ordersError) throw ordersError
@@ -182,24 +190,12 @@ export const expensesApi = {
         const itemsTotal = (o.order_items || []).reduce((s: number, it: { quantity: number; unit_price: number; subtotal: number | null }) =>
           s + Number(it.subtotal ?? it.quantity * it.unit_price), 0)
         const label = `#${o.order_number || ''} ${o.customer_name || ''}`.trim()
-
-        if ((o.payment_status === 'paid' || o.payment_status === 'partial') && o.paid_amount != null) {
-          const total = Number(o.paid_amount)
-          return {
-            created_at: o.paid_at || o.created_at,
-            total,
-            mpFeeLoss: hasMpFee ? total * mpFeePct / 100 : 0,
-            lostBalance: Math.max(0, itemsTotal - total),
-            type: 'order',
-            label,
-            grossAmount: itemsTotal,
-          }
-        }
+        const total = Number(o.paid_amount)
         return {
-          created_at: o.created_at,
-          total: itemsTotal,
-          mpFeeLoss: hasMpFee ? itemsTotal * mpFeePct / 100 : 0,
-          lostBalance: 0,
+          created_at: o.paid_at || o.created_at,
+          total,
+          mpFeeLoss: hasMpFee ? total * mpFeePct / 100 : 0,
+          lostBalance: Math.max(0, itemsTotal - total),
           type: 'order',
           label,
           grossAmount: itemsTotal,
