@@ -635,6 +635,9 @@ function MonthlyExpensesView({ expenses, year, onYearChange, onEdit, onDelete }:
                                             </span>
                                           </div>
                                           <div className="flex items-center gap-2 shrink-0 ml-2">
+                                            {e.supplier?.name && (
+                                              <span className="text-gray-400 truncate max-w-[120px]">{e.supplier.name}</span>
+                                            )}
                                             <span className="font-bold text-gray-700">{formatPrice(e.amount)}</span>
                                             {editDeleteButtons(e)}
                                           </div>
