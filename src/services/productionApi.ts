@@ -175,14 +175,16 @@ export const productionApi = {
   // Cuánto se cobró en la semana (ventas directas, sin empresas) agrupado por medio de pago
   getWeekPaymentBreakdown: async (weekStart: string, weekEnd: string): Promise<Record<string, number>> => {
     const storeId = await getStoreId()
+    // Filtra por paid_at, no created_at — un pedido puede haberse creado otra semana y
+    // cobrarse recién esta (ver mismo fix en cashApi.getSalesByPaymentMethod).
     const { data, error } = await supabase
       .from('orders')
       .select('total, paid_amount, metadata')
       .eq('store_id', storeId)
       .is('invoice_id', null)
       .in('payment_status', ['paid', 'partial'])
-      .gte('created_at', `${weekStart}T00:00:00`)
-      .lte('created_at', `${weekEnd}T23:59:59`)
+      .gte('paid_at', `${weekStart}T00:00:00`)
+      .lte('paid_at', `${weekEnd}T23:59:59`)
     if (error) throw error
 
     const totals: Record<string, number> = { efectivo: 0, qr: 0, transferencia: 0, tarjeta: 0, other: 0 }

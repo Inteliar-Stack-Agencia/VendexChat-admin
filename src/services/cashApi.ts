@@ -50,11 +50,13 @@ export const cashApi = {
     return data as CashSession | null
   },
 
-  // Pull sales totals per payment method from Pedidos cobrados ese día (no por estado de
-  // preparación, sino por payment_status — un pedido puede estar "completado" y sin cobrar,
-  // o cobrado y aún en preparación). Usa el monto realmente cobrado (paid_amount), no el total
-  // teórico. Excluye pedidos facturados a una empresa (invoice_id) — esos se cobran y
-  // controlan desde company_invoices, no acá.
+  // Pull sales totals per payment method from Pedidos cobrados ese día. Filtra por paid_at
+  // (cuándo se marcó cobrado), no por created_at (cuándo se creó el pedido) — Caja es un
+  // control de efectivo del día, y un pedido puede haberse creado hace días y cobrarse
+  // recién hoy (ej. delivery a pagar contra entrega). Si filtrara por created_at, ese cobro
+  // de hoy nunca aparecería en la caja de hoy. Usa el monto realmente cobrado (paid_amount),
+  // no el total teórico. Excluye pedidos facturados a una empresa (invoice_id) — esos se
+  // cobran y controlan desde company_invoices, no acá.
   getSalesByPaymentMethod: async (date: string) => {
     const storeId = await getStoreId()
     const { data, error } = await supabase
@@ -63,8 +65,8 @@ export const cashApi = {
       .eq('store_id', storeId)
       .is('invoice_id', null)
       .in('payment_status', ['paid', 'partial'])
-      .gte('created_at', `${date}T00:00:00`)
-      .lte('created_at', `${date}T23:59:59`)
+      .gte('paid_at', `${date}T00:00:00`)
+      .lte('paid_at', `${date}T23:59:59`)
     if (error) throw error
 
     const totals = {
