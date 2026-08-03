@@ -162,6 +162,87 @@ export const ordersApi = {
         return data as Order
     },
 
+    // Reemplaza los items de un pedido ya creado — para cuando lo que se despachó
+    // termina siendo distinto a lo pedido originalmente (cambios/agregados de último
+    // momento). Recalcula subtotal/total y ajusta stock por la diferencia (no el total),
+    // para no descontar dos veces lo que ya se había descontado al crear el pedido.
+    updateItems: async (
+        orderId: string | number,
+        items: { product_id: string | null; product_name: string; quantity: number; unit_price: number; subtotal: number }[],
+        subtotal: number,
+        total: number,
+    ) => {
+        const { data: oldItems, error: oldError } = await supabase
+            .from('order_items')
+            .select('product_id, quantity')
+            .eq('order_id', orderId)
+        if (oldError) throw oldError
+
+        const { error: deleteError } = await supabase
+            .from('order_items')
+            .delete()
+            .eq('order_id', orderId)
+        if (deleteError) throw deleteError
+
+        if (items.length > 0) {
+            const { error: insertError } = await supabase
+                .from('order_items')
+                .insert(items.map(item => ({
+                    order_id: orderId,
+                    product_id: item.product_id,
+                    product_name: item.product_name,
+                    quantity: item.quantity,
+                    unit_price: item.unit_price,
+                    subtotal: item.subtotal,
+                })))
+            if (insertError) throw insertError
+        }
+
+        const { data, error: updateError } = await supabase
+            .from('orders')
+            .update({ subtotal, total })
+            .eq('id', orderId)
+            .select('*, order_items(*, products(name))')
+            .single()
+        if (updateError) throw updateError
+
+        // Ajustar stock solo por la DIFERENCIA entre lo viejo y lo nuevo — un producto que
+        // ya estaba en el pedido y sigue con la misma cantidad no debe tocarse.
+        const oldQtyByProduct: Record<string, number> = {}
+        for (const oi of oldItems || []) {
+            if (!oi.product_id) continue
+            oldQtyByProduct[oi.product_id] = (oldQtyByProduct[oi.product_id] || 0) + oi.quantity
+        }
+        const newQtyByProduct: Record<string, number> = {}
+        for (const item of items) {
+            if (!item.product_id) continue
+            newQtyByProduct[item.product_id] = (newQtyByProduct[item.product_id] || 0) + item.quantity
+        }
+        const affectedProductIds = [...new Set([...Object.keys(oldQtyByProduct), ...Object.keys(newQtyByProduct)])]
+        if (affectedProductIds.length > 0) {
+            const { data: affectedProducts } = await supabase
+                .from('products')
+                .select('id, stock, unlimited_stock')
+                .in('id', affectedProductIds)
+            if (affectedProducts) {
+                await Promise.all(
+                    affectedProducts
+                        .filter(p => !p.unlimited_stock)
+                        .map(p => {
+                            const delta = (oldQtyByProduct[p.id] || 0) - (newQtyByProduct[p.id] || 0)
+                            if (delta === 0) return Promise.resolve(null)
+                            return supabase
+                                .from('products')
+                                .update({ stock: Math.max(0, (p.stock || 0) + delta) })
+                                .eq('id', p.id)
+                        })
+                )
+            }
+        }
+
+        return normalizeOrder(data)
+    },
+
     remove: async (id: string | number) => {
         const { error: itemsError } = await supabase
             .from('order_items')

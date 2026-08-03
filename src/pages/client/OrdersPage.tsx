@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Link } from 'react-router-dom'
-import { Eye, ShoppingCart, Printer, Archive, ArchiveRestore, Trash2, Search, CheckCircle2, Circle } from 'lucide-react'
+import { Eye, ShoppingCart, Printer, Archive, ArchiveRestore, Trash2, Search, CheckCircle2, Circle, Pencil } from 'lucide-react'
 import { Card, EmptyState, Pagination, Button, ConfirmDialog, showToast, Modal, Input } from '../../components/common'
 import { ordersApi } from '../../services/api'
 import { orderPaymentsApi, type PaymentMethod } from '../../services/orderPaymentsApi'
+import { productsApi } from '../../services/productsApi'
 import { getStoreId } from '../../services/coreApi'
 import { supabase } from '../../supabaseClient'
-import { Order } from '../../types'
+import { Order, Product } from '../../types'
 import { formatPrice, formatDate, orderStatusConfig } from '../../utils/helpers'
 import { useAuth } from '../../contexts/AuthContext'
 
@@ -29,6 +30,136 @@ const PAYMENT_METHOD_OPTIONS: { value: PaymentMethod; label: string }[] = [
   { value: 'tarjeta', label: 'Tarjeta' },
 ]
 
+// ─── Editar productos del pedido ────────────────────────────────────────────────
+
+interface EditItem {
+  product_id: string | null
+  product_name: string
+  quantity: number
+  unit_price: number
+}
+
+function EditOrderItemsModal({ order, onSave, onClose }: {
+  order: Order
+  onSave: (items: { product_id: string | null; product_name: string; quantity: number; unit_price: number; subtotal: number }[]) => Promise<void>
+  onClose: () => void
+}) {
+  const [items, setItems] = useState<EditItem[]>(
+    order.items.map(i => ({ product_id: i.product_id, product_name: i.product_name, quantity: i.quantity, unit_price: i.unit_price }))
+  )
+  const [products, setProducts] = useState<Product[]>([])
+  const [search, setSearch] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    productsApi.list({ limit: 500 }).then(res => setProducts(res.data.filter(p => p.is_active))).catch(() => {})
+  }, [])
+
+  const filteredProducts = search.trim()
+    ? products.filter(p => p.name.toLowerCase().includes(search.toLowerCase())).slice(0, 8)
+    : []
+
+  const addProduct = (p: Product) => {
+    setItems(prev => {
+      const existing = prev.find(i => i.product_id === p.id)
+      if (existing) return prev.map(i => i.product_id === p.id ? { ...i, quantity: i.quantity + 1 } : i)
+      return [...prev, { product_id: p.id, product_name: p.name, quantity: 1, unit_price: Number(p.price || 0) }]
+    })
+    setSearch('')
+  }
+
+  const updateQty = (idx: number, delta: number) => {
+    setItems(prev => prev.map((it, i) => i === idx ? { ...it, quantity: Math.max(1, it.quantity + delta) } : it))
+  }
+
+  const removeItem = (idx: number) => {
+    setItems(prev => prev.filter((_, i) => i !== idx))
+  }
+
+  const total = items.reduce((s, it) => s + it.quantity * it.unit_price, 0)
+
+  const handleSubmit = async () => {
+    if (items.length === 0) {
+      showToast('error', 'El pedido necesita al menos un producto')
+      return
+    }
+    setSaving(true)
+    try {
+      await onSave(items.map(it => ({
+        product_id: it.product_id,
+        product_name: it.product_name,
+        quantity: it.quantity,
+        unit_price: it.unit_price,
+        subtotal: it.quantity * it.unit_price,
+      })))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Modal isOpen onClose={onClose} title={`Editar productos — #${order.order_number || order.id.slice(0, 8)}`} size="lg">
+      <div className="space-y-4">
+        <p className="text-xs text-gray-400">Ajustá lo que realmente se despachó — puede diferir de lo pedido originalmente.</p>
+
+        <div className="relative">
+          <Input
+            placeholder="Buscar producto para agregar..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          {filteredProducts.length > 0 && (
+            <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-56 overflow-y-auto">
+              {filteredProducts.map(p => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => addProduct(p)}
+                  className="w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-gray-50 text-left"
+                >
+                  <span>{p.name}</span>
+                  <span className="text-gray-400 text-xs">{formatPrice(Number(p.price || 0))}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="divide-y divide-gray-100 border border-gray-100 rounded-lg">
+          {items.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-6">Sin productos — buscá arriba para agregar</p>
+          ) : items.map((it, idx) => (
+            <div key={idx} className="flex items-center justify-between gap-2 px-3 py-2">
+              <span className="text-sm font-medium text-gray-800 flex-1 truncate">{it.product_name}</span>
+              <div className="flex items-center gap-1">
+                <button type="button" onClick={() => updateQty(idx, -1)} className="w-6 h-6 rounded-full border border-gray-200 text-gray-500 hover:bg-gray-50">−</button>
+                <span className="w-6 text-center text-sm font-bold">{it.quantity}</span>
+                <button type="button" onClick={() => updateQty(idx, 1)} className="w-6 h-6 rounded-full border border-gray-200 text-gray-500 hover:bg-gray-50">+</button>
+              </div>
+              <span className="text-sm font-bold text-gray-700 w-20 text-right">{formatPrice(it.quantity * it.unit_price)}</span>
+              <button type="button" onClick={() => removeItem(idx)} className="p-1 text-gray-300 hover:text-red-500">
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex justify-between items-center bg-gray-50 rounded-lg px-3 py-2">
+          <span className="text-xs font-semibold text-gray-500">Nuevo subtotal</span>
+          <span className="text-sm font-black text-gray-800">{formatPrice(total)}</span>
+        </div>
+
+        <div className="flex gap-3 pt-2">
+          <Button variant="secondary" onClick={onClose} className="flex-1">Cancelar</Button>
+          <Button onClick={handleSubmit} loading={saving} className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white">
+            Guardar cambios
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
 export default function OrdersPage() {
   useAuth()
   const [orders, setOrders] = useState<Order[]>([])
@@ -48,6 +179,7 @@ export default function OrdersPage() {
   const [paymentAmount, setPaymentAmount] = useState('')
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('efectivo')
   const [savingPayment, setSavingPayment] = useState(false)
+  const [editItemsOrder, setEditItemsOrder] = useState<Order | null>(null)
 
   const isArchived = (order: Order) => Boolean((order.metadata as Record<string, unknown> | null)?.archived)
 
@@ -161,6 +293,29 @@ export default function OrdersPage() {
     setSelectedOrderIds(prev => prev.includes(orderId)
       ? prev.filter(id => id !== orderId)
       : [...prev, orderId])
+  }
+
+  const openEditItems = async (orderId: string) => {
+    try {
+      const full = await ordersApi.get(orderId)
+      setEditItemsOrder(full)
+    } catch {
+      showToast('error', 'Error al cargar el pedido')
+    }
+  }
+
+  const handleSaveItems = async (items: { product_id: string | null; product_name: string; quantity: number; unit_price: number; subtotal: number }[]) => {
+    if (!editItemsOrder) return
+    const subtotal = items.reduce((s, i) => s + i.subtotal, 0)
+    const total = subtotal + (editItemsOrder.delivery_cost || 0)
+    try {
+      const updated = await ordersApi.updateItems(editItemsOrder.id, items, subtotal, total)
+      setOrders(prev => prev.map(o => o.id === updated.id ? { ...o, items: updated.items, subtotal: updated.subtotal, total: updated.total } : o))
+      showToast('success', 'Productos actualizados')
+      setEditItemsOrder(null)
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : 'Error al guardar')
+    }
   }
 
   const handlePrint = async (orderId: string) => {
@@ -556,6 +711,13 @@ export default function OrdersPage() {
                           >
                             <Printer className="w-5 h-5" />
                           </button>
+                          <button
+                            onClick={() => openEditItems(order.id)}
+                            className="p-2.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-600 hover:text-amber-700 border border-amber-100"
+                            title="Editar productos despachados"
+                          >
+                            <Pencil className="w-5 h-5" />
+                          </button>
                           <Link
                             to={`/orders/${order.id}`}
                             className="p-2.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-600 hover:text-indigo-700 border border-indigo-100"
@@ -637,6 +799,14 @@ export default function OrdersPage() {
           </div>
         )}
       </Modal>
+
+      {editItemsOrder && (
+        <EditOrderItemsModal
+          order={editItemsOrder}
+          onSave={handleSaveItems}
+          onClose={() => setEditItemsOrder(null)}
+        />
+      )}
 
       <ConfirmDialog
         isOpen={!!pendingAction}
