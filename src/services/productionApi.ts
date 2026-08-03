@@ -255,6 +255,39 @@ export const productionApi = {
     if (error) throw error
   },
 
+  // Plata vendida por producto, cargada a mano (reemplaza el intento de derivarla de Pedidos).
+  getWeekSalesAmounts: async (weekStart: string, weekEnd: string): Promise<Record<string, Record<string, number>>> => {
+    const storeId = await getStoreId()
+    const { data, error } = await supabase
+      .from('sales_log')
+      .select('product_id, date, amount')
+      .eq('store_id', storeId)
+      .gte('date', weekStart)
+      .lte('date', weekEnd)
+    if (error) throw error
+    const map: Record<string, Record<string, number>> = {}
+    for (const row of data || []) {
+      if (!map[row.product_id]) map[row.product_id] = {}
+      map[row.product_id][row.date] = Number(row.amount)
+    }
+    return map
+  },
+
+  saveWeekSalesAmounts: async (weekDates: string[], entries: Record<string, Record<string, number>>): Promise<void> => {
+    const storeId = await getStoreId()
+    const rows: { store_id: string; date: string; product_id: string; amount: number }[] = []
+    for (const [productId, datemap] of Object.entries(entries)) {
+      for (const date of weekDates) {
+        rows.push({ store_id: storeId, date, product_id: productId, amount: datemap[date] ?? 0 })
+      }
+    }
+    if (rows.length === 0) return
+    const { error } = await supabase
+      .from('sales_log')
+      .upsert(rows, { onConflict: 'store_id,date,product_id' })
+    if (error) throw error
+  },
+
   // Cantidad producida por producto en un día puntual (para generar etiquetas)
   getDayEntries: async (date: string): Promise<{ product_id: string; quantity: number }[]> => {
     const storeId = await getStoreId()

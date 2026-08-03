@@ -1842,204 +1842,249 @@ function StockCloseGrid({ products }: { products: Product[] }) {
   )
 }
 
-// ─── POS Sales Grid ───────────────────────────────────────────────────────────
+// ─── Sales Grid (carga manual de $$$, no depende de Pedidos) ──────────────────
 
-function POSSalesGrid({ products }: { products: Product[] }) {
+function SalesGrid({ products }: { products: Product[] }) {
   const [weekStart, setWeekStart] = useState<Date>(() => getWeekStart(new Date()))
-  const [weekData, setWeekData] = useState<Awaited<ReturnType<typeof productionApi.getWeekData>> | null>(null)
+  const [salesData, setSalesData] = useState<Record<string, Record<string, number>>>({})
   const [loading, setLoading] = useState(true)
+  const [editMode, setEditMode] = useState(false)
+  const [pending, setPending] = useState<Record<string, Record<string, string>>>({})
+  const [saving, setSaving] = useState(false)
 
-  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
+  const allWeekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
+  const weekDays = allWeekDays.filter(d => d.getDay() >= 1 && d.getDay() <= 5)
   const weekStartISO = toISO(weekStart)
-  const weekEndISO = toISO(weekDays[6])
-  const weekLabel = `${weekStart.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })} – ${weekDays[6].toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })}`
+  const weekEndISO = toISO(allWeekDays[6])
+  const weekLabel = `${weekStart.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })} – ${weekDays[weekDays.length - 1].toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })}`
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const data = await productionApi.getWeekData(weekStartISO, weekEndISO)
-      setWeekData(data)
+      const data = await productionApi.getWeekSalesAmounts(weekStartISO, weekEndISO)
+      setSalesData(data)
     } catch {
-      showToast('error', 'Error al cargar ventas POS')
+      showToast('error', 'Error al cargar ventas')
     } finally {
       setLoading(false)
     }
   }, [weekStartISO, weekEndISO])
 
   useEffect(() => { load() }, [load])
+  useEffect(() => { setEditMode(false); setPending({}) }, [weekStartISO])
 
-  const trackedProducts = products.filter(p => p.track_pos_sales)
+  const activeProducts = products.filter(p => p.is_active)
 
-  // Group by category
-  const categories = [...new Set(trackedProducts.map(p => p.category_name || 'Sin categoría'))]
-  type CategoryGroup = { name: string; products: Product[] }
-  const grouped: CategoryGroup[] = categories.map(name => ({
-    name,
-    products: trackedProducts.filter(p => (p.category_name || 'Sin categoría') === name),
-  }))
+  const groups = (() => {
+    const byCategory: Record<string, Product[]> = {}
+    for (const p of activeProducts) {
+      const key = p.category_name || 'Sin categoría'
+      if (!byCategory[key]) byCategory[key] = []
+      byCategory[key].push(p)
+    }
+    return Object.entries(byCategory)
+      .map(([name, items]) => ({ name, items: items.sort((a, b) => a.name.localeCompare(b.name, 'es')) }))
+      .sort((a, b) => a.name.localeCompare(b.name, 'es'))
+  })()
 
-  const getSalesQty = (productId: string, date: string) =>
-    weekData?.sales[productId]?.[date]?.qty ?? 0
+  const getAmount = (productId: string, date: string): number => salesData[productId]?.[date] ?? 0
 
-  const getSalesRevenue = (productId: string, date: string) =>
-    weekData?.sales[productId]?.[date]?.revenue ?? 0
+  const getVal = (productId: string, date: string): string => {
+    if (pending[productId]?.[date] !== undefined) return pending[productId][date]
+    const v = getAmount(productId, date)
+    return v === 0 ? '' : String(v)
+  }
 
-  const getSalesCobrado = (productId: string, date: string) =>
-    weekData?.sales[productId]?.[date]?.cobrado ?? 0
+  const handleChange = (productId: string, date: string, val: string) => {
+    setPending(prev => ({ ...prev, [productId]: { ...(prev[productId] || {}), [date]: val } }))
+  }
 
-  const weekSalesQty = (productId: string) =>
-    weekDays.reduce((s, d) => s + getSalesQty(productId, toISO(d)), 0)
+  const productWeekTotal = (productId: string) =>
+    weekDays.reduce((s, d) => {
+      const iso = toISO(d)
+      const pv = pending[productId]?.[iso]
+      return s + (pv !== undefined ? (parseFloat(pv) || 0) : getAmount(productId, iso))
+    }, 0)
 
-  const weekSalesRevenue = (productId: string) =>
-    weekDays.reduce((s, d) => s + getSalesRevenue(productId, toISO(d)), 0)
+  const dayTotal = (date: string) =>
+    activeProducts.reduce((s, p) => {
+      const pv = pending[p.id]?.[date]
+      return s + (pv !== undefined ? (parseFloat(pv) || 0) : getAmount(p.id, date))
+    }, 0)
 
-  const weekSalesCobrado = (productId: string) =>
-    weekDays.reduce((s, d) => s + getSalesCobrado(productId, toISO(d)), 0)
+  const grandTotal = activeProducts.reduce((s, p) => s + productWeekTotal(p.id), 0)
 
-  const weekProductCost = (productId: string) =>
-    weekData?.costs[productId] ?? (products.find((p) => p.id === productId)?.cost_price ?? null)
+  const enterEditMode = () => {
+    const init: Record<string, Record<string, string>> = {}
+    for (const p of activeProducts) {
+      init[p.id] = {}
+      for (const d of weekDays) {
+        const iso = toISO(d)
+        const v = getAmount(p.id, iso)
+        init[p.id][iso] = v === 0 ? '' : String(v)
+      }
+    }
+    setPending(init)
+    setEditMode(true)
+  }
 
-  const totalQty = trackedProducts.reduce((s, p) => s + weekSalesQty(p.id), 0)
-  const totalRevenue = trackedProducts.reduce((s, p) => s + weekSalesRevenue(p.id), 0)
-  const totalCobrado = trackedProducts.reduce((s, p) => s + weekSalesCobrado(p.id), 0)
-  const totalCosto = trackedProducts.reduce((s, p) => s + weekSalesQty(p.id) * (weekProductCost(p.id) ?? 0), 0)
-  const totalMargen = totalRevenue - totalCosto
-  const totalPendiente = Math.max(0, totalRevenue - totalCobrado)
+  const cancelEdit = () => {
+    setEditMode(false)
+    setPending({})
+  }
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      const weekDatesISO = weekDays.map(toISO)
+      const entries: Record<string, Record<string, number>> = {}
+      for (const p of activeProducts) {
+        entries[p.id] = {}
+        for (const d of weekDatesISO) {
+          entries[p.id][d] = parseFloat(pending[p.id]?.[d] || '0') || 0
+        }
+      }
+      await productionApi.saveWeekSalesAmounts(weekDatesISO, entries)
+      showToast('success', 'Ventas guardadas')
+      setEditMode(false)
+      setPending({})
+      await load()
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : 'Error al guardar')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <div className="space-y-4">
+      {/* Edit / Save bar */}
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs text-gray-400">
+          {editMode ? 'Ingresá cuánto vendiste en pesos de cada producto, por día' : 'Cargá a mano cuánto vendiste — no depende de Pedidos ni del POS'}
+        </p>
+        <div className="flex items-center gap-2 shrink-0">
+          {editMode ? (
+            <>
+              <button onClick={cancelEdit}
+                className="px-4 py-2 text-sm font-semibold text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors">
+                Cancelar
+              </button>
+              <button onClick={handleSave} disabled={saving}
+                className="flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-white bg-teal-600 hover:bg-teal-700 rounded-xl transition-colors disabled:opacity-60 shadow-sm">
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                Guardar cambios
+              </button>
+            </>
+          ) : (
+            <button onClick={enterEditMode}
+              className="flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-colors shadow-sm">
+              <TrendingUp className="w-4 h-4" />
+              Cargar ventas
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* Week navigator */}
       <div className="flex items-center justify-between">
         <button onClick={() => setWeekStart(d => addDays(d, -7))} className="p-2 rounded-lg hover:bg-gray-100">
           <ChevronLeft className="w-5 h-5 text-gray-600" />
         </button>
-        <div className="flex items-center gap-2">
-          <CalendarDays className="w-4 h-4 text-teal-600" />
-          <span className="text-sm font-bold text-gray-700">{weekLabel}</span>
+        <div className="text-center">
+          <p className="text-sm font-bold text-gray-800">{weekLabel}</p>
+          <p className="text-xs text-gray-400">Ventas de la semana</p>
         </div>
         <button onClick={() => setWeekStart(d => addDays(d, 7))} className="p-2 rounded-lg hover:bg-gray-100">
           <ChevronRight className="w-5 h-5 text-gray-600" />
         </button>
       </div>
 
-      {/* Summary banners */}
-      <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
-        <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-3 text-center">
-          <div className="text-lg font-black text-indigo-700">{totalQty}</div>
-          <div className="text-xs text-indigo-500 font-semibold">Unidades</div>
-        </div>
-        <div className="bg-violet-50 border border-violet-200 rounded-xl p-3 text-center">
-          <div className="text-lg font-black text-violet-700">{formatPrice(totalRevenue)}</div>
-          <div className="text-xs text-violet-500 font-semibold">Facturado</div>
-        </div>
-        <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 text-center">
-          <div className="text-lg font-black text-orange-700">{formatPrice(totalCosto)}</div>
-          <div className="text-xs text-orange-500 font-semibold">Costo</div>
-        </div>
-        <div className={`rounded-xl p-3 text-center border ${totalMargen >= 0 ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
-          <div className={`text-lg font-black ${totalMargen >= 0 ? 'text-green-700' : 'text-red-600'}`}>{formatPrice(totalMargen)}</div>
-          <div className={`text-xs font-semibold ${totalMargen >= 0 ? 'text-green-500' : 'text-red-500'}`}>Margen</div>
-        </div>
-        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-center">
-          <div className="text-lg font-black text-emerald-700">{formatPrice(totalCobrado)}</div>
-          <div className="text-xs text-emerald-500 font-semibold">Cobrado</div>
-        </div>
-        <div className={`rounded-xl p-3 text-center border ${totalPendiente > 0 ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-200'}`}>
-          <div className={`text-lg font-black ${totalPendiente > 0 ? 'text-red-600' : 'text-gray-400'}`}>{formatPrice(totalPendiente)}</div>
-          <div className={`text-xs font-semibold ${totalPendiente > 0 ? 'text-red-500' : 'text-gray-400'}`}>Pend. cobro</div>
-        </div>
+      {/* Summary banner */}
+      <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-center">
+        <div className="text-2xl font-black text-emerald-700">{formatPrice(grandTotal)}</div>
+        <div className="text-xs text-emerald-600 font-semibold">Total vendido esta semana</div>
       </div>
 
-      {trackedProducts.length === 0 ? (
+      {activeProducts.length === 0 ? (
         <div className="text-center py-12 text-gray-400">
           <TrendingUp className="w-10 h-10 mx-auto mb-3 opacity-30" />
-          <p className="font-semibold">Sin productos marcados para ventas POS</p>
-          <p className="text-xs mt-1">Activá "Registrar ventas en POS" en la edición de cada producto</p>
+          <p className="font-semibold">Sin productos activos</p>
         </div>
       ) : loading ? (
         <div className="text-center py-10 text-gray-400 text-sm">Cargando...</div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-gray-200">
+        <div className={`overflow-x-auto rounded-xl border bg-white transition-colors ${editMode ? 'border-amber-200 ring-2 ring-amber-100' : 'border-gray-200'}`}>
           <table className="min-w-full text-sm">
             <thead>
-              <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="px-3 py-2 text-left text-xs font-black text-gray-500 uppercase tracking-wider min-w-[140px]">Producto</th>
+              <tr className={`border-b ${editMode ? 'bg-amber-50 border-amber-100' : 'bg-gray-50 border-gray-200'}`}>
+                <th className={`px-3 py-2 text-left text-xs font-black text-gray-500 uppercase tracking-wider min-w-[160px] sticky left-0 z-10 ${editMode ? 'bg-amber-50' : 'bg-gray-50'}`}>Producto</th>
                 {weekDays.map(d => (
-                  <th key={toISO(d)} className="px-2 py-2 text-center text-xs font-black text-gray-500 uppercase tracking-wider min-w-[60px]">
+                  <th key={toISO(d)} className="px-2 py-2 text-center text-xs font-black text-gray-500 uppercase tracking-wider min-w-[90px]">
                     <div>{DAY_SHORT[d.getDay()]}</div>
                     <div className="text-[10px] font-normal text-gray-400">{d.getDate()}</div>
                   </th>
                 ))}
-                <th className="px-2 py-2 text-center text-xs font-black text-indigo-600 uppercase tracking-wider">Cant.</th>
-                <th className="px-2 py-2 text-center text-xs font-black text-violet-600 uppercase tracking-wider">Facturado</th>
-                <th className="px-2 py-2 text-center text-xs font-black text-orange-600 uppercase tracking-wider">Costo</th>
-                <th className="px-2 py-2 text-center text-xs font-black text-green-600 uppercase tracking-wider">Margen</th>
-                <th className="px-2 py-2 text-center text-xs font-black text-emerald-600 uppercase tracking-wider">Cobrado</th>
-                <th className="px-2 py-2 text-center text-xs font-black text-red-500 uppercase tracking-wider">Pend. cobro</th>
+                <th className="px-2 py-2 text-center text-xs font-black text-emerald-600 uppercase tracking-wider">Total</th>
               </tr>
             </thead>
             <tbody>
-              {grouped.map(group => (
+              {groups.map(group => (
                 <>
                   <tr key={`cat-${group.name}`} className="bg-gray-100">
-                    <td colSpan={9 + 6} className="px-3 py-1.5 text-[10px] font-black text-gray-500 uppercase tracking-widest">
+                    <td colSpan={weekDays.length + 2} className="px-3 py-1.5 text-[10px] font-black text-gray-500 uppercase tracking-widest sticky left-0">
                       {group.name}
                     </td>
                   </tr>
-                  {group.products.map((product, i) => {
-                    const wQty = weekSalesQty(product.id)
-                    const wRev = weekSalesRevenue(product.id)
-                    const wCobrado = weekSalesCobrado(product.id)
-                    const wCosto = wQty * (weekProductCost(product.id) ?? 0)
-                    const wMargen = wRev - wCosto
-                    const wPendiente = Math.max(0, wRev - wCobrado)
-                    return (
-                      <tr key={product.id} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}>
-                        <td className="px-3 py-2 font-medium text-gray-800">{product.name}</td>
-                        {weekDays.map(d => {
-                          const qty = getSalesQty(product.id, toISO(d))
-                          return (
-                            <td key={toISO(d)} className="px-2 py-2 text-center text-xs text-gray-600">
-                              {qty > 0 ? <span className="font-bold text-indigo-700">{qty}</span> : <span className="text-gray-300">—</span>}
-                            </td>
-                          )
-                        })}
-                        <td className="px-2 py-2 text-center font-black text-indigo-700">{wQty || '—'}</td>
-                        <td className="px-2 py-2 text-center font-bold text-violet-600">{wRev > 0 ? formatPrice(wRev) : '—'}</td>
-                        <td className="px-2 py-2 text-center font-bold text-orange-500">{wCosto > 0 ? formatPrice(wCosto) : '—'}</td>
-                        <td className={`px-2 py-2 text-center font-bold ${wMargen > 0 ? 'text-green-600' : wMargen < 0 ? 'text-red-500' : 'text-gray-400'}`}>{(wRev > 0 || wCosto > 0) ? formatPrice(wMargen) : '—'}</td>
-                        <td className="px-2 py-2 text-center font-bold text-emerald-600">{wCobrado > 0 ? formatPrice(wCobrado) : '—'}</td>
-                        <td className={`px-2 py-2 text-center font-bold ${wPendiente > 0 ? 'text-red-600 bg-red-50' : 'text-gray-300'}`}>{wPendiente > 0 ? formatPrice(wPendiente) : '—'}</td>
-                      </tr>
-                    )
-                  })}
+                  {group.items.map((product, i) => (
+                    <tr key={product.id} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}>
+                      <td className="px-3 py-2 font-medium text-gray-800 sticky left-0 bg-inherit">{product.name}</td>
+                      {weekDays.map(d => {
+                        const iso = toISO(d)
+                        const amt = getAmount(product.id, iso)
+                        return (
+                          <td key={iso} className="px-2 py-1.5 text-center">
+                            {editMode ? (
+                              <input
+                                type="number" min="0" step="0.01" placeholder="0"
+                                value={getVal(product.id, iso)}
+                                onChange={(e) => handleChange(product.id, iso, e.target.value)}
+                                className="w-20 text-center border border-emerald-300 rounded-lg px-1 py-1 text-xs font-bold text-emerald-700 focus:outline-none focus:ring-1 focus:ring-emerald-400 bg-emerald-50"
+                              />
+                            ) : (
+                              <span className="text-xs text-gray-600">{amt > 0 ? formatPrice(amt) : <span className="text-gray-300">—</span>}</span>
+                            )}
+                          </td>
+                        )
+                      })}
+                      <td className="px-2 py-2 text-center font-black text-emerald-700">
+                        {productWeekTotal(product.id) > 0 ? formatPrice(productWeekTotal(product.id)) : '—'}
+                      </td>
+                    </tr>
+                  ))}
                 </>
               ))}
             </tbody>
             <tfoot>
               <tr className="bg-gray-100 border-t-2 border-gray-300">
-                <td className="px-3 py-3 text-xs font-black text-gray-600 uppercase">Total semana</td>
+                <td className="px-3 py-3 text-xs font-black text-gray-600 uppercase sticky left-0 bg-gray-100">Total semana</td>
                 {weekDays.map(d => {
-                  const dayQty = trackedProducts.reduce((s, p) => s + getSalesQty(p.id, toISO(d)), 0)
+                  const iso = toISO(d)
+                  const t = dayTotal(iso)
                   return (
-                    <td key={toISO(d)} className="px-2 py-3 text-center font-black text-indigo-700 text-xs">
-                      {dayQty || '—'}
+                    <td key={iso} className="px-2 py-3 text-center font-black text-gray-700 text-xs">
+                      {t > 0 ? formatPrice(t) : '—'}
                     </td>
                   )
                 })}
-                <td className="px-2 py-3 text-center font-black text-indigo-700">{totalQty}</td>
-                <td className="px-2 py-3 text-center font-black text-violet-700">{formatPrice(totalRevenue)}</td>
-                <td className="px-2 py-3 text-center font-black text-orange-600">{formatPrice(totalCosto)}</td>
-                <td className={`px-2 py-3 text-center font-black ${totalMargen >= 0 ? 'text-green-700' : 'text-red-600'}`}>{formatPrice(totalMargen)}</td>
-                <td className="px-2 py-3 text-center font-black text-emerald-700">{formatPrice(totalCobrado)}</td>
-                <td className={`px-2 py-3 text-center font-black ${totalPendiente > 0 ? 'text-red-600' : 'text-gray-400'}`}>{formatPrice(totalPendiente)}</td>
+                <td className="px-2 py-3 text-center font-black text-emerald-700">{formatPrice(grandTotal)}</td>
               </tr>
             </tfoot>
           </table>
         </div>
       )}
       <p className="text-[10px] text-gray-400 text-center">
-        Ventas registradas desde el POS · solo productos con "Registrar ventas en POS" activado
+        {editMode ? 'Los cambios no se guardan hasta que hagas clic en "Guardar cambios"' : 'Cargá manualmente cuánto vendiste cada día — no depende de Pedidos ni del POS'}
       </p>
     </div>
   )
@@ -2216,13 +2261,13 @@ export default function InventoryPage() {
             className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-bold transition-all ${tab === 'ventas' ? 'bg-white text-teal-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
           >
             <TrendingUp className="w-4 h-4" />
-            Ventas POS
+            Ventas
           </button>
         </div>
 
         {tab === 'produccion' && <ProductionGrid products={products} onCostUpdated={load} refreshKey={productionRefreshKey} />}
         {tab === 'stock' && <StockCloseGrid products={products} />}
-        {tab === 'ventas' && <POSSalesGrid products={products} />}
+        {tab === 'ventas' && <SalesGrid products={products} />}
 
         {showForm && <DayInputForm products={products} onSave={handleSaveInputs} onClose={() => setShowForm(false)} />}
         {showEgressForm && <DayEgressForm products={products} onSave={handleSaveEgresses} onClose={() => setShowEgressForm(false)} />}
