@@ -1543,6 +1543,7 @@ function BillingTab({ clients }: { clients: CompanyClient[] }) {
   const [extraItems, setExtraItems] = useState<CompanyInvoiceExtraItem[]>([])
   const [extraDesc, setExtraDesc] = useState('')
   const [extraAmount, setExtraAmount] = useState('')
+  const [extraMode, setExtraMode] = useState<'amount' | 'percent'>('amount')
   const [loadingPreview, setLoadingPreview] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [invoices, setInvoices] = useState<CompanyInvoice[]>([])
@@ -1607,9 +1608,19 @@ function BillingTab({ clients }: { clients: CompanyClient[] }) {
   const amounts = selectedClient ? companyDispatchApi.computeInvoiceAmounts(selectedSum, selectedClient.price_mode, selectedClient.iva_rate, selectedClient.discount_percentage) : null
 
   const addExtraItem = () => {
-    const amount = parseFloat(extraAmount)
-    if (!extraDesc.trim() || isNaN(amount) || amount === 0) { showToast('error', 'Cargá una descripción y un monto válido'); return }
-    setExtraItems(prev => [...prev, { description: extraDesc.trim(), amount }])
+    const raw = parseFloat(extraAmount)
+    if (!extraDesc.trim() || isNaN(raw) || raw === 0) { showToast('error', 'Cargá una descripción y un monto/porcentaje válido'); return }
+    // El % se calcula sobre el total de despachos + pedidos web tildados (sin contar
+    // otros ítems manuales ya agregados), y se guarda como monto fijo — igual que si lo
+    // hubieras tipeado directo en $, para no tocar el resto del flujo de facturación.
+    if (extraMode === 'percent') {
+      const baseSum = selectedDispatches.reduce((s, d) => s + companyDispatchApi.dispatchTotal(d), 0)
+        + selectedOrders.reduce((s, o) => s + o.total, 0)
+      const amount = (baseSum * raw) / 100
+      setExtraItems(prev => [...prev, { description: `${extraDesc.trim()} (${raw > 0 ? '+' : ''}${raw}%)`, amount }])
+    } else {
+      setExtraItems(prev => [...prev, { description: extraDesc.trim(), amount: raw }])
+    }
     setExtraDesc('')
     setExtraAmount('')
   }
@@ -1843,10 +1854,22 @@ function BillingTab({ clients }: { clients: CompanyClient[] }) {
                 </div>
               )}
               <div className="flex gap-2">
-                <input type="text" value={extraDesc} onChange={e => setExtraDesc(e.target.value)} placeholder="Ej: Costo de envío"
+                <input type="text" value={extraDesc} onChange={e => setExtraDesc(e.target.value)} placeholder="Ej: Costo de envío, Descuento"
                   className="flex-1 border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-300" />
-                <input type="number" value={extraAmount} onChange={e => setExtraAmount(e.target.value)} placeholder="Monto"
-                  className="w-28 border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+                <div className="flex rounded-lg border border-gray-200 overflow-hidden shrink-0">
+                  <button type="button" onClick={() => setExtraMode('amount')}
+                    className={`px-2 py-1.5 text-xs font-bold transition-colors ${extraMode === 'amount' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-400 hover:bg-gray-50'}`}>
+                    $
+                  </button>
+                  <button type="button" onClick={() => setExtraMode('percent')}
+                    className={`px-2 py-1.5 text-xs font-bold transition-colors ${extraMode === 'percent' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-400 hover:bg-gray-50'}`}>
+                    %
+                  </button>
+                </div>
+                <input type="number" value={extraAmount} onChange={e => setExtraAmount(e.target.value)}
+                  placeholder={extraMode === 'percent' ? 'Ej: -10' : 'Monto'}
+                  title={extraMode === 'percent' ? 'Positivo suma, negativo descuenta — sobre el total tildado arriba' : undefined}
+                  className="w-24 border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-300" />
                 <button onClick={addExtraItem} type="button"
                   className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg text-xs font-bold transition-colors">
                   Agregar
