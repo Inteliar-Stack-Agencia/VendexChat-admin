@@ -1380,6 +1380,9 @@ function StockCloseGrid({ products }: { products: Product[] }) {
   const [paymentBreakdown, setPaymentBreakdown] = useState<Record<string, number>>({})
   // Ventas de mostrador cargadas a mano esta semana (nunca pasaron por un Pedido)
   const [manualSales, setManualSales] = useState<ManualStockSale[]>([])
+  // Conteo rápido de stock del último día de la semana (viernes) — si existe, se usa
+  // como "sobrante" en vez de tener que cargarlo de nuevo a mano en el cierre.
+  const [fridayCounts, setFridayCounts] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
   // weekly close: one row per product — pending[productId][field]
   const [pending, setPending] = useState<Record<string, { sobrante: string; consumo_interno: string; merma: string }>>({})
@@ -1397,15 +1400,17 @@ function StockCloseGrid({ products }: { products: Product[] }) {
     setPending({})
     setEditMode(false)
     try {
-      const [data, dispatchItems, breakdown, manual] = await Promise.all([
+      const [data, dispatchItems, breakdown, manual, fridayCount] = await Promise.all([
         productionApi.getWeekData(weekStartISO, weekEndISO),
         companyDispatchApi.crossStoreDispatchItemsWithPaymentByDate(weekStartISO, weekEndISO).catch(() => []),
         productionApi.getWeekPaymentBreakdown(weekStartISO, weekEndISO).catch(() => ({})),
         productionApi.listManualSales(weekStartISO).catch(() => []),
+        productionApi.getDailyStockCount(toISO(weekDays[weekDays.length - 1])).catch(() => ({})),
       ])
       setWeekData(data)
       setPaymentBreakdown(breakdown)
       setManualSales(manual)
+      setFridayCounts(fridayCount)
       const byName: Record<string, number> = {}
       const paymentByName: Record<string, { facturado: number; cobrado: number }> = {}
       for (const item of dispatchItems) {
@@ -1422,6 +1427,9 @@ function StockCloseGrid({ products }: { products: Product[] }) {
     } finally {
       setLoading(false)
     }
+    // weekDays se deriva de weekStart en el mismo render que weekStartISO/weekEndISO,
+    // así que siempre está sincronizado — no hace falta como dependencia extra.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weekStartISO, weekEndISO])
 
   useEffect(() => { load() }, [load])
@@ -1441,9 +1449,15 @@ function StockCloseGrid({ products }: { products: Product[] }) {
     return total
   }
 
+  // "Sobrante" se toma del Conteo rápido de stock del viernes cuando existe (así no hay
+  // que cargarlo dos veces); si esa semana no se contó, cae al valor guardado a mano.
+  const getSobranteDefault = (productId: string): number =>
+    fridayCounts[productId] !== undefined ? fridayCounts[productId] : getSavedWeekField(productId, 'sobrante')
+
   const getField = (productId: string, field: 'sobrante' | 'consumo_interno' | 'merma'): number => {
     const pv = pending[productId]?.[field]
     if (pv !== undefined) return parseInt(pv) || 0
+    if (field === 'sobrante') return getSobranteDefault(productId)
     return getSavedWeekField(productId, field)
   }
 
@@ -1540,7 +1554,7 @@ function StockCloseGrid({ products }: { products: Product[] }) {
     const init: typeof pending = {}
     for (const p of activeProducts) {
       init[p.id] = {
-        sobrante: String(getSavedWeekField(p.id, 'sobrante') || ''),
+        sobrante: String(getSobranteDefault(p.id) || ''),
         consumo_interno: String(getSavedWeekField(p.id, 'consumo_interno') || ''),
         merma: String(getSavedWeekField(p.id, 'merma') || ''),
       }
@@ -1749,7 +1763,7 @@ function StockCloseGrid({ products }: { products: Product[] }) {
               <tr className={`border-b ${editMode ? 'bg-amber-50 border-amber-100' : 'bg-gray-50 border-gray-100'}`}>
                 <th className={`text-left px-4 py-3 font-bold text-gray-500 uppercase tracking-wider min-w-[200px] sticky left-0 z-10 ${editMode ? 'bg-amber-50' : 'bg-gray-50'}`}>Producto</th>
                 <th className="text-center px-2 py-3 font-bold text-teal-500 uppercase tracking-wider min-w-[70px]">Prod.</th>
-                <th className="text-center px-2 py-3 font-bold text-amber-600 uppercase tracking-wider min-w-[80px]">Sobrante</th>
+                <th className="text-center px-2 py-3 font-bold text-amber-600 uppercase tracking-wider min-w-[80px]">Sobrante<br /><span className="normal-case font-normal text-[9px] text-amber-400">del conteo rápido</span></th>
                 <th className="text-center px-2 py-3 font-bold text-blue-500 uppercase tracking-wider min-w-[80px]">C. Interno</th>
                 <th className="text-center px-2 py-3 font-bold text-red-500 uppercase tracking-wider min-w-[70px]">Merma</th>
                 <th className="text-center px-2 py-3 font-bold text-emerald-600 uppercase tracking-wider min-w-[70px]">Vendido</th>
@@ -1784,7 +1798,7 @@ function StockCloseGrid({ products }: { products: Product[] }) {
                         <tr key={product.id} className={`border-b border-gray-50 ${bg}`}>
                           <td className={`px-4 py-2.5 font-medium text-gray-700 sticky left-0 z-10 ${bg}`}>{product.name}</td>
                           <td className="px-2 py-2 text-center font-black text-teal-600">{t.totalProduced || '—'}</td>
-                          <td className="px-2 py-2 text-center">
+                          <td className="px-2 py-2 text-center" title={fridayCounts[product.id] !== undefined ? 'Del conteo rápido de stock del viernes' : 'Cargado a mano — sin conteo rápido esta semana'}>
                             {editMode ? (
                               <input type="number" min="0" value={pend.sobrante} placeholder="0"
                                 onChange={(e) => updateField(product.id, 'sobrante', e.target.value)}
