@@ -922,6 +922,10 @@ function ProductionGrid({ products, onCostUpdated, refreshKey }: { products: Pro
   const [editMode, setEditMode] = useState(false)
   const [pendingQty, setPendingQty] = useState<Record<string, Record<string, string>>>({})
   const [pendingCosts, setPendingCosts] = useState<Record<string, string>>({})
+  const [pendingReingreso, setPendingReingreso] = useState<Record<string, string>>({})
+  // Conteo rápido de stock del viernes de la semana ANTERIOR — sugerencia de cuánto se
+  // puede reingresar a la venta esta semana (lo que sobró y sigue en buen estado).
+  const [lastWeekFridayCounts, setLastWeekFridayCounts] = useState<Record<string, number>>({})
   const [saving, setSaving] = useState(false)
   const [generatingLabelsFor, setGeneratingLabelsFor] = useState<string | null>(null)
   const [loadingExpense, setLoadingExpense] = useState(false)
@@ -948,14 +952,21 @@ function ProductionGrid({ products, onCostUpdated, refreshKey }: { products: Pro
     setLoading(true)
     setPendingQty({})
     setPendingCosts({})
+    setPendingReingreso({})
     try {
-      const data = await productionApi.getWeekData(weekStartISO, weekEndISO)
+      const [data, lastFridayCount] = await Promise.all([
+        productionApi.getWeekData(weekStartISO, weekEndISO),
+        productionApi.getDailyStockCount(toISO(addDays(weekDays[weekDays.length - 1], -7))).catch(() => ({})),
+      ])
       setWeekData(data)
+      setLastWeekFridayCounts(lastFridayCount)
     } catch {
       showToast('error', 'Error al cargar producción')
     } finally {
       setLoading(false)
     }
+    // weekDays se deriva de weekStart en el mismo render que weekStartISO/weekEndISO.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weekStartISO, weekEndISO])
 
   useEffect(() => { load() }, [load])
@@ -983,10 +994,27 @@ function ProductionGrid({ products, onCostUpdated, refreshKey }: { products: Pro
     setEditMode(false)
     setPendingQty({})
     setPendingCosts({})
+    setPendingReingreso({})
   }, [weekStartISO])
 
   const getProduction = (productId: string, date: string): number =>
     weekData?.production[productId]?.[date] ?? 0
+
+  // Reingreso guardado esta semana (si ya se confirmó). Si todavía no se cargó nada,
+  // se sugiere el conteo del viernes de la semana pasada (lo que sobró y sigue vendible).
+  const getSavedReingreso = (productId: string): number => {
+    let total = 0
+    for (const day of weekDays) total += weekData?.reingresos[productId]?.[toISO(day)] ?? 0
+    return total
+  }
+
+  const getReingresoVal = (productId: string): string => {
+    if (pendingReingreso[productId] !== undefined) return pendingReingreso[productId]
+    const saved = getSavedReingreso(productId)
+    if (saved > 0) return String(saved)
+    const suggested = lastWeekFridayCounts[productId] ?? 0
+    return suggested > 0 ? String(suggested) : ''
+  }
 
   // Cost for this week: pendingCosts > production_log cost > product.cost_price
   const getWeekCost = (product: Product): number | null => {
@@ -1073,6 +1101,9 @@ function ProductionGrid({ products, onCostUpdated, refreshKey }: { products: Pro
     }
     setPendingQty(initQty)
     setPendingCosts(initCosts)
+    const initReingreso: Record<string, string> = {}
+    for (const p of activeProducts) initReingreso[p.id] = getReingresoVal(p.id)
+    setPendingReingreso(initReingreso)
     setEditMode(true)
   }
 
@@ -1080,6 +1111,7 @@ function ProductionGrid({ products, onCostUpdated, refreshKey }: { products: Pro
     setEditMode(false)
     setPendingQty({})
     setPendingCosts({})
+    setPendingReingreso({})
   }
 
   // Genera etiquetas (código único por unidad) para venta directa a partir de la producción
@@ -1132,10 +1164,23 @@ function ProductionGrid({ products, onCostUpdated, refreshKey }: { products: Pro
 
       await productionApi.saveWeekEntries(weekDatesISO, entries, costs, storeId)
 
+      // Reingreso se guarda aparte (no es producción nueva, no afecta el costo/gasto de
+      // esta semana) — anclado al lunes, un valor por semana por producto.
+      const mondayDate = weekDatesISO[0]
+      await Promise.all(
+        activeProducts.map(async (p) => {
+          const reingreso = parseInt(pendingReingreso[p.id] || '0') || 0
+          if (reingreso !== getSavedReingreso(p.id)) {
+            await productionApi.upsertReingreso(mondayDate, p.id, reingreso)
+          }
+        })
+      )
+
       showToast('success', 'Producción guardada')
       setEditMode(false)
       setPendingQty({})
       setPendingCosts({})
+      setPendingReingreso({})
       await load()
       onCostUpdated()
     } catch (err) {
@@ -1200,6 +1245,7 @@ function ProductionGrid({ products, onCostUpdated, refreshKey }: { products: Pro
         <div className="bg-gray-50 rounded-xl p-3 text-center">
           <p className="text-[9px] font-bold text-gray-500 uppercase tracking-widest mb-1">Costo total producción</p>
           <p className="text-2xl font-black text-gray-800">{formatPrice(totalProductionCost)}</p>
+          <p className="text-[9px] text-gray-400 mt-0.5">No incluye Reingreso — eso ya se pagó la semana pasada</p>
         </div>
         <div className="bg-orange-50 rounded-xl p-3 flex items-center justify-between gap-3">
           <div className="text-left">
@@ -1276,6 +1322,10 @@ function ProductionGrid({ products, onCostUpdated, refreshKey }: { products: Pro
                   )
                 })}
                 <th className="text-center px-2 py-3 font-bold text-teal-500 uppercase tracking-wider min-w-[70px]">Total</th>
+                <th className="text-center px-2 py-3 font-bold text-cyan-600 uppercase tracking-wider min-w-[90px]">
+                  Reingreso
+                  <span className="text-[9px] normal-case text-cyan-400 font-normal block">sobrante semana pasada · no genera gasto</span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -1296,7 +1346,7 @@ function ProductionGrid({ products, onCostUpdated, refreshKey }: { products: Pro
                 return sortedGroups.map(([catKey, group]) => (
                   <>
                     <tr key={`cat-${catKey}`} className="bg-gray-100 border-t border-gray-200">
-                      <td colSpan={4 + weekDays.length} className="px-4 py-1.5 text-[10px] font-black text-gray-500 uppercase tracking-widest sticky left-0">
+                      <td colSpan={5 + weekDays.length} className="px-4 py-1.5 text-[10px] font-black text-gray-500 uppercase tracking-widest sticky left-0">
                         {group.name}
                       </td>
                     </tr>
@@ -1347,6 +1397,19 @@ function ProductionGrid({ products, onCostUpdated, refreshKey }: { products: Pro
                             )
                           })}
                           <td className="px-2 py-2 text-center font-black text-teal-600">{produced || '—'}</td>
+                          <td className="px-2 py-2 text-center" title={lastWeekFridayCounts[product.id] ? `Sugerido: ${lastWeekFridayCounts[product.id]} (sobrante del conteo rápido de la semana pasada)` : 'Sin conteo rápido la semana pasada — cargalo a mano'}>
+                            {editMode ? (
+                              <input
+                                type="number" min="0"
+                                value={pendingReingreso[product.id] ?? ''}
+                                placeholder="0"
+                                onChange={(e) => setPendingReingreso((prev) => ({ ...prev, [product.id]: e.target.value }))}
+                                className="w-16 text-center border border-cyan-300 rounded-lg px-1 py-1.5 text-xs font-bold text-cyan-700 focus:outline-none focus:ring-1 focus:ring-cyan-400 bg-cyan-50"
+                              />
+                            ) : (
+                              <span className="font-bold text-cyan-600">{getSavedReingreso(product.id) || '—'}</span>
+                            )}
+                          </td>
                         </tr>
                       )
                     })}
@@ -1371,6 +1434,9 @@ function ProductionGrid({ products, onCostUpdated, refreshKey }: { products: Pro
                   )
                 })}
                 <td className="px-2 py-3 text-center font-black text-teal-600">{grandProduced}</td>
+                <td className="px-2 py-3 text-center font-black text-cyan-600">
+                  {activeProducts.reduce((s, p) => s + getSavedReingreso(p.id), 0) || '—'}
+                </td>
               </tr>
             </tfoot>
           </table>
@@ -1402,12 +1468,9 @@ function StockCloseGrid({ products }: { products: Product[] }) {
   // Conteo rápido de stock del último día de la semana (viernes) — si existe, se usa
   // como "sobrante" en vez de tener que cargarlo de nuevo a mano en el cierre.
   const [fridayCounts, setFridayCounts] = useState<Record<string, number>>({})
-  // Conteo del viernes de la semana ANTERIOR — sugerencia de cuánto se puede reingresar
-  // a la venta esta semana (lo que sobró y sigue en buen estado).
-  const [lastWeekFridayCounts, setLastWeekFridayCounts] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
   // weekly close: one row per product — pending[productId][field]
-  const [pending, setPending] = useState<Record<string, { sobrante: string; consumo_interno: string; merma: string; reingreso: string }>>({})
+  const [pending, setPending] = useState<Record<string, { sobrante: string; consumo_interno: string; merma: string }>>({})
   const [saving, setSaving] = useState(false)
   const [editMode, setEditMode] = useState(false)
 
@@ -1422,19 +1485,17 @@ function StockCloseGrid({ products }: { products: Product[] }) {
     setPending({})
     setEditMode(false)
     try {
-      const [data, dispatchItems, breakdown, manual, fridayCount, lastFridayCount] = await Promise.all([
+      const [data, dispatchItems, breakdown, manual, fridayCount] = await Promise.all([
         productionApi.getWeekData(weekStartISO, weekEndISO),
         companyDispatchApi.crossStoreDispatchItemsWithPaymentByDate(weekStartISO, weekEndISO).catch(() => []),
         productionApi.getWeekPaymentBreakdown(weekStartISO, weekEndISO).catch(() => ({})),
         productionApi.listManualSales(weekStartISO).catch(() => []),
         productionApi.getDailyStockCount(toISO(weekDays[weekDays.length - 1])).catch(() => ({})),
-        productionApi.getDailyStockCount(toISO(addDays(weekDays[weekDays.length - 1], -7))).catch(() => ({})),
       ])
       setWeekData(data)
       setPaymentBreakdown(breakdown)
       setManualSales(manual)
       setFridayCounts(fridayCount)
-      setLastWeekFridayCounts(lastFridayCount)
       const byName: Record<string, number> = {}
       const paymentByName: Record<string, { facturado: number; cobrado: number }> = {}
       for (const item of dispatchItems) {
@@ -1485,21 +1546,12 @@ function StockCloseGrid({ products }: { products: Product[] }) {
     return getSavedWeekField(productId, field)
   }
 
-  // Reingreso guardado esta semana (si ya se confirmó). Si todavía no se cargó nada,
-  // se sugiere el conteo del viernes de la semana pasada (lo que sobró y sigue vendible).
-  const getSavedReingreso = (productId: string): number => {
+  // Reingreso: se carga y edita desde la pestaña Producción (para no mezclarlo con
+  // "Cargar como gasto") — acá solo se lee, para que "Vendido real" lo tenga en cuenta.
+  const getReingreso = (productId: string): number => {
     let total = 0
     for (const day of weekDays) total += weekData?.reingresos[productId]?.[toISO(day)] ?? 0
     return total
-  }
-
-  const getReingresoSuggested = (productId: string): number => lastWeekFridayCounts[productId] ?? 0
-
-  const getReingreso = (productId: string): number => {
-    const pv = pending[productId]?.reingreso
-    if (pv !== undefined) return parseInt(pv) || 0
-    const saved = getSavedReingreso(productId)
-    return saved > 0 ? saved : getReingresoSuggested(productId)
   }
 
   const getSalesQty = (productId: string): number => {
@@ -1603,7 +1655,6 @@ function StockCloseGrid({ products }: { products: Product[] }) {
         sobrante: String(getSobranteDefault(p.id) || ''),
         consumo_interno: String(getSavedWeekField(p.id, 'consumo_interno') || ''),
         merma: String(getSavedWeekField(p.id, 'merma') || ''),
-        reingreso: String(getReingreso(p.id) || ''),
       }
     }
     setPending(init)
@@ -1615,18 +1666,13 @@ function StockCloseGrid({ products }: { products: Product[] }) {
     try {
       // Save totals to the last day of the week (weekEndISO used as the anchor)
       const saveDate = toISO(weekDays[weekDays.length - 1]) // Friday
-      const mondayDate = toISO(weekDays[0])
       await Promise.all(
         activeProducts.map(async (p) => {
           const sobrante = parseInt(pending[p.id]?.sobrante || '0') || 0
           const consumo = parseInt(pending[p.id]?.consumo_interno || '0') || 0
           const merma = parseInt(pending[p.id]?.merma || '0') || 0
-          const reingreso = parseInt(pending[p.id]?.reingreso || '0') || 0
           if (sobrante > 0 || consumo > 0 || merma > 0) {
             await productionApi.upsertStockClose(saveDate, p.id, { sobrante, consumo_interno: consumo, merma })
-          }
-          if (reingreso > 0) {
-            await productionApi.upsertReingreso(mondayDate, p.id, reingreso)
           }
         })
       )
@@ -1640,8 +1686,8 @@ function StockCloseGrid({ products }: { products: Product[] }) {
     }
   }
 
-  const updateField = (productId: string, field: 'sobrante' | 'consumo_interno' | 'merma' | 'reingreso', val: string) => {
-    setPending((prev) => ({ ...prev, [productId]: { ...(prev[productId] || { sobrante: '', consumo_interno: '', merma: '', reingreso: '' }), [field]: val } }))
+  const updateField = (productId: string, field: 'sobrante' | 'consumo_interno' | 'merma', val: string) => {
+    setPending((prev) => ({ ...prev, [productId]: { ...(prev[productId] || { sobrante: '', consumo_interno: '', merma: '' }), [field]: val } }))
   }
 
   return (
@@ -1707,12 +1753,7 @@ function StockCloseGrid({ products }: { products: Product[] }) {
           <p className={`text-lg font-black ${grandTotals.margen >= 0 ? 'text-green-700' : 'text-red-600'}`}>{formatPrice(grandTotals.margen)}</p>
         </div>
       </div>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-        <div className="bg-cyan-50 rounded-xl p-2 text-center">
-          <p className="text-[9px] font-bold text-cyan-600 uppercase tracking-widest mb-0.5">Reingreso</p>
-          <p className="text-lg font-black text-cyan-700">{grandTotals.reingreso}</p>
-          <p className="text-[10px] text-cyan-500">{formatPrice(grandTotals.costoReingreso)}</p>
-        </div>
+      <div className="grid grid-cols-3 gap-2">
         <div className="bg-amber-50 rounded-xl p-2 text-center">
           <p className="text-[9px] font-bold text-amber-600 uppercase tracking-widest mb-0.5">Sobrante</p>
           <p className="text-lg font-black text-amber-700">{grandTotals.sobrante}</p>
@@ -1823,8 +1864,7 @@ function StockCloseGrid({ products }: { products: Product[] }) {
             <thead>
               <tr className={`border-b ${editMode ? 'bg-amber-50 border-amber-100' : 'bg-gray-50 border-gray-100'}`}>
                 <th className={`text-left px-4 py-3 font-bold text-gray-500 uppercase tracking-wider min-w-[200px] sticky left-0 z-10 ${editMode ? 'bg-amber-50' : 'bg-gray-50'}`}>Producto</th>
-                <th className="text-center px-2 py-3 font-bold text-teal-500 uppercase tracking-wider min-w-[70px]">Prod.</th>
-                <th className="text-center px-2 py-3 font-bold text-cyan-600 uppercase tracking-wider min-w-[80px]">Reingreso<br /><span className="normal-case font-normal text-[9px] text-cyan-400">sobrante semana pasada</span></th>
+                <th className="text-center px-2 py-3 font-bold text-teal-500 uppercase tracking-wider min-w-[70px]">Prod.<br /><span className="normal-case font-normal text-[9px] text-teal-400">+ reingreso de Producción</span></th>
                 <th className="text-center px-2 py-3 font-bold text-amber-600 uppercase tracking-wider min-w-[80px]">Sobrante<br /><span className="normal-case font-normal text-[9px] text-amber-400">del conteo rápido</span></th>
                 <th className="text-center px-2 py-3 font-bold text-blue-500 uppercase tracking-wider min-w-[80px]">C. Interno</th>
                 <th className="text-center px-2 py-3 font-bold text-red-500 uppercase tracking-wider min-w-[70px]">Merma</th>
@@ -1848,26 +1888,19 @@ function StockCloseGrid({ products }: { products: Product[] }) {
                 return sortedGroups.map(([catKey, group]) => (
                   <>
                     <tr key={`cat-${catKey}`} className="bg-gray-100 border-t border-gray-200">
-                      <td colSpan={9} className="px-4 py-1.5 text-[10px] font-black text-gray-500 uppercase tracking-widest sticky left-0">
+                      <td colSpan={8} className="px-4 py-1.5 text-[10px] font-black text-gray-500 uppercase tracking-widest sticky left-0">
                         {group.name}
                       </td>
                     </tr>
                     {group.products.map((product) => {
                       const t = productTotals(product)
                       const bg = rowIdx++ % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'
-                      const pend = pending[product.id] || { sobrante: '', consumo_interno: '', merma: '', reingreso: '' }
+                      const pend = pending[product.id] || { sobrante: '', consumo_interno: '', merma: '' }
                       return (
                         <tr key={product.id} className={`border-b border-gray-50 ${bg}`}>
                           <td className={`px-4 py-2.5 font-medium text-gray-700 sticky left-0 z-10 ${bg}`}>{product.name}</td>
-                          <td className="px-2 py-2 text-center font-black text-teal-600">{t.totalProduced || '—'}</td>
-                          <td className="px-2 py-2 text-center" title={lastWeekFridayCounts[product.id] ? `Sugerido: ${lastWeekFridayCounts[product.id]} (sobrante del conteo rápido de la semana pasada)` : 'Sin conteo rápido la semana pasada — cargalo a mano'}>
-                            {editMode ? (
-                              <input type="number" min="0" value={pend.reingreso} placeholder="0"
-                                onChange={(e) => updateField(product.id, 'reingreso', e.target.value)}
-                                className="w-16 text-center border border-cyan-300 rounded-lg px-1 py-1.5 text-xs font-bold text-cyan-700 focus:outline-none focus:ring-1 focus:ring-cyan-400 bg-cyan-50" />
-                            ) : (
-                              <span className="font-bold text-cyan-600">{t.reingreso || '—'}</span>
-                            )}
+                          <td className="px-2 py-2 text-center font-black text-teal-600" title={t.reingreso > 0 ? `Producido: ${t.totalProduced} + Reingreso: ${t.reingreso}` : undefined}>
+                            {t.totalDisponible || '—'}
                           </td>
                           <td className="px-2 py-2 text-center" title={fridayCounts[product.id] !== undefined ? 'Del conteo rápido de stock del viernes' : 'Cargado a mano — sin conteo rápido esta semana'}>
                             {editMode ? (
@@ -1911,8 +1944,7 @@ function StockCloseGrid({ products }: { products: Product[] }) {
             <tfoot>
               <tr className="bg-gray-100 border-t-2 border-gray-200">
                 <td className="px-4 py-3 font-black text-gray-700 sticky left-0 bg-gray-100 z-10">TOTALES</td>
-                <td className="px-2 py-3 text-center font-black text-teal-600">{grandTotals.produced}</td>
-                <td className="px-2 py-3 text-center font-black text-cyan-600">{grandTotals.reingreso}</td>
+                <td className="px-2 py-3 text-center font-black text-teal-600">{grandTotals.produced + grandTotals.reingreso}</td>
                 <td className="px-2 py-3 text-center font-black text-amber-600">{grandTotals.sobrante}</td>
                 <td className="px-2 py-3 text-center font-black text-blue-600">{grandTotals.consumo}</td>
                 <td className="px-2 py-3 text-center font-black text-red-500">{grandTotals.merma}</td>
