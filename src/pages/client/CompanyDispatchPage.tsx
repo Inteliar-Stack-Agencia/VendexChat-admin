@@ -22,6 +22,20 @@ const PRICE_MODE_LABEL: Record<PriceMode, string> = {
   mostrador_menos_iva: 'Mostrador − IVA',
 }
 
+const PAYMENT_METHOD_OPTIONS = [
+  { value: 'efectivo', label: 'Efectivo' },
+  { value: 'qr', label: 'QR/MP' },
+  { value: 'transferencia', label: 'Transfer.' },
+  { value: 'tarjeta', label: 'Tarjeta' },
+]
+
+const PAYMENT_METHOD_LABEL: Record<string, string> = {
+  efectivo: 'Efectivo',
+  qr: 'QR / MercadoPago',
+  transferencia: 'Transferencia',
+  tarjeta: 'Tarjeta',
+}
+
 function getWeekBounds(offset = 0): { from: string; to: string; label: string } {
   const now = new Date()
   const day = now.getDay()
@@ -1530,6 +1544,82 @@ Devolvé SOLO un JSON válido, sin texto adicional ni bloques de código markdow
   )
 }
 
+// ─── Registrar pago de factura ─────────────────────────────────────────────────
+
+function PayInvoiceModal({ invoice, onSave, onClose }: {
+  invoice: CompanyInvoice
+  onSave: (amount: number, method: string) => Promise<void>
+  onClose: () => void
+}) {
+  const [amount, setAmount] = useState(String(invoice.total))
+  const [method, setMethod] = useState('efectivo')
+  const [saving, setSaving] = useState(false)
+
+  const handleSubmit = async () => {
+    const n = parseFloat(amount)
+    if (isNaN(n) || n <= 0) { showToast('error', 'Monto inválido'); return }
+    setSaving(true)
+    try {
+      await onSave(n, method)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm">
+        <div className="flex items-center justify-between p-5 border-b border-gray-100">
+          <div>
+            <h2 className="font-bold text-gray-900">Registrar pago</h2>
+            <p className="text-xs text-gray-400 mt-0.5">{invoice.client?.name || 'Empresa'} · {invoice.period_from} → {invoice.period_to}</p>
+          </div>
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100"><X className="w-5 h-5 text-gray-500" /></button>
+        </div>
+        <div className="p-5 space-y-4">
+          <div className="bg-gray-50 p-3 rounded-lg">
+            <p className="text-xs text-gray-500 uppercase font-semibold">Total facturado</p>
+            <p className="text-xl font-bold text-gray-900">{formatPrice(invoice.total)}</p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Monto realmente cobrado</label>
+            <input
+              type="number" min="0" step="0.01"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+            />
+            <p className="text-xs text-gray-400 mt-1">Si hubo descuento o pagó menos, poné acá el monto real — eso es lo que suma al P&L.</p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Medio de pago</label>
+            <div className="grid grid-cols-4 gap-2">
+              {PAYMENT_METHOD_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setMethod(opt.value)}
+                  className={`py-2 rounded-lg text-[10px] font-bold uppercase border-2 transition-all ${
+                    method === opt.value ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-gray-200 text-gray-400 hover:border-gray-300'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="flex gap-3 pt-2">
+            <Button variant="secondary" onClick={onClose} className="flex-1">Cancelar</Button>
+            <Button onClick={handleSubmit} loading={saving} className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white">
+              Marcar pagada
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Facturación / cuenta corriente ───────────────────────────────────────────
 
 function BillingTab({ clients }: { clients: CompanyClient[] }) {
@@ -1549,6 +1639,7 @@ function BillingTab({ clients }: { clients: CompanyClient[] }) {
   const [invoices, setInvoices] = useState<CompanyInvoice[]>([])
   const [loadingInvoices, setLoadingInvoices] = useState(true)
   const [payingId, setPayingId] = useState<string | null>(null)
+  const [payInvoiceModal, setPayInvoiceModal] = useState<CompanyInvoice | null>(null)
 
   const activeClients = clients.filter(c => c.is_active)
   const selectedClient = clients.find(c => c.id === selectedClientId)
@@ -1712,15 +1803,13 @@ function BillingTab({ clients }: { clients: CompanyClient[] }) {
     printWindow.document.close()
   }
 
-  const handleMarkPaid = async (inv: CompanyInvoice) => {
-    const amountStr = prompt(`Monto cobrado de ${inv.client?.name || 'la empresa'}:`, String(inv.total))
-    if (amountStr === null) return
-    const amount = parseFloat(amountStr)
-    if (isNaN(amount)) { showToast('error', 'Monto inválido'); return }
-    setPayingId(inv.id)
+  const handleMarkPaid = async (amount: number, method: string) => {
+    if (!payInvoiceModal) return
+    setPayingId(payInvoiceModal.id)
     try {
-      await companyDispatchApi.markInvoicePaid(inv.id, amount)
+      await companyDispatchApi.markInvoicePaid(payInvoiceModal.id, amount, method)
       showToast('success', 'Factura marcada como pagada')
+      setPayInvoiceModal(null)
       loadInvoices()
     } catch {
       showToast('error', 'Error al marcar como pagada')
@@ -1933,9 +2022,12 @@ function BillingTab({ clients }: { clients: CompanyClient[] }) {
                   <div className="text-right">
                     <span className="font-black text-gray-800 text-sm block">{formatPrice(inv.total)}</span>
                     {inv.status === 'pagado' && inv.paid_amount != null && inv.paid_amount < inv.total && (
-                      <span className="text-[10px] font-bold text-rose-500">
+                      <span className="text-[10px] font-bold text-rose-500 block">
                         cobrado {formatPrice(inv.paid_amount)} · -{formatPrice(inv.total - inv.paid_amount)}
                       </span>
+                    )}
+                    {inv.status === 'pagado' && inv.payment_method && (
+                      <span className="text-[10px] text-gray-400 capitalize">{PAYMENT_METHOD_LABEL[inv.payment_method] || inv.payment_method}</span>
                     )}
                   </div>
                   <button onClick={() => handlePrintExisting(inv)} disabled={printingId === inv.id} title="Ver / imprimir recibo"
@@ -1947,7 +2039,7 @@ function BillingTab({ clients }: { clients: CompanyClient[] }) {
                       <CheckCircle2 className="w-3 h-3" /> Pagado
                     </span>
                   ) : (
-                    <button onClick={() => handleMarkPaid(inv)} disabled={payingId === inv.id}
+                    <button onClick={() => setPayInvoiceModal(inv)} disabled={payingId === inv.id}
                       className="text-[10px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 px-2.5 py-1.5 rounded-full transition-colors">
                       {payingId === inv.id ? '...' : 'Marcar pagada'}
                     </button>
@@ -1958,6 +2050,14 @@ function BillingTab({ clients }: { clients: CompanyClient[] }) {
           </div>
         )}
       </Card>
+
+      {payInvoiceModal && (
+        <PayInvoiceModal
+          invoice={payInvoiceModal}
+          onSave={handleMarkPaid}
+          onClose={() => setPayInvoiceModal(null)}
+        />
+      )}
     </div>
   )
 }

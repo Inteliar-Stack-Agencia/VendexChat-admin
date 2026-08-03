@@ -42,6 +42,7 @@ export interface CompanyInvoice {
   invoiced_at: string
   paid_at: string | null
   paid_amount: number | null
+  payment_method: string | null
   notes: string | null
   created_at: string
   client?: { name: string }
@@ -403,10 +404,10 @@ export const companyDispatchApi = {
     return data || []
   },
 
-  markInvoicePaid: async (id: string, paidAmount: number, notes?: string): Promise<CompanyInvoice> => {
+  markInvoicePaid: async (id: string, paidAmount: number, paymentMethod: string, notes?: string): Promise<CompanyInvoice> => {
     const { data, error } = await supabase
       .from('company_invoices')
-      .update({ status: 'pagado', paid_at: new Date().toISOString(), paid_amount: paidAmount, notes: notes ?? undefined })
+      .update({ status: 'pagado', paid_at: new Date().toISOString(), paid_amount: paidAmount, payment_method: paymentMethod, notes: notes ?? undefined })
       .eq('id', id)
       .select()
       .single()
