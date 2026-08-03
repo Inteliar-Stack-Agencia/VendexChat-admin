@@ -933,43 +933,49 @@ export default function ExpensesPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-50">
-                      {filteredExpenses.map((exp) => {
+                      {filteredExpenses.map((exp, idx) => {
                         const cat = getCategoryMeta(exp.category)
+                        const showDateGap = idx > 0 && filteredExpenses[idx - 1].date !== exp.date
                         return (
-                          <tr key={exp.id} className="hover:bg-gray-50 transition-colors">
-                            <td className="px-4 py-3 text-gray-600 text-xs whitespace-nowrap">
-                              {new Date(exp.date + 'T00:00:00').toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })}
-                            </td>
-                            <td className="px-4 py-3 font-medium text-gray-900">
-                              {exp.description}
-                              {exp.notes && <p className="text-xs text-gray-400 font-normal">{exp.notes}</p>}
-                            </td>
-                            <td className="px-4 py-3">
-                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${exp.expense_type === 'fijo' ? 'bg-indigo-100 text-indigo-700' : 'bg-amber-100 text-amber-700'}`}>
-                                {exp.expense_type === 'fijo' ? '📌 Fijo' : '📊 Variable'}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3">
-                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${cat.color}`}>{cat.label}</span>
-                            </td>
-                            <td className="px-4 py-3 text-gray-500 text-xs">{exp.supplier?.name ?? '—'}</td>
-                            <td className="px-4 py-3 text-right font-bold text-gray-900">{formatPrice(exp.amount)}</td>
-                            <td className="px-4 py-3 text-right">
-                              <div className="flex justify-end gap-1">
-                                <button onClick={() => openEditExpense(exp)}
-                                  className="p-1.5 rounded-lg hover:bg-indigo-50 hover:text-indigo-600 text-gray-400 transition-colors">
-                                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                                      d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                  </svg>
-                                </button>
-                                <button onClick={() => handleDeleteExpense(exp.id)}
-                                  className="p-1.5 rounded-lg hover:bg-red-50 hover:text-red-600 text-gray-400 transition-colors">
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
+                          <Fragment key={exp.id}>
+                            {showDateGap && (
+                              <tr aria-hidden="true"><td colSpan={7} className="h-3 bg-gray-100/60 p-0" /></tr>
+                            )}
+                            <tr className="hover:bg-gray-50 transition-colors">
+                              <td className="px-4 py-3 text-gray-600 text-xs whitespace-nowrap">
+                                {new Date(exp.date + 'T00:00:00').toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                              </td>
+                              <td className="px-4 py-3 font-medium text-gray-900">
+                                {exp.description}
+                                {exp.notes && <p className="text-xs text-gray-400 font-normal">{exp.notes}</p>}
+                              </td>
+                              <td className="px-4 py-3">
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${exp.expense_type === 'fijo' ? 'bg-indigo-100 text-indigo-700' : 'bg-amber-100 text-amber-700'}`}>
+                                  {exp.expense_type === 'fijo' ? '📌 Fijo' : '📊 Variable'}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3">
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${cat.color}`}>{cat.label}</span>
+                              </td>
+                              <td className="px-4 py-3 text-gray-500 text-xs">{exp.supplier?.name ?? '—'}</td>
+                              <td className="px-4 py-3 text-right font-bold text-gray-900">{formatPrice(exp.amount)}</td>
+                              <td className="px-4 py-3 text-right">
+                                <div className="flex justify-end gap-1">
+                                  <button onClick={() => openEditExpense(exp)}
+                                    className="p-1.5 rounded-lg hover:bg-indigo-50 hover:text-indigo-600 text-gray-400 transition-colors">
+                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                        d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                    </svg>
+                                  </button>
+                                  <button onClick={() => handleDeleteExpense(exp.id)}
+                                    className="p-1.5 rounded-lg hover:bg-red-50 hover:text-red-600 text-gray-400 transition-colors">
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          </Fragment>
                         )
                       })}
                     </tbody>
