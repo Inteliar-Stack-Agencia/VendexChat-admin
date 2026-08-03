@@ -1,11 +1,16 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Landmark, Plus, ChevronLeft, ChevronRight, RefreshCw, Trash2, X, CheckCircle2, AlertCircle } from 'lucide-react'
+import { Landmark, Plus, ChevronLeft, ChevronRight, RefreshCw, Trash2, X, CheckCircle2, AlertCircle, ClipboardList, Loader2 } from 'lucide-react'
 import { Button, Card } from '../../components/common'
 import FeatureGuard from '../../components/FeatureGuard'
 import { showToast } from '../../components/common/Toast'
 import { cashApi, type CashSession, type CashSessionForm } from '../../services/cashApi'
+import { productionApi } from '../../services/productionApi'
+import { productsApi } from '../../services/productsApi'
+import type { Product } from '../../types'
 import { formatPrice } from '../../utils/helpers'
+
+const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0]
 
 const today = new Date().toISOString().split('T')[0]
 
@@ -22,6 +27,83 @@ const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto
 function getDiffColor(diff: number) {
   if (diff === 0) return 'text-gray-500'
   return diff > 0 ? 'text-green-600' : 'text-red-600'
+}
+
+// ─── Quick Stock Count Modal ────────────────────────────────────────────────────
+
+interface QuickStockCountModalProps {
+  products: Product[]
+  initialCounts: Record<string, number>
+  onSave: (counts: Record<string, number>) => Promise<void>
+  onClose: () => void
+}
+
+function QuickStockCountModal({ products, initialCounts, onSave, onClose }: QuickStockCountModalProps) {
+  const [values, setValues] = useState<Record<string, string>>(() => {
+    const init: Record<string, string> = {}
+    for (const p of products) init[p.id] = initialCounts[p.id] != null ? String(initialCounts[p.id]) : ''
+    return init
+  })
+  const [saving, setSaving] = useState(false)
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const counts: Record<string, number> = {}
+    for (const [productId, val] of Object.entries(values)) {
+      if (val.trim() === '') continue
+      const n = parseInt(val)
+      if (!isNaN(n) && n >= 0) counts[productId] = n
+    }
+    if (Object.keys(counts).length === 0) {
+      showToast('error', 'Contá al menos un producto')
+      return
+    }
+    setSaving(true)
+    try {
+      await onSave(counts)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between p-5 border-b border-gray-100 shrink-0">
+          <div>
+            <h2 className="font-bold text-gray-900">Conteo rápido de stock</h2>
+            <p className="text-xs text-gray-400 mt-0.5">Cuántas unidades quedan de cada producto ahora mismo — {today}</p>
+          </div>
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100"><X className="w-5 h-5 text-gray-500" /></button>
+        </div>
+        <form onSubmit={handleSubmit} className="flex-1 flex flex-col min-h-0">
+          <div className="flex-1 overflow-y-auto p-5 space-y-2">
+            {products.map((p) => (
+              <div key={p.id} className="flex items-center justify-between gap-3">
+                <span className="text-sm font-medium text-gray-700 truncate">{p.name}</span>
+                <input
+                  type="number" min="0" step="1"
+                  placeholder="—"
+                  value={values[p.id] ?? ''}
+                  onChange={(e) => setValues((prev) => ({ ...prev, [p.id]: e.target.value }))}
+                  className="w-24 shrink-0 border border-gray-200 rounded-lg px-3 py-1.5 text-sm font-bold text-center focus:outline-none focus:ring-2 focus:ring-teal-300"
+                />
+              </div>
+            ))}
+            {products.length === 0 && (
+              <p className="text-sm text-gray-400 text-center py-8">Sin productos activos</p>
+            )}
+          </div>
+          <div className="flex gap-3 p-5 border-t border-gray-100 shrink-0">
+            <Button type="button" variant="secondary" onClick={onClose} className="flex-1">Cancelar</Button>
+            <Button type="submit" disabled={saving} className="flex-1 bg-teal-600 hover:bg-teal-700 text-white">
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Guardar conteo'}
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
 }
 
 // ─── Cash Form Modal ──────────────────────────────────────────────────────────
@@ -246,6 +328,63 @@ export default function CashRegisterPage() {
   const [formDate, setFormDate] = useState(today)
   const [deleting, setDeleting] = useState<string | null>(null)
 
+  // Conteo rápido de stock — pantallazo de unidades vendidas hoy vs. cobrado hoy
+  const [products, setProducts] = useState<Product[]>([])
+  const [showCountModal, setShowCountModal] = useState(false)
+  const [todayCounts, setTodayCounts] = useState<Record<string, number>>({})
+  const [yesterdayCounts, setYesterdayCounts] = useState<Record<string, number>>({})
+  const [todayProduction, setTodayProduction] = useState<Record<string, number>>({})
+  const [todayCollected, setTodayCollected] = useState<number | null>(null)
+
+  const [quickCountLoaded, setQuickCountLoaded] = useState(false)
+  const loadQuickCount = useCallback(async () => {
+    try {
+      const [prodList, todayC, yestC, todayProd, todayPay] = await Promise.all([
+        productsApi.list({ limit: 500 }),
+        productionApi.getDailyStockCount(today),
+        productionApi.getDailyStockCount(yesterday),
+        productionApi.getDayEntries(today),
+        cashApi.getSalesByPaymentMethod(today),
+      ])
+      setProducts(prodList.data.filter((p) => p.is_active))
+      setTodayCounts(todayC)
+      setYesterdayCounts(yestC)
+      const prodMap: Record<string, number> = {}
+      for (const e of todayProd) prodMap[e.product_id] = e.quantity
+      setTodayProduction(prodMap)
+      setTodayCollected(todayPay.efectivo + todayPay.qr + todayPay.transferencia + todayPay.tarjeta + todayPay.other)
+    } catch {
+      // silencioso: es un pantallazo informativo, no bloquea el resto de Caja
+    } finally {
+      setQuickCountLoaded(true)
+    }
+  }, [])
+
+  useEffect(() => { loadQuickCount() }, [loadQuickCount])
+
+  // Vengo del recordatorio del Dashboard ("Contar stock") — abrir directo el modal
+  const handledCountParam = useRef(false)
+  useEffect(() => {
+    if (!quickCountLoaded || handledCountParam.current || searchParams.get('count') !== 'today') return
+    handledCountParam.current = true
+    setShowCountModal(true)
+    setSearchParams((prev) => { prev.delete('count'); return prev }, { replace: true })
+  }, [quickCountLoaded, searchParams, setSearchParams])
+
+  const countedProductIds = Object.keys(todayCounts).filter((id) => yesterdayCounts[id] != null)
+  const unitsSoldToday = countedProductIds.reduce(
+    (s, id) => s + (yesterdayCounts[id] + (todayProduction[id] || 0) - todayCounts[id]),
+    0,
+  )
+  const hasTodayCount = Object.keys(todayCounts).length > 0
+
+  const handleSaveCount = async (counts: Record<string, number>) => {
+    await productionApi.saveDailyStockCount(today, counts)
+    showToast('success', 'Conteo guardado')
+    setShowCountModal(false)
+    loadQuickCount()
+  }
+
   // Month navigation
   const [viewDate, setViewDate] = useState(() => {
     const d = new Date()
@@ -354,13 +493,50 @@ export default function CashRegisterPage() {
               <p className="text-sm text-gray-400">Apertura y cierre diario · control de efectivo</p>
             </div>
           </div>
-          <Button
-            onClick={() => (todaySession ? openEdit(todaySession) : openNew())}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-2"
-          >
-            <Plus className="w-4 h-4" /> {todaySession ? 'Editar caja de hoy' : 'Abrir caja'}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              onClick={() => setShowCountModal(true)}
+              variant="secondary"
+              className="flex items-center gap-2"
+            >
+              <ClipboardList className="w-4 h-4" /> {hasTodayCount ? 'Actualizar conteo de stock' : 'Conteo rápido de stock'}
+            </Button>
+            <Button
+              onClick={() => (todaySession ? openEdit(todaySession) : openNew())}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" /> {todaySession ? 'Editar caja de hoy' : 'Abrir caja'}
+            </Button>
+          </div>
         </div>
+
+        {/* Pantallazo: unidades vendidas hoy (conteo de stock) vs. plata cobrada hoy */}
+        {hasTodayCount && (
+          <Card className="p-4 flex flex-wrap items-center justify-between gap-4 bg-teal-50/50 border-teal-100">
+            <div>
+              <p className="text-[10px] font-black text-teal-600 uppercase tracking-widest">Pantallazo de hoy</p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                {countedProductIds.length} producto{countedProductIds.length !== 1 ? 's' : ''} con conteo de ayer y de hoy
+              </p>
+            </div>
+            <div className="flex items-center gap-6">
+              <div className="text-center">
+                <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Unidades vendidas</p>
+                <p className="text-xl font-black text-teal-700">{unitsSoldToday}</p>
+              </div>
+              <div className="text-center">
+                <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Cobrado hoy (pedidos)</p>
+                <p className="text-xl font-black text-emerald-700">{todayCollected != null ? formatPrice(todayCollected) : '—'}</p>
+              </div>
+              {unitsSoldToday > 0 && todayCollected != null && (
+                <div className="text-center">
+                  <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Promedio / unidad</p>
+                  <p className="text-xl font-black text-gray-700">{formatPrice(todayCollected / unitsSoldToday)}</p>
+                </div>
+              )}
+            </div>
+          </Card>
+        )}
 
         {/* Month nav */}
         <div className="flex items-center justify-between">
@@ -508,6 +684,15 @@ export default function CashRegisterPage() {
           session={editSession}
           onSave={handleSave}
           onClose={() => setShowForm(false)}
+        />
+      )}
+
+      {showCountModal && (
+        <QuickStockCountModal
+          products={products}
+          initialCounts={todayCounts}
+          onSave={handleSaveCount}
+          onClose={() => setShowCountModal(false)}
         />
       )}
     </FeatureGuard>

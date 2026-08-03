@@ -28,6 +28,7 @@ import OnboardingChecklist from '../../components/dashboard/OnboardingChecklist'
 import CurrencySelector from '../../components/dashboard/CurrencySelector'
 import { dashboardApi, tenantApi } from '../../services/api'
 import { cashApi, type CashSession } from '../../services/cashApi'
+import { productionApi } from '../../services/productionApi'
 import { DashboardStats, Tenant } from '../../types'
 import { formatPrice, orderStatusConfig } from '../../utils/helpers'
 import { useAuth } from '../../contexts/AuthContext'
@@ -90,6 +91,8 @@ export default function DashboardPage() {
 
   // Recordatorio: ¿ya se abrió la caja de hoy? (undefined = todavía no se sabe)
   const [todayCashSession, setTodayCashSession] = useState<CashSession | null | undefined>(undefined)
+  // Recordatorio: ¿ya se hizo el conteo rápido de stock de hoy? (undefined = todavía no se sabe)
+  const [hasTodayStockCount, setHasTodayStockCount] = useState<boolean | undefined>(undefined)
 
   // Moneda de la tienda
   const [currency, setCurrency] = useState('ARS')
@@ -127,6 +130,10 @@ export default function DashboardPage() {
     cashApi.getByDate(todayISO)
       .then(setTodayCashSession)
       .catch(() => setTodayCashSession(null))
+
+    productionApi.getDailyStockCount(todayISO)
+      .then((counts) => setHasTodayStockCount(Object.keys(counts).length > 0))
+      .catch(() => setHasTodayStockCount(false))
   }, [selectedStoreId])
 
   async function handleCurrencyChange(code: string) {
@@ -310,6 +317,26 @@ export default function DashboardPage() {
           <Link to="/cash?open=today">
             <Button size="sm" className="bg-amber-600 hover:bg-amber-700 text-white font-bold uppercase tracking-widest text-[10px] px-6 py-2.5 shrink-0">
               Abrir caja
+            </Button>
+          </Link>
+        </div>
+      )}
+
+      {/* Recordatorio: conteo rápido de stock del día */}
+      {hasCashAccess && hasTodayStockCount === false && (
+        <div className="p-4 rounded-2xl bg-teal-50 border border-teal-200 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="p-3 rounded-xl bg-teal-100">
+              <ClipboardList className="w-6 h-6 text-teal-600" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-teal-800">Todavía no hiciste el conteo de stock de hoy</h3>
+              <p className="text-teal-700/80 text-xs mt-0.5">Un conteo rápido te muestra unidades vendidas hoy contra lo cobrado.</p>
+            </div>
+          </div>
+          <Link to="/cash?count=today">
+            <Button size="sm" className="bg-teal-600 hover:bg-teal-700 text-white font-bold uppercase tracking-widest text-[10px] px-6 py-2.5 shrink-0">
+              Contar stock
             </Button>
           </Link>
         </div>

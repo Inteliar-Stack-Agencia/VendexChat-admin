@@ -224,6 +224,34 @@ export const productionApi = {
     if (error) throw error
   },
 
+  // Conteo rápido diario de stock — cuántas unidades quedan de cada producto hoy.
+  // Con el conteo de ayer y lo producido hoy se puede estimar cuánto se vendió
+  // sin esperar al Cierre de Stock semanal completo.
+  getDailyStockCount: async (date: string): Promise<Record<string, number>> => {
+    const storeId = await getStoreId()
+    const { data, error } = await supabase
+      .from('daily_stock_counts')
+      .select('product_id, quantity')
+      .eq('store_id', storeId)
+      .eq('date', date)
+    if (error) throw error
+    const map: Record<string, number> = {}
+    for (const row of data || []) map[row.product_id] = row.quantity
+    return map
+  },
+
+  saveDailyStockCount: async (date: string, counts: Record<string, number>): Promise<void> => {
+    const storeId = await getStoreId()
+    const rows = Object.entries(counts).map(([product_id, quantity]) => ({
+      store_id: storeId, product_id, date, quantity,
+    }))
+    if (rows.length === 0) return
+    const { error } = await supabase
+      .from('daily_stock_counts')
+      .upsert(rows, { onConflict: 'store_id,product_id,date' })
+    if (error) throw error
+  },
+
   // Cantidad producida por producto en un día puntual (para generar etiquetas)
   getDayEntries: async (date: string): Promise<{ product_id: string; quantity: number }[]> => {
     const storeId = await getStoreId()
