@@ -334,7 +334,7 @@ export default function DashboardPage() {
               <p className="text-teal-700/80 text-xs mt-0.5">Un conteo rápido te muestra unidades vendidas hoy contra lo cobrado.</p>
             </div>
           </div>
-          <Link to="/cash?count=today">
+          <Link to="/inventory?tab=stock&count=today">
             <Button size="sm" className="bg-teal-600 hover:bg-teal-700 text-white font-bold uppercase tracking-widest text-[10px] px-6 py-2.5 shrink-0">
               Contar stock
             </Button>
