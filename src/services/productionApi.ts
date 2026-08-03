@@ -252,6 +252,26 @@ export const productionApi = {
     return map
   },
 
+  // Conteo más reciente de cada producto dentro de un rango de fechas — no todos los
+  // productos se cuentan siempre el mismo día, así que por producto se toma el último
+  // conteo cargado en el rango (no forzosamente el viernes ni el mismo día para todos).
+  getMostRecentStockCount: async (from: string, to: string): Promise<Record<string, number>> => {
+    const storeId = await getStoreId()
+    const { data, error } = await supabase
+      .from('daily_stock_counts')
+      .select('product_id, quantity, date')
+      .eq('store_id', storeId)
+      .gte('date', from)
+      .lte('date', to)
+      .order('date', { ascending: true })
+    if (error) throw error
+    const map: Record<string, number> = {}
+    // Recorre en orden ascendente y va pisando — el último que procesa por producto
+    // (el de fecha más reciente) queda como valor final.
+    for (const row of data || []) map[row.product_id] = row.quantity
+    return map
+  },
+
   saveDailyStockCount: async (date: string, counts: Record<string, number>): Promise<void> => {
     const storeId = await getStoreId()
     const rows = Object.entries(counts).map(([product_id, quantity]) => ({

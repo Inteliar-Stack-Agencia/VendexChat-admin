@@ -1562,9 +1562,10 @@ function StockCloseGrid({ products, autoOpenCount }: { products: Product[]; auto
   const [paymentBreakdown, setPaymentBreakdown] = useState<Record<string, number>>({})
   // Ventas de mostrador cargadas a mano esta semana (nunca pasaron por un Pedido)
   const [manualSales, setManualSales] = useState<ManualStockSale[]>([])
-  // Conteo rápido de stock del último día de la semana (viernes) — si existe, se usa
-  // como "sobrante" en vez de tener que cargarlo de nuevo a mano en el cierre.
-  const [fridayCounts, setFridayCounts] = useState<Record<string, number>>({})
+  // Conteo rápido más reciente de la semana (no necesariamente del viernes — puede ser
+  // de cualquier día en que se haya contado) — si existe, se usa como "sobrante" en vez
+  // de tener que cargarlo de nuevo a mano en el cierre.
+  const [mostRecentCounts, setMostRecentCounts] = useState<Record<string, number>>({})
   // Conteo de HOY (no necesariamente el viernes de la semana que se está viendo) — para
   // precargar el modal de conteo rápido con lo último cargado.
   const [todayCounts, setTodayCounts] = useState<Record<string, number>>({})
@@ -1586,18 +1587,18 @@ function StockCloseGrid({ products, autoOpenCount }: { products: Product[]; auto
     setPending({})
     setEditMode(false)
     try {
-      const [data, dispatchItems, breakdown, manual, fridayCount, todayCount] = await Promise.all([
+      const [data, dispatchItems, breakdown, manual, recentCount, todayCount] = await Promise.all([
         productionApi.getWeekData(weekStartISO, weekEndISO),
         companyDispatchApi.crossStoreDispatchItemsWithPaymentByDate(weekStartISO, weekEndISO).catch(() => []),
         productionApi.getWeekPaymentBreakdown(weekStartISO, weekEndISO).catch(() => ({})),
         productionApi.listManualSales(weekStartISO).catch(() => []),
-        productionApi.getDailyStockCount(toISO(weekDays[weekDays.length - 1])).catch(() => ({})),
+        productionApi.getMostRecentStockCount(weekStartISO, weekEndISO).catch(() => ({})),
         productionApi.getDailyStockCount(today).catch(() => ({})),
       ])
       setWeekData(data)
       setPaymentBreakdown(breakdown)
       setManualSales(manual)
-      setFridayCounts(fridayCount)
+      setMostRecentCounts(recentCount)
       setTodayCounts(todayCount)
       const byName: Record<string, number> = {}
       const paymentByName: Record<string, { facturado: number; cobrado: number }> = {}
@@ -1652,10 +1653,12 @@ function StockCloseGrid({ products, autoOpenCount }: { products: Product[]; auto
     return total
   }
 
-  // "Sobrante" se toma del Conteo rápido de stock del viernes cuando existe (así no hay
-  // que cargarlo dos veces); si esa semana no se contó, cae al valor guardado a mano.
+  // "Sobrante" se toma del conteo rápido más reciente de la semana cuando existe (no
+  // hace falta que sea viernes — cualquier día contado esta semana ya actualiza el
+  // cierre), así no hay que cargarlo dos veces; si todavía no se contó nada, cae al
+  // valor guardado a mano.
   const getSobranteDefault = (productId: string): number =>
-    fridayCounts[productId] !== undefined ? fridayCounts[productId] : getSavedWeekField(productId, 'sobrante')
+    mostRecentCounts[productId] !== undefined ? mostRecentCounts[productId] : getSavedWeekField(productId, 'sobrante')
 
   const getField = (productId: string, field: 'sobrante' | 'consumo_interno' | 'merma'): number => {
     const pv = pending[productId]?.[field]
@@ -2027,7 +2030,7 @@ function StockCloseGrid({ products, autoOpenCount }: { products: Product[]; auto
                           <td className="px-2 py-2 text-center font-black text-teal-600" title={t.reingreso > 0 ? `Producido: ${t.totalProduced} + Reingreso: ${t.reingreso}` : undefined}>
                             {t.totalDisponible || '—'}
                           </td>
-                          <td className="px-2 py-2 text-center" title={fridayCounts[product.id] !== undefined ? 'Del conteo rápido de stock del viernes' : 'Cargado a mano — sin conteo rápido esta semana'}>
+                          <td className="px-2 py-2 text-center" title={mostRecentCounts[product.id] !== undefined ? 'Del conteo rápido más reciente de la semana' : 'Cargado a mano — sin conteo rápido esta semana'}>
                             {editMode ? (
                               <input type="number" min="0" value={pend.sobrante} placeholder="0"
                                 onChange={(e) => updateField(product.id, 'sobrante', e.target.value)}
