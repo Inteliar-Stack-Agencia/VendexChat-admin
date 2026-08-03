@@ -21,7 +21,7 @@ import { productionApi, type ManualStockSale, type ManualSaleChannel } from '../
 import { companyDispatchApi } from '../../services/companyDispatchApi'
 import { labelsApi } from '../../services/labelsApi'
 import { productsApi } from '../../services/productsApi'
-import { expensesApi } from '../../services/expensesApi'
+import { expensesApi, type Supplier } from '../../services/expensesApi'
 import { formatPrice } from '../../utils/helpers'
 import { showToast } from '../../components/common/Toast'
 import { callAI } from '../../services/aiService'
@@ -929,6 +929,12 @@ function ProductionGrid({ products, onCostUpdated, refreshKey }: { products: Pro
   // no memoria) — así "Cargar como gasto" solo cobra la diferencia nueva si se sigue
   // cargando producción durante la semana, en vez de recalcular o duplicar todo.
   const [alreadyExpensed, setAlreadyExpensed] = useState(0)
+  const [suppliers, setSuppliers] = useState<Supplier[]>([])
+  const [expenseSupplierId, setExpenseSupplierId] = useState('')
+
+  useEffect(() => {
+    expensesApi.listSuppliers().then(setSuppliers).catch(() => {})
+  }, [])
 
   const allWeekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
   // Only Mon–Fri (getDay: 1=Mon … 5=Fri)
@@ -1037,7 +1043,7 @@ function ProductionGrid({ products, onCostUpdated, refreshKey }: { products: Pro
         expense_type: 'variable',
         amount: pendingExpenseAmount,
         date: today,
-        supplier_id: null,
+        supplier_id: expenseSupplierId || null,
         notes: null,
       })
       setAlreadyExpensed((prev) => prev + pendingExpenseAmount)
@@ -1205,21 +1211,34 @@ function ProductionGrid({ products, onCostUpdated, refreshKey }: { products: Pro
               <p className="text-[10px] text-orange-400 mt-0.5">Ya cargaste {formatPrice(alreadyExpensed)} esta semana</p>
             )}
           </div>
-          <button
-            onClick={handleLoadAsExpense}
-            disabled={loadingExpense || pendingExpenseAmount <= 0}
-            className="shrink-0 flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-white bg-orange-600 hover:bg-orange-700 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
-            title="Crea un gasto variable de materia prima solo por la producción nueva que todavía no se cargó, sin tipearlo a mano"
-          >
-            {loadingExpense ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            ) : pendingExpenseAmount <= 0 ? (
-              <CheckCircle2 className="w-3.5 h-3.5" />
-            ) : (
-              <TrendingDown className="w-3.5 h-3.5" />
+          <div className="shrink-0 flex flex-col items-end gap-1.5">
+            {suppliers.length > 0 && (
+              <select
+                value={expenseSupplierId}
+                onChange={(e) => setExpenseSupplierId(e.target.value)}
+                className="text-[10px] border border-orange-200 rounded-lg px-1.5 py-1 bg-white text-orange-700 focus:outline-none focus:ring-1 focus:ring-orange-400"
+                title="Proveedor de esta mercadería (opcional)"
+              >
+                <option value="">Sin proveedor</option>
+                {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
             )}
-            {pendingExpenseAmount <= 0 ? 'Al día' : `Cargar ${formatPrice(pendingExpenseAmount)}`}
-          </button>
+            <button
+              onClick={handleLoadAsExpense}
+              disabled={loadingExpense || pendingExpenseAmount <= 0}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-white bg-orange-600 hover:bg-orange-700 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+              title="Crea un gasto variable de materia prima solo por la producción nueva que todavía no se cargó, sin tipearlo a mano"
+            >
+              {loadingExpense ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : pendingExpenseAmount <= 0 ? (
+                <CheckCircle2 className="w-3.5 h-3.5" />
+              ) : (
+                <TrendingDown className="w-3.5 h-3.5" />
+              )}
+              {pendingExpenseAmount <= 0 ? 'Al día' : `Cargar ${formatPrice(pendingExpenseAmount)}`}
+            </button>
+          </div>
         </div>
       </div>
 
