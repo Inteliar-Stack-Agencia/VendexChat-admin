@@ -1576,6 +1576,9 @@ function StockCloseGrid({ products, autoOpenCount }: { products: Product[]; auto
   const [pending, setPending] = useState<Record<string, { sobrante: string; consumo_interno: string; merma: string }>>({})
   const [saving, setSaving] = useState(false)
   const [editMode, setEditMode] = useState(false)
+  // Fecha a la que se anclan sobrante/consumo/merma y el autocompletado de Ventas — por
+  // defecto hoy (no forzosamente el viernes; el cierre se puede hacer cualquier día).
+  const [closeDate, setCloseDate] = useState(today)
 
   const allWeekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
   const weekDays = allWeekDays.filter(d => d.getDay() >= 1 && d.getDay() <= 5)
@@ -1780,14 +1783,19 @@ function StockCloseGrid({ products, autoOpenCount }: { products: Product[]; auto
       }
     }
     setPending(init)
+    // Si la semana que se está viendo incluye hoy, el cierre se ancla a hoy (lo más
+    // común: cerrás el mismo día que estás comparando contra Caja/Empresas). Si es una
+    // semana pasada, cae al último día hábil de esa semana.
+    const weekDatesISO = weekDays.map(toISO)
+    setCloseDate(weekDatesISO.includes(today) ? today : weekDatesISO[weekDatesISO.length - 1])
     setEditMode(true)
   }
 
   const handleSave = async () => {
     setSaving(true)
     try {
-      // Save totals to the last day of the week (weekEndISO used as the anchor)
-      const saveDate = toISO(weekDays[weekDays.length - 1]) // Friday
+      const weekDatesISO = weekDays.map(toISO)
+      const saveDate = weekDatesISO.includes(closeDate) ? closeDate : weekDatesISO[weekDatesISO.length - 1]
       await Promise.all(
         activeProducts.map(async (p) => {
           const sobrante = parseInt(pending[p.id]?.sobrante || '0') || 0
@@ -1806,7 +1814,6 @@ function StockCloseGrid({ products, autoOpenCount }: { products: Product[]; auto
       // de lista) y se cobran vía Facturación, nunca por Caja. Solo para productos que
       // todavía no tienen nada cargado esta semana; si ya hay algo cargado a mano, se
       // respeta y no se pisa.
-      const weekDatesISO = weekDays.map(toISO)
       const existingSales = await productionApi.getWeekSalesAmounts(weekStartISO, weekEndISO)
       const autoEntries: Record<string, Record<string, number>> = {}
       for (const p of activeProducts) {
@@ -1855,6 +1862,17 @@ function StockCloseGrid({ products, autoOpenCount }: { products: Product[]; auto
           )}
           {editMode ? (
             <>
+              <label className="flex items-center gap-1.5 text-xs font-semibold text-gray-500">
+                Fecha del cierre
+                <input
+                  type="date"
+                  value={closeDate}
+                  min={toISO(weekDays[0])}
+                  max={toISO(weekDays[weekDays.length - 1])}
+                  onChange={(e) => setCloseDate(e.target.value)}
+                  className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs font-bold text-gray-700 focus:outline-none focus:ring-1 focus:ring-amber-400"
+                />
+              </label>
               <button onClick={() => { setEditMode(false); setPending({}) }}
                 className="px-4 py-2 text-sm font-semibold text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors">
                 Cancelar
