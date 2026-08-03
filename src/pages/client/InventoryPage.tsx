@@ -23,6 +23,7 @@ import { companyDispatchApi } from '../../services/companyDispatchApi'
 import { labelsApi } from '../../services/labelsApi'
 import { productsApi } from '../../services/productsApi'
 import { expensesApi, type Supplier } from '../../services/expensesApi'
+import { cashApi } from '../../services/cashApi'
 import { formatPrice } from '../../utils/helpers'
 import { showToast } from '../../components/common/Toast'
 import { callAI } from '../../services/aiService'
@@ -1797,6 +1798,27 @@ function StockCloseGrid({ products, autoOpenCount }: { products: Product[]; auto
           }
         })
       )
+
+      // Auto-cargar la pestaña Ventas con lo vendido real de este cierre (unidades ×
+      // precio de lista), para no tener que volver a tipearlo a mano — solo para
+      // productos que todavía no tienen nada cargado esta semana; si ya hay algo cargado
+      // a mano, se respeta y no se pisa.
+      const weekDatesISO = weekDays.map(toISO)
+      const existingSales = await productionApi.getWeekSalesAmounts(weekStartISO, weekEndISO)
+      const autoEntries: Record<string, Record<string, number>> = {}
+      for (const p of activeProducts) {
+        const alreadyLoaded = weekDatesISO.some((d) => (existingSales[p.id]?.[d] ?? 0) > 0)
+        if (alreadyLoaded) continue
+        const ingresos = productTotals(p).ingresos
+        if (ingresos <= 0) continue
+        const entry: Record<string, number> = {}
+        for (const d of weekDatesISO) entry[d] = d === saveDate ? ingresos : 0
+        autoEntries[p.id] = entry
+      }
+      if (Object.keys(autoEntries).length > 0) {
+        await productionApi.saveWeekSalesAmounts(weekDatesISO, autoEntries)
+      }
+
       showToast('success', 'Cierre de semana guardado')
       setEditMode(false)
       await load()
@@ -2106,6 +2128,9 @@ function SalesGrid({ products }: { products: Product[] }) {
   const [editMode, setEditMode] = useState(false)
   const [pending, setPending] = useState<Record<string, Record<string, string>>>({})
   const [saving, setSaving] = useState(false)
+  // Plata registrada en Caja (cierres diarios) esta semana, para comparar contra lo
+  // vendido (que ahora se autocompleta desde el Cierre de Stock).
+  const [cajaTotal, setCajaTotal] = useState<number | null>(null)
 
   const allWeekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
   const weekDays = allWeekDays.filter(d => d.getDay() >= 1 && d.getDay() <= 5)
@@ -2116,8 +2141,16 @@ function SalesGrid({ products }: { products: Product[] }) {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const data = await productionApi.getWeekSalesAmounts(weekStartISO, weekEndISO)
+      const [data, sessions] = await Promise.all([
+        productionApi.getWeekSalesAmounts(weekStartISO, weekEndISO),
+        cashApi.list({ from: weekStartISO, to: weekEndISO }).catch(() => []),
+      ])
       setSalesData(data)
+      setCajaTotal(
+        sessions.length > 0
+          ? sessions.reduce((s, sess) => s + sess.sales_efectivo + sess.sales_qr + sess.sales_transferencia + sess.sales_tarjeta + sess.sales_other, 0)
+          : null,
+      )
     } catch {
       showToast('error', 'Error al cargar ventas')
     } finally {
@@ -2255,11 +2288,24 @@ function SalesGrid({ products }: { products: Product[] }) {
         </button>
       </div>
 
-      {/* Summary banner */}
-      <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-center">
-        <div className="text-2xl font-black text-emerald-700">{formatPrice(grandTotal)}</div>
-        <div className="text-xs text-emerald-600 font-semibold">Total vendido esta semana</div>
+      {/* Summary banner: total vendido (se autocompleta desde el Cierre de Stock) vs.
+          lo efectivamente registrado en Caja esa semana */}
+      <div className="flex flex-wrap gap-3">
+        <div className="flex-1 min-w-[200px] bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-center">
+          <div className="text-2xl font-black text-emerald-700">{formatPrice(grandTotal)}</div>
+          <div className="text-xs text-emerald-600 font-semibold">Total vendido esta semana</div>
+        </div>
+        <div className="flex-1 min-w-[200px] bg-indigo-50 border border-indigo-200 rounded-xl p-4 text-center">
+          <div className="text-2xl font-black text-indigo-700">{cajaTotal != null ? formatPrice(cajaTotal) : '—'}</div>
+          <div className="text-xs text-indigo-600 font-semibold">Registrado en Caja esta semana</div>
+        </div>
       </div>
+      {cajaTotal != null && Math.abs(grandTotal - cajaTotal) > 1 && (
+        <div className={`rounded-lg px-3 py-2 text-xs font-bold flex items-center justify-between ${grandTotal - cajaTotal > 0 ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'}`}>
+          <span>{grandTotal - cajaTotal > 0 ? 'Vendiste más de lo registrado en Caja (falta cargarlo o hubo descuento)' : 'En Caja hay más de lo que muestra Ventas'}</span>
+          <span>{formatPrice(grandTotal - cajaTotal)}</span>
+        </div>
+      )}
 
       {activeProducts.length === 0 ? (
         <div className="text-center py-12 text-gray-400">
