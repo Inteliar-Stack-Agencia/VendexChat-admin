@@ -6,6 +6,7 @@ import FeatureGuard from '../../components/FeatureGuard'
 import { showToast } from '../../components/common/Toast'
 import { cashApi, type CashSession, type CashSessionForm } from '../../services/cashApi'
 import { productionApi } from '../../services/productionApi'
+import { productsApi } from '../../services/productsApi'
 import { formatPrice } from '../../utils/helpers'
 
 const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0]
@@ -249,27 +250,27 @@ export default function CashRegisterPage() {
   const [formDate, setFormDate] = useState(today)
   const [deleting, setDeleting] = useState<string | null>(null)
 
-  // Pantallazo de unidades vendidas hoy vs. cobrado hoy — el conteo en sí se carga
-  // desde Inventario → Cierre/Stock, acá solo se lee para mostrarlo.
+  // Pantallazo de unidades vendidas hoy vs. lo registrado en Caja — el conteo en sí
+  // se carga desde Inventario → Cierre/Stock, acá solo se lee para cruzarlo con la plata.
   const [todayCounts, setTodayCounts] = useState<Record<string, number>>({})
   const [yesterdayCounts, setYesterdayCounts] = useState<Record<string, number>>({})
   const [todayProduction, setTodayProduction] = useState<Record<string, number>>({})
-  const [todayCollected, setTodayCollected] = useState<number | null>(null)
+  const [countProducts, setCountProducts] = useState<{ id: string; price: number }[]>([])
 
   const loadQuickCount = useCallback(async () => {
     try {
-      const [todayC, yestC, todayProd, todayPay] = await Promise.all([
+      const [todayC, yestC, todayProd, prodList] = await Promise.all([
         productionApi.getDailyStockCount(today),
         productionApi.getDailyStockCount(yesterday),
         productionApi.getDayEntries(today),
-        cashApi.getSalesByPaymentMethod(today),
+        productsApi.list({ limit: 500 }),
       ])
       setTodayCounts(todayC)
       setYesterdayCounts(yestC)
       const prodMap: Record<string, number> = {}
       for (const e of todayProd) prodMap[e.product_id] = e.quantity
       setTodayProduction(prodMap)
-      setTodayCollected(todayPay.efectivo + todayPay.qr + todayPay.transferencia + todayPay.tarjeta + todayPay.other)
+      setCountProducts(prodList.data.map((p) => ({ id: p.id, price: Number(p.price || 0) })))
     } catch {
       // silencioso: es un pantallazo informativo, no bloquea el resto de Caja
     }
@@ -282,6 +283,14 @@ export default function CashRegisterPage() {
     (s, id) => s + (yesterdayCounts[id] + (todayProduction[id] || 0) - todayCounts[id]),
     0,
   )
+  // Unidades vendidas hoy (según conteo) × precio de lista de cada producto — lo que
+  // "debería" haber entrado en Caja si todo se vendió al precio de venta normal.
+  const priceById: Record<string, number> = {}
+  for (const p of countProducts) priceById[p.id] = p.price
+  const expectedVentasFromStock = countedProductIds.reduce((s, id) => {
+    const units = yesterdayCounts[id] + (todayProduction[id] || 0) - todayCounts[id]
+    return s + units * (priceById[id] || 0)
+  }, 0)
   const hasTodayCount = Object.keys(todayCounts).length > 0
 
   // Month navigation
@@ -308,6 +317,11 @@ export default function CashRegisterPage() {
   useEffect(() => { load() }, [load])
 
   const todaySession = sessions.find((s) => s.date === today)
+  // Lo que realmente quedó guardado en Caja hoy (no lo que venga de Pedidos — Morfi no
+  // carga cada venta de mostrador como Pedido, así que esa plata nunca aparecería ahí).
+  const registeredVentasToday = todaySession
+    ? todaySession.sales_efectivo + todaySession.sales_qr + todaySession.sales_transferencia + todaySession.sales_tarjeta + todaySession.sales_other
+    : null
 
   const openNew = () => {
     setEditSession(null)
@@ -407,33 +421,47 @@ export default function CashRegisterPage() {
           </div>
         </div>
 
-        {/* Pantallazo: unidades vendidas hoy (conteo de stock) vs. plata cobrada hoy */}
-        {hasTodayCount && (
-          <Card className="p-4 flex flex-wrap items-center justify-between gap-4 bg-teal-50/50 border-teal-100">
-            <div>
-              <p className="text-[10px] font-black text-teal-600 uppercase tracking-widest">Pantallazo de hoy</p>
-              <p className="text-xs text-gray-500 mt-0.5">
-                {countedProductIds.length} producto{countedProductIds.length !== 1 ? 's' : ''} con conteo de ayer y de hoy
-              </p>
-            </div>
-            <div className="flex items-center gap-6">
-              <div className="text-center">
-                <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Unidades vendidas</p>
-                <p className="text-xl font-black text-teal-700">{unitsSoldToday}</p>
+        {/* Pantallazo: unidades vendidas hoy (conteo de stock) × precio de lista, contra
+            lo que efectivamente quedó cargado en Caja hoy — para ver si lo que se vendió
+            según el stock coincide con lo que se cobró. */}
+        {hasTodayCount && (() => {
+          const gap = registeredVentasToday != null ? registeredVentasToday - expectedVentasFromStock : null
+          return (
+            <Card className="p-4 space-y-3 bg-teal-50/50 border-teal-100">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <p className="text-[10px] font-black text-teal-600 uppercase tracking-widest">Pantallazo de hoy</p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {countedProductIds.length} producto{countedProductIds.length !== 1 ? 's' : ''} con conteo de ayer y de hoy
+                  </p>
+                </div>
+                <div className="flex items-center gap-6">
+                  <div className="text-center">
+                    <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Unidades vendidas</p>
+                    <p className="text-xl font-black text-teal-700">{unitsSoldToday}</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Ventas esperadas (stock)</p>
+                    <p className="text-xl font-black text-indigo-700">{formatPrice(expectedVentasFromStock)}</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Registrado en Caja hoy</p>
+                    <p className="text-xl font-black text-emerald-700">{registeredVentasToday != null ? formatPrice(registeredVentasToday) : '—'}</p>
+                  </div>
+                </div>
               </div>
-              <div className="text-center">
-                <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Cobrado hoy (pedidos)</p>
-                <p className="text-xl font-black text-emerald-700">{todayCollected != null ? formatPrice(todayCollected) : '—'}</p>
-              </div>
-              {unitsSoldToday > 0 && todayCollected != null && (
-                <div className="text-center">
-                  <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Promedio / unidad</p>
-                  <p className="text-xl font-black text-gray-700">{formatPrice(todayCollected / unitsSoldToday)}</p>
+              {gap != null && Math.abs(gap) > 1 && (
+                <div className={`rounded-lg px-3 py-2 text-xs font-bold flex items-center justify-between ${gap > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                  <span>{gap > 0 ? 'Cobraste más de lo esperado según stock' : 'Falta registrar en Caja (o hubo descuento)'}</span>
+                  <span>{gap > 0 ? '+' : ''}{formatPrice(gap)}</span>
                 </div>
               )}
-            </div>
-          </Card>
-        )}
+              {registeredVentasToday == null && (
+                <p className="text-[10px] text-gray-400">Todavía no guardaste el cierre de hoy en Caja — comparalo cuando lo cargues.</p>
+              )}
+            </Card>
+          )
+        })()}
 
         {/* Month nav */}
         <div className="flex items-center justify-between">
