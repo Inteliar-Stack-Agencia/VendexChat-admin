@@ -1979,7 +1979,7 @@ function StockCloseGrid({ products, autoOpenCount }: { products: Product[]; auto
       {/* Cobrado por canal: de dónde vino la plata cobrada esta semana */}
       <div>
         <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Cobrado por canal</p>
-        <div className="grid grid-cols-2 sm:grid-cols-6 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-7 gap-2">
           <div className="bg-lime-50 rounded-xl p-2.5 text-center">
             <p className="text-[9px] font-bold text-lime-600 uppercase tracking-widest mb-0.5">Efectivo</p>
             <p className="text-sm font-black text-lime-700">{formatPrice((paymentBreakdown.efectivo || 0) + manualByChannel.efectivo)}</p>
@@ -2001,6 +2001,13 @@ function StockCloseGrid({ products, autoOpenCount }: { products: Product[]; auto
             <p className="text-sm font-black text-violet-700">
               {formatPrice(Object.values(dispatchPaymentByName).reduce((s, v) => s + v.cobrado, 0))}
             </p>
+          </div>
+          <div className="bg-amber-50 rounded-xl p-2.5 text-center">
+            <p className="text-[9px] font-bold text-amber-600 uppercase tracking-widest mb-0.5">Facturado a Empresas (pendiente)</p>
+            <p className="text-sm font-black text-amber-700">
+              {formatPrice(Math.max(0, Object.values(dispatchPaymentByName).reduce((s, v) => s + v.facturado - v.cobrado, 0)))}
+            </p>
+            <p className="text-[8px] text-amber-500 mt-0.5">Ya se despachó, falta cobrar — precio real de cada empresa</p>
           </div>
           {(paymentBreakdown.other || 0) > 0 && (
             <div className="bg-gray-100 rounded-xl p-2.5 text-center">
