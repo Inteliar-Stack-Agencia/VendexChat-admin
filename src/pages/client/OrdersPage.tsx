@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { Eye, ShoppingCart, Printer, Archive, ArchiveRestore, Trash2, Search, CheckCircle2, Circle } from 'lucide-react'
 import { Card, EmptyState, Pagination, Button, ConfirmDialog, showToast, Modal, Input } from '../../components/common'
 import { ordersApi } from '../../services/api'
-import { orderPaymentsApi } from '../../services/orderPaymentsApi'
+import { orderPaymentsApi, type PaymentMethod } from '../../services/orderPaymentsApi'
 import { getStoreId } from '../../services/coreApi'
 import { supabase } from '../../supabaseClient'
 import { Order } from '../../types'
@@ -19,7 +19,15 @@ type PendingAction = {
 type PaymentModal = {
   orderId: string
   orderTotal: number
+  metadata: Record<string, unknown> | null
 } | null
+
+const PAYMENT_METHOD_OPTIONS: { value: PaymentMethod; label: string }[] = [
+  { value: 'efectivo', label: 'Efectivo' },
+  { value: 'qr', label: 'QR/MP' },
+  { value: 'transferencia', label: 'Transfer.' },
+  { value: 'tarjeta', label: 'Tarjeta' },
+]
 
 export default function OrdersPage() {
   useAuth()
@@ -38,6 +46,7 @@ export default function OrdersPage() {
   const [processingAction, setProcessingAction] = useState(false)
   const [paymentModal, setPaymentModal] = useState<PaymentModal>(null)
   const [paymentAmount, setPaymentAmount] = useState('')
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('efectivo')
   const [savingPayment, setSavingPayment] = useState(false)
 
   const isArchived = (order: Order) => Boolean((order.metadata as Record<string, unknown> | null)?.archived)
@@ -214,8 +223,10 @@ export default function OrdersPage() {
   }
 
   const openPaymentModal = (order: Order) => {
-    setPaymentModal({ orderId: order.id, orderTotal: order.total })
+    setPaymentModal({ orderId: order.id, orderTotal: order.total, metadata: order.metadata ?? null })
     setPaymentAmount(order.paid_amount != null ? String(order.paid_amount) : '')
+    const savedMethod = order.metadata?.payment_method as PaymentMethod | undefined
+    setPaymentMethod(PAYMENT_METHOD_OPTIONS.some(o => o.value === savedMethod) ? savedMethod! : 'efectivo')
   }
 
   const handleSavePayment = async (status: 'paid' | 'partial' | 'pending') => {
@@ -228,8 +239,8 @@ export default function OrdersPage() {
     setSavingPayment(true)
     try {
       if (status === 'pending') await orderPaymentsApi.markAsPending(paymentModal.orderId)
-      else if (status === 'paid') await orderPaymentsApi.markAsPaid(paymentModal.orderId, amount)
-      else await orderPaymentsApi.markAsPartial(paymentModal.orderId, amount)
+      else if (status === 'paid') await orderPaymentsApi.markAsPaid(paymentModal.orderId, amount, paymentMethod, paymentModal.metadata)
+      else await orderPaymentsApi.markAsPartial(paymentModal.orderId, amount, paymentMethod, paymentModal.metadata)
 
       setOrders(prev => prev.map(o => o.id === paymentModal.orderId
         ? {
@@ -237,6 +248,7 @@ export default function OrdersPage() {
           payment_status: status,
           paid_amount: status === 'pending' ? null : amount,
           paid_at: status === 'pending' ? null : new Date().toISOString(),
+          metadata: status === 'pending' ? o.metadata : { ...(o.metadata || {}), payment_method: paymentMethod },
         }
         : o))
       showToast('success', 'Pago actualizado')
@@ -580,6 +592,24 @@ export default function OrdersPage() {
                 min="0"
               />
               <p className="text-xs text-gray-400 mt-1">Si hubo descuento o pagó menos, poné acá el monto real — eso es lo que suma al P&L.</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Medio de pago</label>
+              <div className="grid grid-cols-4 gap-2">
+                {PAYMENT_METHOD_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setPaymentMethod(opt.value)}
+                    className={`py-2 rounded-lg text-[10px] font-bold uppercase border-2 transition-all ${
+                      paymentMethod === opt.value ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-gray-200 text-gray-400 hover:border-gray-300'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-gray-400 mt-1">Así se refleja en el canal correcto de Caja.</p>
             </div>
             <div className="space-y-2">
               <button

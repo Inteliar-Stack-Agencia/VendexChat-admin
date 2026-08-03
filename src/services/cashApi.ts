@@ -50,14 +50,19 @@ export const cashApi = {
     return data as CashSession | null
   },
 
-  // Pull sales totals per payment method from POS orders for a date
+  // Pull sales totals per payment method from Pedidos cobrados ese día (no por estado de
+  // preparación, sino por payment_status — un pedido puede estar "completado" y sin cobrar,
+  // o cobrado y aún en preparación). Usa el monto realmente cobrado (paid_amount), no el total
+  // teórico. Excluye pedidos facturados a una empresa (invoice_id) — esos se cobran y
+  // controlan desde company_invoices, no acá.
   getSalesByPaymentMethod: async (date: string) => {
     const storeId = await getStoreId()
     const { data, error } = await supabase
       .from('orders')
-      .select('total, metadata')
+      .select('total, paid_amount, payment_status, metadata')
       .eq('store_id', storeId)
-      .eq('status', 'completed')
+      .is('invoice_id', null)
+      .in('payment_status', ['paid', 'partial'])
       .gte('created_at', `${date}T00:00:00`)
       .lte('created_at', `${date}T23:59:59`)
     if (error) throw error
@@ -74,13 +79,13 @@ export const cashApi = {
     for (const order of (data || [])) {
       const pm: string = (order.metadata as Record<string, unknown>)?.payment_method as string || 'other'
       const discount: number = Number((order.metadata as Record<string, unknown>)?.discount_amount || 0)
-      const total = Number(order.total)
+      const cobrado = order.paid_amount != null ? Number(order.paid_amount) : Number(order.total)
       totals.discounts += discount
-      if (pm === 'efectivo') totals.efectivo += total
-      else if (pm === 'mercadopago' || pm === 'qr') totals.qr += total
-      else if (pm === 'transferencia') totals.transferencia += total
-      else if (pm === 'tarjeta') totals.tarjeta += total
-      else totals.other += total
+      if (pm === 'efectivo') totals.efectivo += cobrado
+      else if (pm === 'mercadopago' || pm === 'qr') totals.qr += cobrado
+      else if (pm === 'transferencia') totals.transferencia += cobrado
+      else if (pm === 'tarjeta') totals.tarjeta += cobrado
+      else totals.other += cobrado
     }
 
     return totals
