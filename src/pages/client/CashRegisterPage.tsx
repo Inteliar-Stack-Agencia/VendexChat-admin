@@ -66,6 +66,18 @@ function QuickStockCountModal({ products, initialCounts, onSave, onClose }: Quic
     }
   }
 
+  const groups = (() => {
+    const byCategory: Record<string, Product[]> = {}
+    for (const p of products) {
+      const key = p.category_name || 'Sin categoría'
+      if (!byCategory[key]) byCategory[key] = []
+      byCategory[key].push(p)
+    }
+    return Object.entries(byCategory)
+      .map(([name, items]) => ({ name, items: items.sort((a, b) => a.name.localeCompare(b.name, 'es')) }))
+      .sort((a, b) => a.name.localeCompare(b.name, 'es'))
+  })()
+
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col">
@@ -77,17 +89,24 @@ function QuickStockCountModal({ products, initialCounts, onSave, onClose }: Quic
           <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100"><X className="w-5 h-5 text-gray-500" /></button>
         </div>
         <form onSubmit={handleSubmit} className="flex-1 flex flex-col min-h-0">
-          <div className="flex-1 overflow-y-auto p-5 space-y-2">
-            {products.map((p) => (
-              <div key={p.id} className="flex items-center justify-between gap-3">
-                <span className="text-sm font-medium text-gray-700 truncate">{p.name}</span>
-                <input
-                  type="number" min="0" step="1"
-                  placeholder="—"
-                  value={values[p.id] ?? ''}
-                  onChange={(e) => setValues((prev) => ({ ...prev, [p.id]: e.target.value }))}
-                  className="w-24 shrink-0 border border-gray-200 rounded-lg px-3 py-1.5 text-sm font-bold text-center focus:outline-none focus:ring-2 focus:ring-teal-300"
-                />
+          <div className="flex-1 overflow-y-auto p-5 space-y-4">
+            {groups.map((group) => (
+              <div key={group.name}>
+                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">{group.name}</p>
+                <div className="space-y-2">
+                  {group.items.map((p) => (
+                    <div key={p.id} className="flex items-center justify-between gap-3">
+                      <span className="text-sm font-medium text-gray-700 truncate">{p.name}</span>
+                      <input
+                        type="number" min="0" step="1"
+                        placeholder="—"
+                        value={values[p.id] ?? ''}
+                        onChange={(e) => setValues((prev) => ({ ...prev, [p.id]: e.target.value }))}
+                        className="w-24 shrink-0 border border-gray-200 rounded-lg px-3 py-1.5 text-sm font-bold text-center focus:outline-none focus:ring-2 focus:ring-teal-300"
+                      />
+                    </div>
+                  ))}
+                </div>
               </div>
             ))}
             {products.length === 0 && (
