@@ -80,8 +80,11 @@ export const cashApi = {
 
     for (const order of (data || [])) {
       const pm: string = (order.metadata as Record<string, unknown>)?.payment_method as string || 'other'
-      const discount: number = Number((order.metadata as Record<string, unknown>)?.discount_amount || 0)
       const cobrado = order.paid_amount != null ? Number(order.paid_amount) : Number(order.total)
+      // Descuento real: diferencia entre el total del pedido y lo que efectivamente se
+      // cobró (ej. se marcó pagado manual por menos, acuerdo puntual con el cliente) —
+      // metadata.discount_amount nunca se escribe en ningún lado, así que no sirve acá.
+      const discount = Math.max(0, Number(order.total) - cobrado)
       totals.discounts += discount
       if (pm === 'efectivo') totals.efectivo += cobrado
       else if (pm === 'mercadopago' || pm === 'qr') totals.qr += cobrado
