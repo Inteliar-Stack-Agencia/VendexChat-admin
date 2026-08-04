@@ -497,13 +497,18 @@ export const companyDispatchApi = {
       if (invoice && invoice.status === 'pagado' && invoice.total > 0) {
         collectedRatio = Number(invoice.paid_amount ?? 0) / invoice.total
       }
+      // "Facturado" solo cuenta si ya se generó el resumen/factura de este despacho
+      // (invoice_id cargado) — un despacho recién hecho en Entrada rápida todavía no es
+      // plata facturada, es solo mercadería que salió. La cantidad (unidades) sí cuenta
+      // siempre, salió de stock haya factura o no.
+      const yaFacturado = d.invoice_id != null
       for (const item of d.items || []) {
         rows.push({
           date: d.date,
           product_name: item.product_name,
           quantity: item.quantity,
           store_id: d.store_id,
-          facturado: Number(item.subtotal ?? 0),
+          facturado: yaFacturado ? Number(item.subtotal ?? 0) : 0,
           cobrado: Number(item.subtotal ?? 0) * collectedRatio,
         })
       }
