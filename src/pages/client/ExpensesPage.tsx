@@ -734,17 +734,21 @@ export default function ExpensesPage() {
   useEffect(() => { if (viewMode === 'mensual') loadMonthly() }, [viewMode, loadMonthly])
 
   const handleSaveExpense = async (data: Parameters<typeof expensesApi.createExpense>[0]) => {
-    if (editExpense) {
-      await expensesApi.updateExpense(editExpense.id, data)
-      showToast('success', 'Gasto actualizado')
-    } else {
-      await expensesApi.createExpense(data)
-      showToast('success', 'Gasto registrado')
+    try {
+      if (editExpense) {
+        await expensesApi.updateExpense(editExpense.id, data)
+        showToast('success', 'Gasto actualizado')
+      } else {
+        await expensesApi.createExpense(data)
+        showToast('success', 'Gasto registrado')
+      }
+      setShowExpenseForm(false)
+      setEditExpense(null)
+      loadData()
+      if (viewMode === 'mensual') loadMonthly()
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : 'Error al guardar el gasto')
     }
-    setShowExpenseForm(false)
-    setEditExpense(null)
-    loadData()
-    if (viewMode === 'mensual') loadMonthly()
   }
 
   const openEditExpense = (exp: Expense) => {
@@ -754,30 +758,42 @@ export default function ExpensesPage() {
 
   const handleDeleteExpense = async (id: string) => {
     if (!confirm('¿Eliminar este gasto?')) return
-    await expensesApi.deleteExpense(id)
-    showToast('success', 'Gasto eliminado')
-    loadData()
-    if (viewMode === 'mensual') loadMonthly()
+    try {
+      await expensesApi.deleteExpense(id)
+      showToast('success', 'Gasto eliminado')
+      loadData()
+      if (viewMode === 'mensual') loadMonthly()
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : 'Error al eliminar el gasto')
+    }
   }
 
   const handleSaveSupplier = async (data: Parameters<typeof expensesApi.createSupplier>[0]) => {
-    if (editSupplier) {
-      await expensesApi.updateSupplier(editSupplier.id, data)
-      showToast('success', 'Proveedor actualizado')
-    } else {
-      await expensesApi.createSupplier(data)
-      showToast('success', 'Proveedor creado')
+    try {
+      if (editSupplier) {
+        await expensesApi.updateSupplier(editSupplier.id, data)
+        showToast('success', 'Proveedor actualizado')
+      } else {
+        await expensesApi.createSupplier(data)
+        showToast('success', 'Proveedor creado')
+      }
+      setShowSupplierForm(false)
+      setEditSupplier(null)
+      loadData()
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : 'Error al guardar el proveedor')
     }
-    setShowSupplierForm(false)
-    setEditSupplier(null)
-    loadData()
   }
 
   const handleDeleteSupplier = async (id: string) => {
     if (!confirm('¿Eliminar este proveedor?')) return
-    await expensesApi.deleteSupplier(id)
-    showToast('success', 'Proveedor eliminado')
-    loadData()
+    try {
+      await expensesApi.deleteSupplier(id)
+      showToast('success', 'Proveedor eliminado')
+      loadData()
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : 'Error al eliminar el proveedor')
+    }
   }
 
   const filteredExpenses = expenses.filter((e) => {
