@@ -36,10 +36,21 @@ async function _getStoreIdInternal(): Promise<string> {
     const user = _cachedUser
     if (!user) throw new Error('No hay sesión activa')
 
+    // La sincronización de profiles.store_id se ESPERA (no fire-and-forget) antes de
+    // devolver el id — varias tablas (expenses, suppliers, production_log,
+    // daily_stock_counts, sales_log...) tienen RLS que solo chequea
+    // store_id = my_store_id(), y my_store_id() lee profiles.store_id en el momento de
+    // la escritura. Si esto quedara sin esperar, cualquier escritura hecha justo después
+    // de cambiar de sucursal (o tras un F5, antes de que el sync anterior haya llegado)
+    // corre contra el store_id viejo y la RLS la bloquea en silencio — sin ningún error
+    // visible, se ve como "no guarda nada".
     if (impersonatedId) {
-        supabase.from('profiles').update({ store_id: impersonatedId }).eq('id', user.id)
-            .then(() => { _lastSyncedStoreId = impersonatedId }, (e) => console.warn('[getStoreId] Profile sync failed:', e))
-        _lastSyncedStoreId = impersonatedId
+        try {
+            await supabase.from('profiles').update({ store_id: impersonatedId }).eq('id', user.id)
+            _lastSyncedStoreId = impersonatedId
+        } catch (e) {
+            console.warn('[getStoreId] Profile sync failed:', e)
+        }
         return impersonatedId
     }
 
@@ -49,9 +60,12 @@ async function _getStoreIdInternal(): Promise<string> {
         if (_lastSyncedStoreId === selectedStoreId) return selectedStoreId
         const { data: accessibleStore } = await supabase.from('stores').select('id').eq('id', selectedStoreId).maybeSingle()
         if (accessibleStore) {
-            supabase.from('profiles').update({ store_id: selectedStoreId }).eq('id', user.id)
-                .then(() => { _lastSyncedStoreId = selectedStoreId }, (e) => console.warn('[getStoreId] Profile sync failed:', e))
-            _lastSyncedStoreId = selectedStoreId
+            try {
+                await supabase.from('profiles').update({ store_id: selectedStoreId }).eq('id', user.id)
+                _lastSyncedStoreId = selectedStoreId
+            } catch (e) {
+                console.warn('[getStoreId] Profile sync failed:', e)
+            }
             return selectedStoreId
         }
         // Store no encontrado (eliminado o sin acceso): limpiar y caer al fallback
