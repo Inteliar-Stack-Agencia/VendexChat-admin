@@ -51,7 +51,9 @@ export interface Partner {
 // Tiendas B2B "satélite": despachan productos que en realidad son stock/cocina de otra
 // tienda (no tienen producción propia). Su ingreso se contabiliza en el P&L de la tienda
 // madre, no en el suyo (que quedaría vacío para no duplicar ni confundir con costos sin ingreso).
-const REVENUE_ABSORBED_INTO: Record<string, string> = { empresas: 'caba' }
+// Exportado porque el mismo criterio sirve para ocultar recordatorios de Caja/Stock en el
+// Dashboard de estas tiendas satélite (no tienen producción ni caja propia).
+export const REVENUE_ABSORBED_INTO: Record<string, string> = { empresas: 'caba' }
 const REVENUE_SIBLING_SLUGS: Record<string, string[]> = { caba: ['empresas'] }
 
 // Una entrada de ingreso reconocido en el P&L (factura de empresa pagada, o pedido propio).

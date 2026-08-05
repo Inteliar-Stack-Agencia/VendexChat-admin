@@ -29,6 +29,7 @@ import CurrencySelector from '../../components/dashboard/CurrencySelector'
 import { dashboardApi, tenantApi } from '../../services/api'
 import { cashApi, type CashSession } from '../../services/cashApi'
 import { productionApi } from '../../services/productionApi'
+import { REVENUE_ABSORBED_INTO } from '../../services/expensesApi'
 import { DashboardStats, Tenant } from '../../types'
 import { formatPrice, orderStatusConfig } from '../../utils/helpers'
 import { useAuth } from '../../contexts/AuthContext'
@@ -150,14 +151,19 @@ export default function DashboardPage() {
     }
   }
 
-  const hasCashAccess = isSuperadmin || (() => {
+  // Tiendas satélite B2B (ej. Empresas) no producen ni cuentan stock propio, ni manejan
+  // caja — son solo despacho/facturación, así que los recordatorios de "abrir caja" y
+  // "contar stock" no aplican ahí.
+  const isDispatchOnlySatellite = !!(tenant?.slug && REVENUE_ABSORBED_INTO[tenant.slug])
+
+  const hasCashAccess = !isDispatchOnlySatellite && (isSuperadmin || (() => {
     const plan = subscription?.plan_type || 'free'
     const status = subscription?.status || 'active'
     const trialEnd = subscription?.current_period_end ? new Date(subscription.current_period_end) : null
     const isTrialExpired = status === 'trial' && trialEnd && trialEnd < new Date()
     const weight = isTrialExpired ? 0 : (PLAN_WEIGHT[plan] ?? 0)
     return weight >= PLAN_WEIGHT.pro
-  })()
+  })())
 
   const isTrial = subscription?.status === 'trial'
 
