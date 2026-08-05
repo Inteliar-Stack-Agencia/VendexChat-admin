@@ -1,5 +1,24 @@
 import { supabase } from '../supabaseClient'
 import { getStoreId } from './coreApi'
+import { REVENUE_SIBLING_SLUGS } from './expensesApi'
+
+// Ids de la tienda actual + su satélite de despacho B2B (ej. CABA + Empresas) — para
+// conciliar stock SOLO con despachos que realmente son de la propia mercadería, sin
+// mezclar despachos de otras tiendas independientes (ej. La Plata, que tiene su propia
+// producción) que solo coinciden de nombre en el producto.
+async function getStoreAndSiblingIds(): Promise<string[]> {
+  const storeId = await getStoreId()
+  const { data: ownStore, error: ownStoreError } = await supabase
+    .from('stores').select('slug').eq('id', storeId).single()
+  if (ownStoreError) throw ownStoreError
+  const ownSlug = ownStore?.slug as string | undefined
+  const siblingSlugs = (ownSlug && REVENUE_SIBLING_SLUGS[ownSlug]) || []
+  if (siblingSlugs.length === 0) return [storeId]
+  const { data: siblings, error: siblingsError } = await supabase
+    .from('stores').select('id').in('slug', siblingSlugs)
+  if (siblingsError) throw siblingsError
+  return [storeId, ...(siblings || []).map(s => s.id)]
+}
 
 // iva_incluido: el precio cargado ya es el final que paga la empresa
 // mas_iva: el precio cargado es neto, se le suma el IVA al facturar
@@ -453,11 +472,15 @@ export const companyDispatchApi = {
 
   // ── Cross-store (mismo dueño) ───────────────────────────────────────────────
 
-  // Despachos de TODAS las tiendas del mismo dueño en un rango (para conciliar stock desde otra tienda, ej. CABA leyendo Empresas)
+  // Despachos de la tienda actual + su satélite en un rango (para conciliar stock desde
+  // otra tienda, ej. CABA leyendo Empresas) — NO de cualquier tienda del mismo dueño,
+  // tiendas independientes como La Plata quedan afuera aunque compartan dueño.
   crossStoreDispatchItemsByDate: async (from: string, to: string): Promise<{ date: string; product_name: string; quantity: number; store_id: string }[]> => {
+    const storeIds = await getStoreAndSiblingIds()
     const { data, error } = await supabase
       .from('company_dispatches')
       .select('date, store_id, items:company_dispatch_items(product_name, quantity)')
+      .in('store_id', storeIds)
       .gte('date', from)
       .lte('date', to)
     if (error) throw error
@@ -476,9 +499,11 @@ export const companyDispatchApi = {
     from: string,
     to: string,
   ): Promise<{ date: string; product_name: string; quantity: number; store_id: string; facturado: number; cobrado: number }[]> => {
+    const storeIds = await getStoreAndSiblingIds()
     const { data, error } = await supabase
       .from('company_dispatches')
       .select('date, store_id, total, invoice_id, items:company_dispatch_items(product_name, quantity, subtotal), invoice:company_invoices(status, total, paid_amount)')
+      .in('store_id', storeIds)
       .gte('date', from)
       .lte('date', to)
     if (error) throw error

@@ -54,7 +54,10 @@ export interface Partner {
 // Exportado porque el mismo criterio sirve para ocultar recordatorios de Caja/Stock en el
 // Dashboard de estas tiendas satélite (no tienen producción ni caja propia).
 export const REVENUE_ABSORBED_INTO: Record<string, string> = { empresas: 'caba' }
-const REVENUE_SIBLING_SLUGS: Record<string, string[]> = { caba: ['empresas'] }
+// Exportado porque companyDispatchApi lo usa para acotar la reconciliación de stock
+// (Cierre de Stock) a la tienda actual + su satélite — sin esto, mezclaría despachos de
+// OTRAS tiendas independientes (ej. La Plata) que solo coinciden de nombre en el producto.
+export const REVENUE_SIBLING_SLUGS: Record<string, string[]> = { caba: ['empresas'] }
 
 // Una entrada de ingreso reconocido en el P&L (factura de empresa pagada, o pedido propio).
 export interface RevenueEntry {
