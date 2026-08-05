@@ -210,31 +210,34 @@ export const expensesApi = {
   // suma a Ingresos Netos ni a Resultado (eso sigue siendo estrictamente base caja, ver
   // getMonthlyRevenue); es solo para que el informe no esconda cuánto queda pendiente de
   // cobro de ese mes.
+  //
+  // A diferencia de getMonthlyRevenue (que solo consolida ingresos YA cobrados entre
+  // tiendas configuradas como "hermanas" — ej. empresas → caba), acá se junta lo pendiente
+  // de TODAS las tiendas del mismo dueño, sea cual sea la sucursal (ej. una factura de
+  // La Plata también tiene que verse si estás mirando el P&L desde CABA). Como es solo
+  // informativo y no toca Ingresos/Resultado, no hace falta la configuración estricta de
+  // hermanas para no esconder plata pendiente de otra sucursal propia.
   getPendingCompanyInvoices: async (year: number): Promise<{ total: number; created_at: string; label: string }[]> => {
     const storeId = await getStoreId()
     const from = `${year}-01-01T00:00:00`
     const to = `${year}-12-31T23:59:59`
 
     const { data: ownStore, error: ownStoreError } = await supabase
-      .from('stores').select('slug').eq('id', storeId).single()
+      .from('stores').select('slug, owner_id').eq('id', storeId).single()
     if (ownStoreError) throw ownStoreError
     const ownSlug = ownStore?.slug as string | undefined
 
     if (ownSlug && REVENUE_ABSORBED_INTO[ownSlug]) return []
 
-    const siblingSlugs = (ownSlug && REVENUE_SIBLING_SLUGS[ownSlug]) || []
-    let siblingStoreIds: string[] = []
-    if (siblingSlugs.length > 0) {
-      const { data: siblings, error: siblingsError } = await supabase
-        .from('stores').select('id').in('slug', siblingSlugs)
-      if (siblingsError) throw siblingsError
-      siblingStoreIds = (siblings || []).map(s => s.id)
-    }
+    const { data: ownedStores, error: ownedError } = await supabase
+      .from('stores').select('id').eq('owner_id', ownStore.owner_id)
+    if (ownedError) throw ownedError
+    const storeIds = (ownedStores || []).map(s => s.id)
 
     const { data, error } = await supabase
       .from('company_invoices')
       .select('total, invoiced_at, client:company_clients(name)')
-      .in('store_id', [storeId, ...siblingStoreIds])
+      .in('store_id', storeIds)
       .eq('status', 'facturado')
       .gte('invoiced_at', from)
       .lte('invoiced_at', to)
