@@ -205,6 +205,47 @@ export const expensesApi = {
     return [...invoiceRevenue, ...orderRevenue]
   },
 
+  // Facturas de empresas ya facturadas pero TODAVÍA sin cobrar (status 'facturado'), para
+  // mostrar como referencia aparte en el Balance & P&L — "esto todavía no entró". Nunca se
+  // suma a Ingresos Netos ni a Resultado (eso sigue siendo estrictamente base caja, ver
+  // getMonthlyRevenue); es solo para que el informe no esconda cuánto queda pendiente de
+  // cobro de ese mes.
+  getPendingCompanyInvoices: async (year: number): Promise<{ total: number; created_at: string; label: string }[]> => {
+    const storeId = await getStoreId()
+    const from = `${year}-01-01T00:00:00`
+    const to = `${year}-12-31T23:59:59`
+
+    const { data: ownStore, error: ownStoreError } = await supabase
+      .from('stores').select('slug').eq('id', storeId).single()
+    if (ownStoreError) throw ownStoreError
+    const ownSlug = ownStore?.slug as string | undefined
+
+    if (ownSlug && REVENUE_ABSORBED_INTO[ownSlug]) return []
+
+    const siblingSlugs = (ownSlug && REVENUE_SIBLING_SLUGS[ownSlug]) || []
+    let siblingStoreIds: string[] = []
+    if (siblingSlugs.length > 0) {
+      const { data: siblings, error: siblingsError } = await supabase
+        .from('stores').select('id').in('slug', siblingSlugs)
+      if (siblingsError) throw siblingsError
+      siblingStoreIds = (siblings || []).map(s => s.id)
+    }
+
+    const { data, error } = await supabase
+      .from('company_invoices')
+      .select('total, invoiced_at, client:company_clients(name)')
+      .in('store_id', [storeId, ...siblingStoreIds])
+      .eq('status', 'facturado')
+      .gte('invoiced_at', from)
+      .lte('invoiced_at', to)
+    if (error) throw error
+    return (data || []).map(i => {
+      const client = i.client as unknown as { name: string } | { name: string }[] | null
+      const clientName = Array.isArray(client) ? client[0]?.name : client?.name
+      return { total: Number(i.total ?? 0), created_at: i.invoiced_at as string, label: clientName || 'Empresa' }
+    })
+  },
+
   // Suma lo YA cargado como gasto de producción en un rango de fechas (por categoría +
   // prefijo de descripción). Se usa en "Cargar como gasto" (Inventario → Producción)
   // para cobrar solo la DIFERENCIA nueva cuando se sigue cargando producción durante
