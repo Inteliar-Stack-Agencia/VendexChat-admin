@@ -112,13 +112,18 @@ export const customersApi = {
     },
 
     // Categoría manual del cliente (no es un segmento automático como VIP/Frecuente) —
-    // para poder marcar rápido "este cliente es de empresa" y filtrarlos aparte.
+    // para poder marcar rápido "este cliente es de empresa", saber de qué empresa es y
+    // filtrarlos/agruparlos aparte. company_name es texto libre (no un FK a
+    // company_clients) porque ese catálogo es por tienda y un mismo cliente puede
+    // aparecer en varias tiendas con registros de company_clients distintos — la UI
+    // sugiere nombres ya registrados (ver listRegisteredCompanies) pero no lo fuerza.
     // Es un cambio GENERAL: la misma persona/empresa suele aparecer como un registro de
     // cliente distinto en cada tienda (customers está por store_id) — así que además de
     // actualizar el que tocaste, se busca por WhatsApp (comparando los últimos 8 dígitos,
     // para no depender del formato con o sin código de país) entre TODAS las tiendas del
     // mismo dueño y se aplica la misma categoría ahí también.
-    setCustomerType: async (id: string, customer_type: 'individual' | 'empresa') => {
+    setCustomerType: async (id: string, customer_type: 'individual' | 'empresa', company_name: string | null = null) => {
+        const patch = { customer_type, company_name: customer_type === 'empresa' ? company_name : null }
         const { data: current, error: currentError } = await supabase
             .from('customers').select('whatsapp, store_id').eq('id', id).single()
         if (currentError) throw currentError
@@ -140,7 +145,7 @@ export const customersApi = {
                         .filter((c) => c.whatsapp && c.whatsapp.replace(/\D/g, '').slice(-8) === last8)
                         .map((c) => c.id)
                     if (matchingIds.length > 0) {
-                        await supabase.from('customers').update({ customer_type }).in('id', matchingIds)
+                        await supabase.from('customers').update(patch).in('id', matchingIds)
                     }
                 }
             }
@@ -148,12 +153,33 @@ export const customersApi = {
 
         const { data, error } = await supabase
             .from('customers')
-            .update({ customer_type })
+            .update(patch)
             .eq('id', id)
             .select()
             .single()
         if (error) throw error
         return data
+    },
+
+    // Nombres de empresas ya registradas (company_clients) en cualquiera de las tiendas
+    // del dueño actual — para sugerir en el selector al marcar un cliente como Empresa,
+    // en vez de tener que escribirlo de cero cada vez.
+    listRegisteredCompanies: async (): Promise<string[]> => {
+        const storeId = await getStoreId()
+        const { data: store, error: storeError } = await supabase
+            .from('stores').select('owner_id').eq('id', storeId).single()
+        if (storeError) throw storeError
+        const { data: ownedStores, error: ownedError } = await supabase
+            .from('stores').select('id').eq('owner_id', store.owner_id)
+        if (ownedError) throw ownedError
+        const storeIds = (ownedStores || []).map((s) => s.id)
+        const { data, error } = await supabase
+            .from('company_clients')
+            .select('name')
+            .in('store_id', storeIds)
+            .order('name')
+        if (error) throw error
+        return Array.from(new Set((data || []).map((c) => c.name)))
     },
 
     archive: async (id: string, archived: boolean) => {

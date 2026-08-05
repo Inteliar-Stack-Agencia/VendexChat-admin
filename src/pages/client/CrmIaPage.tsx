@@ -52,7 +52,7 @@ function getCustomerTags(customer: Customer, allCustomers: Customer[]) {
 
     // Categoría manual — cliente de empresa, no particular
     if (customer.customer_type === 'empresa') {
-        tags.push({ label: '🏢 Empresa', color: 'text-white', bg: 'bg-slate-800' })
+        tags.push({ label: `🏢 ${customer.company_name || 'Empresa'}`, color: 'text-white', bg: 'bg-slate-800' })
     }
 
     return tags
@@ -69,13 +69,16 @@ import { callAI as callAIService } from '../../services/aiService'
 const TAG_FILTERS = ['Todos', 'VIP', 'Frecuente', 'En riesgo', 'Inactivo', 'Nuevo', 'Dieta', 'Empresa']
 
 
-type MessageGoal = 'thankyou' | 'discount' | 'reminder' | 'reactivation'
+type MessageGoal = 'thankyou' | 'discount' | 'reminder' | 'reactivation' | 'weeklyReminder' | 'newMenu' | 'promotion'
 
 const MESSAGE_GOAL_OPTIONS: { key: MessageGoal; label: string; prompt: string }[] = [
     { key: 'thankyou', label: 'Agradecimiento', prompt: 'objetivo: agradecer la compra reciente y reforzar confianza para próxima compra.' },
     { key: 'discount', label: 'Descuento', prompt: 'objetivo: comunicar promoción/descuento con sentido de oportunidad y CTA claro.' },
     { key: 'reminder', label: 'Recordatorio', prompt: 'objetivo: recordar productos o reposición de compra de forma útil y no invasiva.' },
     { key: 'reactivation', label: 'Reactivación', prompt: 'objetivo: recuperar cliente inactivo con tono cercano y propuesta de valor.' },
+    { key: 'weeklyReminder', label: 'Recordatorio semanal', prompt: 'objetivo: recordarle al cliente que haga su pedido de esta semana (ej. viandas), con tono cercano y un sentido de urgencia suave (ej. "para asegurarte tu lugar"), sin sonar insistente ni robótico.' },
+    { key: 'newMenu', label: 'Menú nuevo', prompt: 'objetivo: contarle al cliente que hay platos/productos nuevos en el menú, generar curiosidad y ganas de probarlos, invitándolo a pedir.' },
+    { key: 'promotion', label: 'Promoción', prompt: 'objetivo: comunicar una promoción u oferta puntual (puede incluir un producto o descuento específico) con sentido de oportunidad y un CTA claro para aprovecharla.' },
 ]
 
 
@@ -122,7 +125,11 @@ function CrmIaPageInner() {
     const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
     const [showArchived, setShowArchived] = useState(false)
     const [archivingId, setArchivingId] = useState<string | null>(null)
-    const [togglingTypeId, setTogglingTypeId] = useState<string | null>(null)
+    const [companyFilter, setCompanyFilter] = useState<string | null>(null)
+    const [isAssigningCompany, setIsAssigningCompany] = useState(false)
+    const [companyNameInput, setCompanyNameInput] = useState('')
+    const [registeredCompanies, setRegisteredCompanies] = useState<string[]>([])
+    const [savingCompany, setSavingCompany] = useState(false)
 
     // Estado de modales
     const [isEditingNotes, setIsEditingNotes] = useState(false)
@@ -174,6 +181,10 @@ function CrmIaPageInner() {
         loadCustomers()
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedStoreId, showArchived])
+
+    useEffect(() => {
+        customersApi.listRegisteredCompanies().then(setRegisteredCompanies).catch(() => {})
+    }, [selectedStoreId])
 
     useEffect(() => {
         tenantApi.getMe()
@@ -353,17 +364,39 @@ INSTRUCCIONES:
         }
     }
 
-    const handleToggleCustomerType = async (customer: Customer) => {
-        setTogglingTypeId(customer.id)
+    const openAssignCompany = (customer: Customer) => {
+        setSelectedCustomer(customer)
+        setCompanyNameInput(customer.company_name || '')
+        setIsAssigningCompany(true)
+    }
+
+    const handleSaveCompany = async () => {
+        if (!selectedCustomer) return
+        setSavingCompany(true)
         try {
-            const newType = customer.customer_type === 'empresa' ? 'individual' : 'empresa'
-            await customersApi.setCustomerType(customer.id, newType)
-            showToast('success', newType === 'empresa' ? 'Marcado como cliente de empresa' : 'Marcado como cliente particular')
+            await customersApi.setCustomerType(selectedCustomer.id, 'empresa', companyNameInput.trim() || null)
+            showToast('success', 'Empresa asignada')
+            setIsAssigningCompany(false)
+            loadCustomers()
+        } catch {
+            showToast('error', 'No se pudo asignar la empresa')
+        } finally {
+            setSavingCompany(false)
+        }
+    }
+
+    const handleRemoveCompanyTag = async () => {
+        if (!selectedCustomer) return
+        setSavingCompany(true)
+        try {
+            await customersApi.setCustomerType(selectedCustomer.id, 'individual')
+            showToast('success', 'Marcado como cliente particular')
+            setIsAssigningCompany(false)
             loadCustomers()
         } catch {
             showToast('error', 'No se pudo actualizar la categoría')
         } finally {
-            setTogglingTypeId(null)
+            setSavingCompany(false)
         }
     }
 
@@ -516,9 +549,22 @@ Firma de la tienda obligatoria: — ${storeSignature}` }
             c.whatsapp.includes(search)
         if (!matchSearch) return false
         if (tagFilter === 'Todos') return true
+        // "Empresa" es una categoría manual, no un tag de comportamiento — se chequea
+        // directo por customer_type (el label ahora incluye el nombre de la empresa, no
+        // la palabra "Empresa" en sí, así que no sirve buscarla como substring del tag).
+        if (tagFilter === 'Empresa') {
+            if (c.customer_type !== 'empresa') return false
+            return !companyFilter || c.company_name === companyFilter
+        }
         const tags = getCustomerTags(c, customers)
         return tags.some(t => t.label.includes(tagFilter))
     })
+
+    // Empresas distintas presentes entre los clientes marcados como "Empresa" — para
+    // armar los sub-filtros de agrupación.
+    const companiesInList = Array.from(new Set(
+        customers.filter(c => c.customer_type === 'empresa' && c.company_name).map(c => c.company_name as string)
+    )).sort()
 
 
     const selectedCustomerDays = selectedCustomer ? getDaysSince(selectedCustomer.last_order_at) : null
@@ -733,7 +779,7 @@ Firma de la tienda obligatoria: — ${storeSignature}` }
                         {TAG_FILTERS.map(tag => (
                             <button
                                 key={tag}
-                                onClick={() => setTagFilter(tag)}
+                                onClick={() => { setTagFilter(tag); setCompanyFilter(null) }}
                                 className={`px-3 py-1 rounded-full text-xs font-semibold transition-all border ${tagFilter === tag
                                     ? 'bg-indigo-600 text-white border-indigo-600'
                                     : 'bg-white text-gray-600 border-gray-300 hover:border-indigo-400 hover:text-indigo-600'
@@ -743,6 +789,30 @@ Firma de la tienda obligatoria: — ${storeSignature}` }
                             </button>
                         ))}
                     </div>
+                    {tagFilter === 'Empresa' && companiesInList.length > 0 && (
+                        <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-xs text-gray-400 font-semibold">Agrupar por:</span>
+                            <button
+                                onClick={() => setCompanyFilter(null)}
+                                className={`px-2.5 py-1 rounded-full border text-xs font-semibold transition-colors ${
+                                    !companyFilter ? 'bg-slate-800 border-slate-800 text-white' : 'bg-white border-gray-200 text-gray-600 hover:border-slate-400'
+                                }`}
+                            >
+                                Todas
+                            </button>
+                            {companiesInList.map(name => (
+                                <button
+                                    key={name}
+                                    onClick={() => setCompanyFilter(name)}
+                                    className={`px-2.5 py-1 rounded-full border text-xs font-semibold transition-colors ${
+                                        companyFilter === name ? 'bg-slate-800 border-slate-800 text-white' : 'bg-white border-gray-200 text-gray-600 hover:border-slate-400'
+                                    }`}
+                                >
+                                    {name}
+                                </button>
+                            ))}
+                        </div>
+                    )}
                 </div>
             </Card>
 
@@ -817,14 +887,13 @@ Firma de la tienda obligatoria: — ${storeSignature}` }
                                             <td className="px-6 py-4 text-right">
                                                 <div className="flex items-center justify-end gap-1">
                                                     <button
-                                                        onClick={() => handleToggleCustomerType(customer)}
-                                                        disabled={togglingTypeId === customer.id}
-                                                        className={`p-2.5 rounded-xl transition-all border disabled:opacity-50 ${
+                                                        onClick={() => openAssignCompany(customer)}
+                                                        className={`p-2.5 rounded-xl transition-all border ${
                                                             customer.customer_type === 'empresa'
                                                                 ? 'bg-slate-800 hover:bg-slate-700 text-white border-slate-800'
                                                                 : 'bg-slate-50/60 hover:bg-slate-100 text-slate-500 hover:text-slate-700 border-slate-100'
                                                         }`}
-                                                        title={customer.customer_type === 'empresa' ? 'Marcar como cliente particular' : 'Marcar como cliente de empresa'}
+                                                        title={customer.customer_type === 'empresa' ? `Empresa: ${customer.company_name || 'sin especificar'}` : 'Marcar como cliente de empresa'}
                                                     >
                                                         <Building2 className="w-5 h-5" />
                                                     </button>
@@ -963,6 +1032,46 @@ Firma de la tienda obligatoria: — ${storeSignature}` }
                         <Button variant="primary" onClick={handleUpdateNotes} loading={saving} className="bg-indigo-600 hover:bg-indigo-700">
                             Guardar Notas
                         </Button>
+                    </div>
+                </div>
+            </Modal>
+
+            {/* Modal: Asignar empresa */}
+            <Modal
+                isOpen={isAssigningCompany}
+                onClose={() => setIsAssigningCompany(false)}
+                title={`Empresa: ${selectedCustomer?.name}`}
+            >
+                <div className="space-y-4">
+                    <div>
+                        <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">
+                            Nombre de la empresa
+                        </label>
+                        <input
+                            type="text"
+                            list="registered-companies-crmia"
+                            value={companyNameInput}
+                            onChange={(e) => setCompanyNameInput(e.target.value)}
+                            placeholder="Ej: AVSA Argentina Valores"
+                            className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-slate-400 focus:border-slate-400 outline-none"
+                        />
+                        <datalist id="registered-companies-crmia">
+                            {registeredCompanies.map((name) => <option key={name} value={name} />)}
+                        </datalist>
+                        <p className="text-[10px] text-gray-400 mt-1.5">Sugerencias de las empresas ya registradas en Despachos.</p>
+                    </div>
+                    <div className="flex justify-between gap-3">
+                        {selectedCustomer?.customer_type === 'empresa' && (
+                            <Button variant="outline" onClick={handleRemoveCompanyTag} loading={savingCompany} className="text-rose-600 border-rose-200 hover:bg-rose-50">
+                                Quitar categoría
+                            </Button>
+                        )}
+                        <div className="flex justify-end gap-3 flex-1">
+                            <Button variant="outline" onClick={() => setIsAssigningCompany(false)}>Cancelar</Button>
+                            <Button variant="primary" onClick={handleSaveCompany} loading={savingCompany} className="bg-slate-800 hover:bg-slate-700">
+                                Guardar
+                            </Button>
+                        </div>
                     </div>
                 </div>
             </Modal>
