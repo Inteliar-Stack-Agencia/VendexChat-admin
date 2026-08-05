@@ -37,6 +37,7 @@ export default function Sidebar({ isOpen, onClose, storeSlug }: SidebarProps) {
   // así que no muestra su propio Balance & P&L. La Plata sí tiene catálogo propio.
   const showOwnPL = storeSlug !== 'empresas'
   const hasPro = ['pro', 'vip', 'ultra'].includes(subscription?.plan_type || '')
+  const hasVip = ['vip', 'ultra'].includes(subscription?.plan_type || '')
   const navigate = useNavigate()
   const isImpersonating = !!localStorage.getItem('vendexchat_impersonated_store')
 
@@ -156,11 +157,17 @@ export default function Sidebar({ isOpen, onClose, storeSlug }: SidebarProps) {
                 )}
                 {/* Clientes (CRM) siempre visible — Empresas y La Plata también manejan
                     clientes propios (contactos de empresas, pedidos de mostrador), no
-                    solo CABA. */}
-                <NavLink to="/customers" className={linkClass} onClick={onClose}>
+                    solo CABA. Con plan VIP/Ultra manda a la versión con IA (CrmIaPage) —
+                    chat, notas de dieta, historial de platos, sugerencias y mensajes de
+                    WhatsApp con plantillas — en vez de la versión básica sin esas cosas. */}
+                <NavLink to={hasVip ? '/crm-ia' : '/customers'} className={linkClass} onClick={onClose}>
                   <Users className="w-5 h-5" />
                   Clientes
-                  <span className="ml-auto text-[8px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded font-black uppercase">PRO</span>
+                  {hasVip ? (
+                    <span className="ml-auto text-[8px] bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded font-black uppercase">VIP IA</span>
+                  ) : (
+                    <span className="ml-auto text-[8px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded font-black uppercase">PRO</span>
+                  )}
                 </NavLink>
                 <NavLink to="/stats" className={linkClass} onClick={onClose}>
                   <BarChart3 className="w-5 h-5" />
