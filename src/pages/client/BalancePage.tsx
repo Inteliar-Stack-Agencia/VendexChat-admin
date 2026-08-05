@@ -429,13 +429,19 @@ function PnLTable({ rows, year, onExport, onSelectMonth }: { rows: MonthlyRow[];
 
 // ─── Informe Detallado de un Mes ─────────────────────────────────────────────────
 
-function MonthDetailView({ month, year, revenueEntries, expenses, onBack }: {
+function MonthDetailView({ month, year, revenueEntries, pendingInvoices, expenses, onBack }: {
   month: number
   year: number
   revenueEntries: RevenueEntry[]
+  pendingInvoices: { total: number; created_at: string; label: string }[]
   expenses: Expense[]
   onBack: () => void
 }) {
+  const monthPendingInvoices = useMemo(
+    () => pendingInvoices.filter((e) => new Date(e.created_at).getMonth() + 1 === month),
+    [pendingInvoices, month]
+  )
+  const totalPending = monthPendingInvoices.reduce((s, e) => s + e.total, 0)
   const monthRevenue = useMemo(
     () => revenueEntries.filter((e) => new Date(e.created_at).getMonth() + 1 === month),
     [revenueEntries, month]
@@ -483,6 +489,26 @@ function MonthDetailView({ month, year, revenueEntries, expenses, onBack }: {
           </div>
         </div>
       </Card>
+
+      {monthPendingInvoices.length > 0 && (
+        <Card padding={false} className="border-amber-200">
+          <div className="p-4 border-b border-amber-100 bg-amber-50/50 flex items-center justify-between">
+            <div>
+              <p className="text-xs font-black text-amber-600 uppercase tracking-widest">Pendiente de cobro (Empresas)</p>
+              <p className="text-[11px] text-amber-500 mt-0.5">Ya facturado, todavía no cobrado — NO incluido en Ingresos netos ni Resultado de arriba</p>
+            </div>
+            <p className="text-lg font-black text-amber-700">{formatPrice(totalPending)}</p>
+          </div>
+          <div className="divide-y divide-gray-50">
+            {monthPendingInvoices.map((inv, i) => (
+              <div key={i} className="flex items-center justify-between px-4 py-3">
+                <p className="text-sm font-semibold text-gray-800">{inv.label}</p>
+                <p className="text-sm font-black text-amber-700">{formatPrice(inv.total)}</p>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {invoices.length > 0 && (
         <Card padding={false}>
@@ -572,6 +598,7 @@ function MonthDetailView({ month, year, revenueEntries, expenses, onBack }: {
 export default function BalancePage() {
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [revenueOrders, setRevenueOrders] = useState<RevenueEntry[]>([])
+  const [pendingInvoices, setPendingInvoices] = useState<{ total: number; created_at: string; label: string }[]>([])
   const [partners, setPartners] = useState<Partner[]>([])
   const [loading, setLoading] = useState(true)
   const [dbError, setDbError] = useState(false)
@@ -581,13 +608,15 @@ export default function BalancePage() {
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
-      const [exp, revenue, partnerList] = await Promise.all([
+      const [exp, revenue, pending, partnerList] = await Promise.all([
         expensesApi.listExpenses({ from: `${year}-01-01`, to: `${year}-12-31` }),
         expensesApi.getMonthlyRevenue(year),
+        expensesApi.getPendingCompanyInvoices(year),
         expensesApi.listPartners(),
       ])
       setExpenses(exp)
       setRevenueOrders(revenue)
+      setPendingInvoices(pending)
       setPartners(partnerList)
       setDbError(false)
     } catch (err: unknown) {
@@ -723,6 +752,7 @@ export default function BalancePage() {
             month={selectedMonth}
             year={year}
             revenueEntries={revenueOrders}
+            pendingInvoices={pendingInvoices}
             expenses={expenses}
             onBack={() => setSelectedMonth(null)}
           />
