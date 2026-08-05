@@ -345,6 +345,8 @@ export interface Customer {
   total_spent: number | string
   last_order_at: string | null
   notes?: string | null
+  dietary_notes?: string | null
+  needs_diet_tracking?: boolean
   is_archived?: boolean
   created_at: string
 }

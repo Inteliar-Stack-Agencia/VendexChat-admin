@@ -3,11 +3,13 @@ import { useNavigate } from 'react-router-dom'
 import {
     Users, Search, MessageSquare, ClipboardList, ShoppingBag,
     TrendingUp, UserCheck, DollarSign, Bot, Sparkles, Copy, CheckCircle2,
-    Send, Loader2, ChevronDown, ChevronUp, Trash2, Archive, ArchiveRestore
+    Send, Loader2, ChevronDown, ChevronUp, Trash2, Archive, ArchiveRestore,
+    Utensils, Salad, HeartPulse
 } from 'lucide-react'
 import FeatureGuard from '../../components/FeatureGuard'
 import { Card, LoadingSpinner, EmptyState, Modal, Button, showToast } from '../../components/common'
 import { customersApi, tenantApi } from '../../services/api'
+import { productsApi } from '../../services/productsApi'
 import { useAuth } from '../../contexts/AuthContext'
 import { formatPrice, formatShortDate, whatsappLink, orderStatusConfig } from '../../utils/helpers'
 import type { Customer } from '../../types'
@@ -43,6 +45,11 @@ function getCustomerTags(customer: Customer, allCustomers: Customer[]) {
         tags.push({ label: '🆕 Nuevo', color: 'text-emerald-700', bg: 'bg-emerald-100' })
     }
 
+    // Seguimiento nutricional: marcado a mano, no es una regla de comportamiento
+    if (customer.needs_diet_tracking) {
+        tags.push({ label: '🥗 Dieta', color: 'text-lime-700', bg: 'bg-lime-100' })
+    }
+
     return tags
 }
 
@@ -54,7 +61,7 @@ function getDaysSince(lastOrderAt: string | null): number | null {
 
 import { callAI as callAIService } from '../../services/aiService'
 
-const TAG_FILTERS = ['Todos', 'VIP', 'Frecuente', 'En riesgo', 'Inactivo', 'Nuevo']
+const TAG_FILTERS = ['Todos', 'VIP', 'Frecuente', 'En riesgo', 'Inactivo', 'Nuevo', 'Dieta']
 
 
 type MessageGoal = 'thankyou' | 'discount' | 'reminder' | 'reactivation'
@@ -116,18 +123,27 @@ function CrmIaPageInner() {
     const [isViewingOrders, setIsViewingOrders] = useState(false)
     const [isAIAnalysis, setIsAIAnalysis] = useState(false)
     const [isAIMessage, setIsAIMessage] = useState(false)
+    const [isViewingDishes, setIsViewingDishes] = useState(false)
+    const [isAIDishSuggestions, setIsAIDishSuggestions] = useState(false)
 
     // Notas
     const [notes, setNotes] = useState('')
+    const [dietaryNotes, setDietaryNotes] = useState('')
+    const [needsDietTracking, setNeedsDietTracking] = useState(false)
     const [saving, setSaving] = useState(false)
 
     // Pedidos del cliente
     const [customerOrders, setCustomerOrders] = useState<{ id: string; order_number: number; total: number; status: string; created_at: string }[]>([])
     const [loadingOrders, setLoadingOrders] = useState(false)
 
+    // Platos consumidos por el cliente
+    const [dishHistory, setDishHistory] = useState<{ product_id: string | null; product_name: string; timesOrdered: number; totalQuantity: number; lastOrderedAt: string }[]>([])
+    const [loadingDishes, setLoadingDishes] = useState(false)
+
     // IA
     const [aiAnalysisText, setAiAnalysisText] = useState('')
     const [aiMessageText, setAiMessageText] = useState('')
+    const [aiDishSuggestionsText, setAiDishSuggestionsText] = useState('')
     const [loadingAI, setLoadingAI] = useState(false)
     const [copied, setCopied] = useState(false)
     const [messageGoal, setMessageGoal] = useState<MessageGoal>('thankyou')
@@ -289,7 +305,10 @@ INSTRUCCIONES:
         if (!selectedCustomer) return
         setSaving(true)
         try {
-            await customersApi.updateNotes(selectedCustomer.id, notes)
+            await Promise.all([
+                customersApi.updateNotes(selectedCustomer.id, notes),
+                customersApi.updateDietaryInfo(selectedCustomer.id, { dietary_notes: dietaryNotes, needs_diet_tracking: needsDietTracking }),
+            ])
             showToast('success', 'Notas actualizadas')
             setIsEditingNotes(false)
             loadCustomers()
@@ -297,6 +316,20 @@ INSTRUCCIONES:
             showToast('error', 'No se pudieron guardar las notas')
         } finally {
             setSaving(false)
+        }
+    }
+
+    const handleViewDishes = async (customer: Customer) => {
+        setSelectedCustomer(customer)
+        setIsViewingDishes(true)
+        setLoadingDishes(true)
+        try {
+            const dishes = await customersApi.getDishHistory(customer.whatsapp)
+            setDishHistory(dishes)
+        } catch {
+            showToast('error', 'No se pudo cargar el historial de platos')
+        } finally {
+            setLoadingDishes(false)
         }
     }
 
@@ -357,6 +390,52 @@ Notas internas: ${customer.notes || 'ninguna'}` }
         } catch {
             showToast('error', 'Error al consultar la IA')
             setIsAIAnalysis(false)
+        } finally {
+            setLoadingAI(false)
+        }
+    }
+
+    // Sugerencias de rotación de platos: mira lo que el cliente pidió con más frecuencia,
+    // sus notas de dieta/salud, y el catálogo activo con categorías, para proponer
+    // reemplazos concretos que se puedan pasar a cocina (ej. "papas fritas → al horno").
+    const handleAIDishSuggestions = async (customer: Customer) => {
+        setSelectedCustomer(customer)
+        setAiDishSuggestionsText('')
+        setIsAIDishSuggestions(true)
+        setLoadingAI(true)
+        try {
+            const [dishes, catalog] = await Promise.all([
+                customersApi.getDishHistory(customer.whatsapp),
+                productsApi.list({ limit: 500 }),
+            ])
+            setDishHistory(dishes)
+            const repeated = dishes.filter((d) => d.timesOrdered >= 2)
+            if (repeated.length === 0) {
+                setAiDishSuggestionsText('Todavía no hay platos que se repitan lo suficiente como para sugerir una rotación — esperá a que tenga más pedidos.')
+                return
+            }
+            const catalogList = catalog.data
+                .filter((p) => p.is_active)
+                .map((p) => `- ${p.name}${p.category_name ? ` (${p.category_name})` : ''}`)
+                .join('\n')
+            const dishList = repeated
+                .map((d) => `- ${d.product_name}: pedido ${d.timesOrdered} veces, última vez ${formatShortDate(d.lastOrderedAt)}`)
+                .join('\n')
+            const text = await callAIService([
+                { role: 'system', content: 'Eres un nutricionista/chef asesorando a un local de viandas sobre cómo rotar el menú de un cliente frecuente para que no coma siempre lo mismo. Proponé reemplazos CONCRETOS (ej. "en vez de papas fritas, probar puré o vegetales al horno") usando SOLO productos que estén en el catálogo activo dado. Si el cliente tiene notas médicas/dieta, priorizalas. Sé breve y accionable: máximo 5 líneas, formato lista, en español, listo para pasarle a cocina. No inventes productos que no estén en el catálogo.' },
+                { role: 'user', content: `Cliente: ${customer.name}
+Notas médicas / dieta: ${customer.dietary_notes || 'ninguna registrada'}
+
+Platos que pide seguido:
+${dishList}
+
+Catálogo activo disponible (con categoría):
+${catalogList}` },
+            ], plan)
+            setAiDishSuggestionsText(text)
+        } catch {
+            showToast('error', 'Error al consultar la IA')
+            setIsAIDishSuggestions(false)
         } finally {
             setLoadingAI(false)
         }
@@ -718,9 +797,9 @@ Firma de la tienda obligatoria: — ${storeSignature}` }
                                             <td className="px-6 py-4 text-right">
                                                 <div className="flex items-center justify-end gap-1">
                                                     <button
-                                                        onClick={() => { setSelectedCustomer(customer); setNotes(customer.notes || ''); setIsEditingNotes(true) }}
+                                                        onClick={() => { setSelectedCustomer(customer); setNotes(customer.notes || ''); setDietaryNotes(customer.dietary_notes || ''); setNeedsDietTracking(!!customer.needs_diet_tracking); setIsEditingNotes(true) }}
                                                         className="p-2.5 rounded-xl bg-indigo-50/60 hover:bg-indigo-100 text-indigo-600 hover:text-indigo-700 transition-all border border-indigo-100"
-                                                        title="Notas internas"
+                                                        title="Notas internas y de dieta"
                                                     >
                                                         <ClipboardList className="w-5 h-5" />
                                                     </button>
@@ -730,6 +809,20 @@ Firma de la tienda obligatoria: — ${storeSignature}` }
                                                         title="Ver pedidos"
                                                     >
                                                         <ShoppingBag className="w-5 h-5" />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleViewDishes(customer)}
+                                                        className="p-2.5 rounded-xl bg-orange-50/60 hover:bg-orange-100 text-orange-600 hover:text-orange-700 transition-all border border-orange-100"
+                                                        title="Platos consumidos"
+                                                    >
+                                                        <Utensils className="w-5 h-5" />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleAIDishSuggestions(customer)}
+                                                        className="p-2.5 rounded-xl bg-lime-50/60 hover:bg-lime-100 text-lime-700 hover:text-lime-800 transition-all border border-lime-100"
+                                                        title="Sugerencias IA de rotación de platos"
+                                                    >
+                                                        <Salad className="w-5 h-5" />
                                                     </button>
                                                     <button
                                                         onClick={() => handleAIAnalysis(customer)}
@@ -809,8 +902,29 @@ Firma de la tienda obligatoria: — ${storeSignature}` }
                             value={notes}
                             onChange={(e) => setNotes(e.target.value)}
                             placeholder="Ej: Cliente recurrente, prefiere envíos por la mañana..."
-                            className="w-full h-40 p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none resize-none transition-all"
+                            className="w-full h-32 p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none resize-none transition-all"
                         />
+                    </div>
+                    <div>
+                        <label className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-lime-600 mb-2">
+                            <HeartPulse className="w-4 h-4" />
+                            Notas médicas / dieta
+                        </label>
+                        <textarea
+                            value={dietaryNotes}
+                            onChange={(e) => setDietaryNotes(e.target.value)}
+                            placeholder="Ej: Diabetes tipo 2, evitar frituras y azúcar; le gustan las verduras al horno..."
+                            className="w-full h-28 p-4 bg-lime-50/50 border border-lime-200 rounded-2xl text-sm focus:ring-2 focus:ring-lime-500 focus:border-lime-500 outline-none resize-none transition-all"
+                        />
+                        <label className="flex items-center gap-2 mt-2 text-sm text-gray-700 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                checked={needsDietTracking}
+                                onChange={(e) => setNeedsDietTracking(e.target.checked)}
+                                className="w-4 h-4 rounded border-gray-300 text-lime-600 focus:ring-lime-500"
+                            />
+                            Requiere seguimiento nutricional activo (rotar platos)
+                        </label>
                     </div>
                     <div className="flex justify-end gap-3">
                         <Button variant="outline" onClick={() => setIsEditingNotes(false)}>Cancelar</Button>
@@ -859,6 +973,71 @@ Firma de la tienda obligatoria: — ${storeSignature}` }
                                 </div>
                             )
                         })}
+                        </div>
+                    </div>
+                )}
+            </Modal>
+
+            {/* Modal: Platos consumidos */}
+            <Modal
+                isOpen={isViewingDishes}
+                onClose={() => { setIsViewingDishes(false); setDishHistory([]) }}
+                title={`Platos consumidos · ${selectedCustomer?.name}`}
+            >
+                {loadingDishes ? (
+                    <LoadingSpinner text="Cargando historial de platos..." />
+                ) : dishHistory.length === 0 ? (
+                    <p className="text-sm text-gray-500 text-center py-6">Todavía no hay pedidos con productos registrados.</p>
+                ) : (
+                    <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
+                        <p className="text-xs text-gray-500">Ordenado por frecuencia — lo que más se repite conviene rotarlo.</p>
+                        {dishHistory.map((dish) => (
+                            <div key={dish.product_id || dish.product_name} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100">
+                                <div>
+                                    <p className="text-sm font-bold text-gray-800">{dish.product_name}</p>
+                                    <p className="text-xs text-gray-400">Última vez: {formatShortDate(dish.lastOrderedAt)}</p>
+                                </div>
+                                <span className={`text-xs font-black px-3 py-1 rounded-full ${dish.timesOrdered >= 3 ? 'bg-rose-100 text-rose-700' : dish.timesOrdered >= 2 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                    {dish.timesOrdered}x pedido
+                                </span>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </Modal>
+
+            {/* Modal: Sugerencias IA de rotación de platos */}
+            <Modal
+                isOpen={isAIDishSuggestions}
+                onClose={() => setIsAIDishSuggestions(false)}
+                title={`Sugerencias de rotación · ${selectedCustomer?.name}`}
+            >
+                {loadingAI ? (
+                    <div className="flex flex-col items-center gap-3 py-10">
+                        <Salad className="w-10 h-10 text-lime-600 animate-pulse" />
+                        <p className="text-sm text-gray-500">Buscando variantes según lo que pide seguido...</p>
+                    </div>
+                ) : (
+                    <div className="space-y-4">
+                        {selectedCustomer?.dietary_notes && (
+                            <div className="p-3 bg-lime-50 border border-lime-200 rounded-xl">
+                                <p className="text-[11px] font-black uppercase tracking-widest text-lime-600 mb-1">Notas médicas / dieta</p>
+                                <p className="text-xs text-gray-700">{selectedCustomer.dietary_notes}</p>
+                            </div>
+                        )}
+                        <div className="p-4 bg-lime-50/60 border border-lime-100 rounded-2xl">
+                            <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{aiDishSuggestionsText}</p>
+                        </div>
+                        <div className="flex justify-end">
+                            <button
+                                onClick={() => handleCopy(aiDishSuggestionsText)}
+                                className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition-all"
+                            >
+                                {copied
+                                    ? <><CheckCircle2 className="w-4 h-4 text-emerald-600" /> Copiado</>
+                                    : <><Copy className="w-5 h-5" /> Copiar para cocina</>
+                                }
+                            </button>
                         </div>
                     </div>
                 )}
