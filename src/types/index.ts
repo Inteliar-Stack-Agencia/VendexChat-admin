@@ -348,6 +348,7 @@ export interface Customer {
   dietary_notes?: string | null
   needs_diet_tracking?: boolean
   customer_type?: 'individual' | 'empresa'
+  company_name?: string | null
   is_archived?: boolean
   created_at: string
 }

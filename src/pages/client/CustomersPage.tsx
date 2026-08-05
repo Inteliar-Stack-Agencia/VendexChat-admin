@@ -22,7 +22,11 @@ export default function CustomersPage() {
     const [notes, setNotes] = useState('')
     const [saving, setSaving] = useState(false)
     const [activeSegment, setActiveSegment] = useState<'all' | 'vip' | 'frequent' | 'new' | 'atRisk' | 'inactive' | 'empresa'>('all')
-    const [togglingTypeId, setTogglingTypeId] = useState<string | null>(null)
+    const [companyFilter, setCompanyFilter] = useState<string | null>(null)
+    const [isAssigningCompany, setIsAssigningCompany] = useState(false)
+    const [companyNameInput, setCompanyNameInput] = useState('')
+    const [registeredCompanies, setRegisteredCompanies] = useState<string[]>([])
+    const [savingCompany, setSavingCompany] = useState(false)
     const [customerOrders, setCustomerOrders] = useState<{ id: string; order_number: number; total: number; status: string; created_at: string }[]>([])
     const [loadingOrders, setLoadingOrders] = useState(false)
     const [deletingCustomerId, setDeletingCustomerId] = useState<string | null>(null)
@@ -46,6 +50,10 @@ export default function CustomersPage() {
         loadCustomers()
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedStoreId, debouncedSearch, page, showArchived])
+
+    useEffect(() => {
+        customersApi.listRegisteredCompanies().then(setRegisteredCompanies).catch(() => {})
+    }, [selectedStoreId])
 
     const loadCustomers = () => {
         setLoading(true)
@@ -128,17 +136,39 @@ export default function CustomersPage() {
         }
     }
 
-    const handleToggleCustomerType = async (customer: Customer) => {
-        setTogglingTypeId(customer.id)
+    const openAssignCompany = (customer: Customer) => {
+        setSelectedCustomer(customer)
+        setCompanyNameInput(customer.company_name || '')
+        setIsAssigningCompany(true)
+    }
+
+    const handleSaveCompany = async () => {
+        if (!selectedCustomer) return
+        setSavingCompany(true)
         try {
-            const newType = customer.customer_type === 'empresa' ? 'individual' : 'empresa'
-            await customersApi.setCustomerType(customer.id, newType)
-            showToast('success', newType === 'empresa' ? 'Marcado como cliente de empresa' : 'Marcado como cliente particular')
+            await customersApi.setCustomerType(selectedCustomer.id, 'empresa', companyNameInput.trim() || null)
+            showToast('success', 'Empresa asignada')
+            setIsAssigningCompany(false)
+            loadCustomers()
+        } catch {
+            showToast('error', 'No se pudo asignar la empresa')
+        } finally {
+            setSavingCompany(false)
+        }
+    }
+
+    const handleRemoveCompanyTag = async () => {
+        if (!selectedCustomer) return
+        setSavingCompany(true)
+        try {
+            await customersApi.setCustomerType(selectedCustomer.id, 'individual')
+            showToast('success', 'Marcado como cliente particular')
+            setIsAssigningCompany(false)
             loadCustomers()
         } catch {
             showToast('error', 'No se pudo actualizar la categoría')
         } finally {
-            setTogglingTypeId(null)
+            setSavingCompany(false)
         }
     }
 
@@ -233,11 +263,25 @@ export default function CustomersPage() {
     const filteredCustomers = useMemo(() => {
         if (activeSegment === 'all') return customers
         // "Empresa" es una categoría manual (customer_type), no un segmento de
-        // comportamiento como los demás — se filtra distinto.
-        if (activeSegment === 'empresa') return customers.filter(customer => customer.customer_type === 'empresa')
+        // comportamiento como los demás — se filtra distinto, y admite además acotar a
+        // una empresa puntual (companyFilter) para agruparlos.
+        if (activeSegment === 'empresa') {
+            const empresaCustomers = customers.filter(customer => customer.customer_type === 'empresa')
+            if (!companyFilter) return empresaCustomers
+            return empresaCustomers.filter(customer => customer.company_name === companyFilter)
+        }
         return customers.filter(customer => getCustomerSegment(customer).key === activeSegment)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [customers, activeSegment])
+    }, [customers, activeSegment, companyFilter])
+
+    // Empresas distintas presentes entre los clientes marcados como "Empresa" — para
+    // armar los sub-filtros de agrupación.
+    const companiesInList = useMemo(() => {
+        const names = customers
+            .filter(c => c.customer_type === 'empresa' && c.company_name)
+            .map(c => c.company_name as string)
+        return Array.from(new Set(names)).sort()
+    }, [customers])
 
     const segmentCounts = useMemo(() => ({
         all: customers.length,
@@ -360,7 +404,7 @@ export default function CustomersPage() {
                         ].map(segment => (
                             <button
                                 key={segment.key}
-                                onClick={() => setActiveSegment(segment.key as typeof activeSegment)}
+                                onClick={() => { setActiveSegment(segment.key as typeof activeSegment); setCompanyFilter(null) }}
                                 className={`px-3 py-1.5 rounded-full border text-sm font-semibold transition-colors ${
                                     activeSegment === segment.key
                                         ? 'bg-indigo-600 border-indigo-600 text-white'
@@ -371,6 +415,31 @@ export default function CustomersPage() {
                             </button>
                         ))}
                     </div>
+
+                    {activeSegment === 'empresa' && companiesInList.length > 0 && (
+                        <div className="flex flex-wrap items-center gap-2 pl-1">
+                            <span className="text-xs text-gray-400 font-semibold">Agrupar por:</span>
+                            <button
+                                onClick={() => setCompanyFilter(null)}
+                                className={`px-2.5 py-1 rounded-full border text-xs font-semibold transition-colors ${
+                                    !companyFilter ? 'bg-slate-800 border-slate-800 text-white' : 'bg-white border-gray-200 text-gray-600 hover:border-slate-400'
+                                }`}
+                            >
+                                Todas
+                            </button>
+                            {companiesInList.map(name => (
+                                <button
+                                    key={name}
+                                    onClick={() => setCompanyFilter(name)}
+                                    className={`px-2.5 py-1 rounded-full border text-xs font-semibold transition-colors ${
+                                        companyFilter === name ? 'bg-slate-800 border-slate-800 text-white' : 'bg-white border-gray-200 text-gray-600 hover:border-slate-400'
+                                    }`}
+                                >
+                                    {name}
+                                </button>
+                            ))}
+                        </div>
+                    )}
 
                     <p className="text-xs text-gray-500 font-medium">
                         Mostrando {filteredCustomers.length} de {customers.length} clientes.
@@ -448,7 +517,7 @@ export default function CustomersPage() {
                                                     </span>
                                                     {customer.customer_type === 'empresa' && (
                                                         <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-800 text-white">
-                                                            🏢 Empresa
+                                                            🏢 {customer.company_name || 'Empresa'}
                                                         </span>
                                                     )}
                                                 </div>
@@ -473,14 +542,13 @@ export default function CustomersPage() {
                                         <td className="px-6 py-4 text-right">
                                             <div className="flex items-center justify-end gap-2">
                                                 <button
-                                                    onClick={() => handleToggleCustomerType(customer)}
-                                                    disabled={togglingTypeId === customer.id}
-                                                    className={`p-2.5 rounded-xl transition-all border disabled:opacity-50 ${
+                                                    onClick={() => openAssignCompany(customer)}
+                                                    className={`p-2.5 rounded-xl transition-all border ${
                                                         customer.customer_type === 'empresa'
                                                             ? 'bg-slate-800 hover:bg-slate-700 text-white border-slate-800'
                                                             : 'bg-slate-50/60 hover:bg-slate-100 text-slate-500 hover:text-slate-700 border-slate-100'
                                                     }`}
-                                                    title={customer.customer_type === 'empresa' ? 'Marcar como cliente particular' : 'Marcar como cliente de empresa'}
+                                                    title={customer.customer_type === 'empresa' ? `Empresa: ${customer.company_name || 'sin especificar'}` : 'Marcar como cliente de empresa'}
                                                 >
                                                     <Building2 className="w-5 h-5" />
                                                 </button>
@@ -573,6 +641,46 @@ export default function CustomersPage() {
                         >
                             Guardar Notas
                         </Button>
+                    </div>
+                </div>
+            </Modal>
+
+            {/* Modal: Asignar empresa */}
+            <Modal
+                isOpen={isAssigningCompany}
+                onClose={() => setIsAssigningCompany(false)}
+                title={`Empresa: ${selectedCustomer?.name}`}
+            >
+                <div className="space-y-4">
+                    <div>
+                        <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">
+                            Nombre de la empresa
+                        </label>
+                        <input
+                            type="text"
+                            list="registered-companies"
+                            value={companyNameInput}
+                            onChange={(e) => setCompanyNameInput(e.target.value)}
+                            placeholder="Ej: AVSA Argentina Valores"
+                            className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-slate-400 focus:border-slate-400 outline-none"
+                        />
+                        <datalist id="registered-companies">
+                            {registeredCompanies.map((name) => <option key={name} value={name} />)}
+                        </datalist>
+                        <p className="text-[10px] text-gray-400 mt-1.5">Sugerencias de las empresas ya registradas en Despachos.</p>
+                    </div>
+                    <div className="flex justify-between gap-3">
+                        {selectedCustomer?.customer_type === 'empresa' && (
+                            <Button variant="outline" onClick={handleRemoveCompanyTag} loading={savingCompany} className="text-rose-600 border-rose-200 hover:bg-rose-50">
+                                Quitar categoría
+                            </Button>
+                        )}
+                        <div className="flex justify-end gap-3 flex-1">
+                            <Button variant="outline" onClick={() => setIsAssigningCompany(false)}>Cancelar</Button>
+                            <Button variant="primary" onClick={handleSaveCompany} loading={savingCompany} className="bg-slate-800 hover:bg-slate-700">
+                                Guardar
+                            </Button>
+                        </div>
                     </div>
                 </div>
             </Modal>
