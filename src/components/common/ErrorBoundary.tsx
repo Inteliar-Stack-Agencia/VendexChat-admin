@@ -1,4 +1,5 @@
 import { Component, ReactNode } from 'react'
+import { isChunkLoadError, reloadOnceForChunkError } from '../../utils/chunkReload'
 
 interface Props {
   children: ReactNode
@@ -22,6 +23,11 @@ export default class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: { componentStack: string }) {
     console.error('[ErrorBoundary] Uncaught error:', error, info.componentStack)
+    // Red de seguridad además del listener de vite:preloadError en main.tsx — cubre el
+    // caso en que el error de chunk viejo llega como excepción normal en vez de ese evento.
+    if (isChunkLoadError(error)) {
+      reloadOnceForChunkError()
+    }
   }
 
   render() {
