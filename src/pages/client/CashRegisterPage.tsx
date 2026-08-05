@@ -7,6 +7,7 @@ import { showToast } from '../../components/common/Toast'
 import { cashApi, type CashSession, type CashSessionForm } from '../../services/cashApi'
 import { productionApi } from '../../services/productionApi'
 import { productsApi } from '../../services/productsApi'
+import { companyDispatchApi } from '../../services/companyDispatchApi'
 import { formatPrice } from '../../utils/helpers'
 
 const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0]
@@ -256,14 +257,22 @@ export default function CashRegisterPage() {
   const [yesterdayCounts, setYesterdayCounts] = useState<Record<string, number>>({})
   const [todayProduction, setTodayProduction] = useState<Record<string, number>>({})
   const [countProducts, setCountProducts] = useState<{ id: string; price: number }[]>([])
+  // Unidades y $ (precio real por empresa) despachados HOY a Empresas — se descuentan de
+  // "vendido hoy" antes de valorizarlo a precio de lista, porque esas unidades no se
+  // cobran por Caja (se facturan aparte, y a otro precio) — y se muestran aparte como
+  // "pendiente de cobrar" para que el cierre de Caja explique la diferencia en vez de
+  // que parezca que falta plata.
+  const [dispatchedTodayByProduct, setDispatchedTodayByProduct] = useState<Record<string, number>>({})
+  const [dispatchedTodayTotal, setDispatchedTodayTotal] = useState(0)
 
   const loadQuickCount = useCallback(async () => {
     try {
-      const [todayC, yestC, todayProd, prodList] = await Promise.all([
+      const [todayC, yestC, todayProd, prodList, todayDispatches] = await Promise.all([
         productionApi.getDailyStockCount(today),
         productionApi.getDailyStockCount(yesterday),
         productionApi.getDayEntries(today),
         productsApi.list({ limit: 500 }),
+        companyDispatchApi.listDispatches({ from: today, to: today }).catch(() => []),
       ])
       setTodayCounts(todayC)
       setYesterdayCounts(yestC)
@@ -271,6 +280,17 @@ export default function CashRegisterPage() {
       for (const e of todayProd) prodMap[e.product_id] = e.quantity
       setTodayProduction(prodMap)
       setCountProducts(prodList.data.map((p) => ({ id: p.id, price: Number(p.price || 0) })))
+      const dispatchByProduct: Record<string, number> = {}
+      let dispatchTotal = 0
+      for (const d of todayDispatches) {
+        dispatchTotal += Number(d.total || 0)
+        for (const item of d.items || []) {
+          if (!item.product_id) continue
+          dispatchByProduct[item.product_id] = (dispatchByProduct[item.product_id] || 0) + item.quantity
+        }
+      }
+      setDispatchedTodayByProduct(dispatchByProduct)
+      setDispatchedTodayTotal(dispatchTotal)
     } catch {
       // silencioso: es un pantallazo informativo, no bloquea el resto de Caja
     }
@@ -283,12 +303,14 @@ export default function CashRegisterPage() {
     (s, id) => s + (yesterdayCounts[id] + (todayProduction[id] || 0) - todayCounts[id]),
     0,
   )
-  // Unidades vendidas hoy (según conteo) × precio de lista de cada producto — lo que
-  // "debería" haber entrado en Caja si todo se vendió al precio de venta normal.
+  // Unidades vendidas HOY DE MOSTRADOR (según conteo, menos lo despachado a Empresas) ×
+  // precio de lista — lo que "debería" haber entrado en Caja. No incluye lo despachado a
+  // Empresas: eso se factura a un precio negociado por empresa y se cobra aparte, nunca
+  // por Caja.
   const priceById: Record<string, number> = {}
   for (const p of countProducts) priceById[p.id] = p.price
   const expectedVentasFromStock = countedProductIds.reduce((s, id) => {
-    const units = yesterdayCounts[id] + (todayProduction[id] || 0) - todayCounts[id]
+    const units = Math.max(0, yesterdayCounts[id] + (todayProduction[id] || 0) - todayCounts[id] - (dispatchedTodayByProduct[id] || 0))
     return s + units * (priceById[id] || 0)
   }, 0)
   const hasTodayCount = Object.keys(todayCounts).length > 0
@@ -441,13 +463,20 @@ export default function CashRegisterPage() {
                     <p className="text-xl font-black text-teal-700">{unitsSoldToday}</p>
                   </div>
                   <div className="text-center">
-                    <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Ventas esperadas (stock)</p>
+                    <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Ventas esperadas (mostrador)</p>
                     <p className="text-xl font-black text-indigo-700">{formatPrice(expectedVentasFromStock)}</p>
                   </div>
                   <div className="text-center">
                     <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Registrado en Caja hoy</p>
                     <p className="text-xl font-black text-emerald-700">{registeredVentasToday != null ? formatPrice(registeredVentasToday) : '—'}</p>
                   </div>
+                  {dispatchedTodayTotal > 0 && (
+                    <div className="text-center">
+                      <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Despachado a Empresas hoy</p>
+                      <p className="text-xl font-black text-amber-700">{formatPrice(dispatchedTodayTotal)}</p>
+                      <p className="text-[8px] text-amber-500 mt-0.5">Pendiente de cobrar, no entra por Caja</p>
+                    </div>
+                  )}
                 </div>
               </div>
               {gap != null && Math.abs(gap) > 1 && (
