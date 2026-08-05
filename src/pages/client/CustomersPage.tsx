@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Users, Search, MessageSquare, ClipboardList, ShoppingBag, TrendingUp, UserCheck, DollarSign, Trash2, Archive, ArchiveRestore, UserPlus } from 'lucide-react'
+import { Users, Search, MessageSquare, ClipboardList, ShoppingBag, TrendingUp, UserCheck, DollarSign, Trash2, Archive, ArchiveRestore, UserPlus, Building2 } from 'lucide-react'
 import { Card, LoadingSpinner, EmptyState, Modal, Button, showToast, Pagination, ConfirmDialog } from '../../components/common'
 import { customersApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
@@ -21,7 +21,8 @@ export default function CustomersPage() {
     const [isViewingOrders, setIsViewingOrders] = useState(false)
     const [notes, setNotes] = useState('')
     const [saving, setSaving] = useState(false)
-    const [activeSegment, setActiveSegment] = useState<'all' | 'vip' | 'frequent' | 'new' | 'atRisk' | 'inactive'>('all')
+    const [activeSegment, setActiveSegment] = useState<'all' | 'vip' | 'frequent' | 'new' | 'atRisk' | 'inactive' | 'empresa'>('all')
+    const [togglingTypeId, setTogglingTypeId] = useState<string | null>(null)
     const [customerOrders, setCustomerOrders] = useState<{ id: string; order_number: number; total: number; status: string; created_at: string }[]>([])
     const [loadingOrders, setLoadingOrders] = useState(false)
     const [deletingCustomerId, setDeletingCustomerId] = useState<string | null>(null)
@@ -127,6 +128,20 @@ export default function CustomersPage() {
         }
     }
 
+    const handleToggleCustomerType = async (customer: Customer) => {
+        setTogglingTypeId(customer.id)
+        try {
+            const newType = customer.customer_type === 'empresa' ? 'individual' : 'empresa'
+            await customersApi.setCustomerType(customer.id, newType)
+            showToast('success', newType === 'empresa' ? 'Marcado como cliente de empresa' : 'Marcado como cliente particular')
+            loadCustomers()
+        } catch {
+            showToast('error', 'No se pudo actualizar la categoría')
+        } finally {
+            setTogglingTypeId(null)
+        }
+    }
+
     const handleCreateCustomer = async () => {
         if (!newCustomer.name.trim()) return
         setCreating(true)
@@ -217,6 +232,9 @@ export default function CustomersPage() {
     ]
     const filteredCustomers = useMemo(() => {
         if (activeSegment === 'all') return customers
+        // "Empresa" es una categoría manual (customer_type), no un segmento de
+        // comportamiento como los demás — se filtra distinto.
+        if (activeSegment === 'empresa') return customers.filter(customer => customer.customer_type === 'empresa')
         return customers.filter(customer => getCustomerSegment(customer).key === activeSegment)
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [customers, activeSegment])
@@ -228,6 +246,7 @@ export default function CustomersPage() {
         new: customers.filter(c => getCustomerSegment(c).key === 'new').length,
         atRisk: customers.filter(c => getCustomerSegment(c).key === 'atRisk').length,
         inactive: customers.filter(c => getCustomerSegment(c).key === 'inactive').length,
+        empresa: customers.filter(c => c.customer_type === 'empresa').length,
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }), [customers])
 
@@ -337,6 +356,7 @@ export default function CustomersPage() {
                             { key: 'atRisk', label: 'En riesgo' },
                             { key: 'inactive', label: 'Inactivo' },
                             { key: 'new', label: 'Nuevo' },
+                            { key: 'empresa', label: '🏢 Empresa' },
                         ].map(segment => (
                             <button
                                 key={segment.key}
@@ -426,6 +446,11 @@ export default function CustomersPage() {
                                                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${segment.className}`}>
                                                         {segment.label}
                                                     </span>
+                                                    {customer.customer_type === 'empresa' && (
+                                                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-800 text-white">
+                                                            🏢 Empresa
+                                                        </span>
+                                                    )}
                                                 </div>
                                                 <span className="text-[10px] text-gray-400 font-medium">
                                                     Último: {customer.last_order_at ? formatShortDate(customer.last_order_at) : 'N/A'}
@@ -447,6 +472,18 @@ export default function CustomersPage() {
                                         </td>
                                         <td className="px-6 py-4 text-right">
                                             <div className="flex items-center justify-end gap-2">
+                                                <button
+                                                    onClick={() => handleToggleCustomerType(customer)}
+                                                    disabled={togglingTypeId === customer.id}
+                                                    className={`p-2.5 rounded-xl transition-all border disabled:opacity-50 ${
+                                                        customer.customer_type === 'empresa'
+                                                            ? 'bg-slate-800 hover:bg-slate-700 text-white border-slate-800'
+                                                            : 'bg-slate-50/60 hover:bg-slate-100 text-slate-500 hover:text-slate-700 border-slate-100'
+                                                    }`}
+                                                    title={customer.customer_type === 'empresa' ? 'Marcar como cliente particular' : 'Marcar como cliente de empresa'}
+                                                >
+                                                    <Building2 className="w-5 h-5" />
+                                                </button>
                                                 <button
                                                     onClick={() => {
                                                         setSelectedCustomer(customer)
