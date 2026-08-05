@@ -113,7 +113,39 @@ export const customersApi = {
 
     // Categoría manual del cliente (no es un segmento automático como VIP/Frecuente) —
     // para poder marcar rápido "este cliente es de empresa" y filtrarlos aparte.
+    // Es un cambio GENERAL: la misma persona/empresa suele aparecer como un registro de
+    // cliente distinto en cada tienda (customers está por store_id) — así que además de
+    // actualizar el que tocaste, se busca por WhatsApp (comparando los últimos 8 dígitos,
+    // para no depender del formato con o sin código de país) entre TODAS las tiendas del
+    // mismo dueño y se aplica la misma categoría ahí también.
     setCustomerType: async (id: string, customer_type: 'individual' | 'empresa') => {
+        const { data: current, error: currentError } = await supabase
+            .from('customers').select('whatsapp, store_id').eq('id', id).single()
+        if (currentError) throw currentError
+
+        const digits = (current.whatsapp || '').replace(/\D/g, '')
+        const last8 = digits.slice(-8)
+
+        if (last8.length === 8) {
+            const { data: store, error: storeError } = await supabase
+                .from('stores').select('owner_id').eq('id', current.store_id).single()
+            if (!storeError && store?.owner_id) {
+                const { data: ownedStores } = await supabase
+                    .from('stores').select('id').eq('owner_id', store.owner_id)
+                const storeIds = (ownedStores || []).map((s) => s.id)
+                if (storeIds.length > 0) {
+                    const { data: candidates } = await supabase
+                        .from('customers').select('id, whatsapp').in('store_id', storeIds)
+                    const matchingIds = (candidates || [])
+                        .filter((c) => c.whatsapp && c.whatsapp.replace(/\D/g, '').slice(-8) === last8)
+                        .map((c) => c.id)
+                    if (matchingIds.length > 0) {
+                        await supabase.from('customers').update({ customer_type }).in('id', matchingIds)
+                    }
+                }
+            }
+        }
+
         const { data, error } = await supabase
             .from('customers')
             .update({ customer_type })
