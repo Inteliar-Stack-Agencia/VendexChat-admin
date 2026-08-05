@@ -111,6 +111,19 @@ export const customersApi = {
         return Array.from(byProduct.values()).sort((a, b) => b.timesOrdered - a.timesOrdered)
     },
 
+    // Categoría manual del cliente (no es un segmento automático como VIP/Frecuente) —
+    // para poder marcar rápido "este cliente es de empresa" y filtrarlos aparte.
+    setCustomerType: async (id: string, customer_type: 'individual' | 'empresa') => {
+        const { data, error } = await supabase
+            .from('customers')
+            .update({ customer_type })
+            .eq('id', id)
+            .select()
+            .single()
+        if (error) throw error
+        return data
+    },
+
     archive: async (id: string, archived: boolean) => {
         const { data, error } = await supabase
             .from('customers')
