@@ -34,6 +34,7 @@ const CATEGORIES: { value: ExpenseCategory; label: string; color: string }[] = [
   { value: 'marketing', label: 'Marketing', color: 'bg-pink-100 text-pink-700' },
   { value: 'merma', label: 'Merma', color: 'bg-red-100 text-red-700' },
   { value: 'consumo_interno', label: 'Consumo Interno', color: 'bg-amber-100 text-amber-700' },
+  { value: 'bebidas', label: 'Bebidas', color: 'bg-cyan-100 text-cyan-700' },
   { value: 'otros', label: 'Otros', color: 'bg-gray-100 text-gray-700' },
 ]
 

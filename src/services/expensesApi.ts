@@ -10,6 +10,7 @@ export type ExpenseCategory =
   | 'marketing'
   | 'merma'
   | 'consumo_interno'
+  | 'bebidas'
   | 'otros'
 
 export interface Supplier {
@@ -268,6 +269,23 @@ export const expensesApi = {
       .eq('store_id', storeId)
       .eq('category', 'materia_prima')
       .ilike('description', 'Ingreso de viandas%')
+      .gte('date', from)
+      .lte('date', to)
+    if (error) throw error
+    return (data || []).reduce((s, e) => s + Number(e.amount), 0)
+  },
+
+  // Igual que sumProductionExpenses pero para bebidas (agua, gaseosas, jugos...) — van a
+  // su propia categoría de gasto, separadas de materia prima, porque no son algo que se
+  // cocine/produzca, solo se compran y revenden.
+  sumBeverageExpenses: async (from: string, to: string) => {
+    const storeId = await getStoreId()
+    const { data, error } = await supabase
+      .from('expenses')
+      .select('amount')
+      .eq('store_id', storeId)
+      .eq('category', 'bebidas')
+      .ilike('description', 'Ingreso de bebidas%')
       .gte('date', from)
       .lte('date', to)
     if (error) throw error
