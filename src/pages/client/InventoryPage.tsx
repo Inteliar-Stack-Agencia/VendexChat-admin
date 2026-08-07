@@ -1835,11 +1835,15 @@ function StockCloseGrid({ products, autoOpenCount }: { products: Product[]; auto
 
   const activeProducts = products.filter((p) => p.is_active)
 
+  // Bebidas no son algo que se "produzca" (se compran ya hechas) — igual que en la
+  // pestaña Producción, se excluyen del total de "Producido", pero sí siguen contando en
+  // Sobrante/Vendido/Ingresos porque esos son movimientos de stock y plata reales.
   const grandTotals = activeProducts.reduce(
     (acc, p) => {
       const t = productTotals(p)
       acc.sobrante += t.sobrante; acc.consumo += t.consumo; acc.merma += t.merma
-      acc.produced += t.totalProduced; acc.reingreso += t.reingreso; acc.vendido += t.vendidoReal
+      if (p.category_name !== 'Bebidas') acc.produced += t.totalProduced
+      acc.reingreso += t.reingreso; acc.vendido += t.vendidoReal
       acc.registrado += t.registrado; acc.sinExplicar += t.sinExplicar
       acc.ingresos += t.ingresos; acc.costo += t.costo; acc.margen += t.margen
       acc.costoSobrante += t.costoSobrante; acc.costoConsumo += t.costoConsumo; acc.costoMerma += t.costoMerma; acc.costoReingreso += t.costoReingreso
