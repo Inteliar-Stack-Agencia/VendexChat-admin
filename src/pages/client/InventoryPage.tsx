@@ -1049,9 +1049,13 @@ function ProductionGrid({ products, onCostUpdated, refreshKey }: { products: Pro
     return { produced }
   }
 
-  const grandProduced = products.reduce((s, p) => s + productTotals(p.id).produced, 0)
+  // Bebidas (agua, gaseosas, jugos...) no son algo que se "produzca" — se compran ya
+  // hechas — así que no cuentan en el total de unidades ni costo de producción, aunque
+  // sigan editables fila por fila para llevar el conteo de stock igual.
+  const isNotBeverage = (p: Product) => p.category_name !== 'Bebidas'
+  const grandProduced = products.filter(isNotBeverage).reduce((s, p) => s + productTotals(p.id).produced, 0)
   const activeProducts = products.filter((p) => p.is_active)
-  const totalProductionCost = activeProducts.reduce((s, p) => s + productTotals(p.id).produced * (getWeekCost(p) ?? 0), 0)
+  const totalProductionCost = activeProducts.filter(isNotBeverage).reduce((s, p) => s + productTotals(p.id).produced * (getWeekCost(p) ?? 0), 0)
   // Lo que falta cargar: el total de producción de la semana menos lo que ya se cargó
   // como gasto en algún click anterior. Si cargás producción día a día y vas apretando
   // el botón, cada vez suma una línea nueva solo por la diferencia — nunca recuenta ni
