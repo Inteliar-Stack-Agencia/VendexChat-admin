@@ -935,6 +935,10 @@ function ProductionGrid({ products, onCostUpdated, refreshKey }: { products: Pro
   // no memoria) — así "Cargar como gasto" solo cobra la diferencia nueva si se sigue
   // cargando producción durante la semana, en vez de recalcular o duplicar todo.
   const [alreadyExpensed, setAlreadyExpensed] = useState(0)
+  // Igual que alreadyExpensed pero para el gasto de bebidas, que se carga aparte en su
+  // propia categoría (no se cocinan, no cuentan como "producción").
+  const [alreadyExpensedBeverages, setAlreadyExpensedBeverages] = useState(0)
+  const [loadingBeverageExpense, setLoadingBeverageExpense] = useState(false)
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [expenseSupplierId, setExpenseSupplierId] = useState('')
 
@@ -988,6 +992,14 @@ function ProductionGrid({ products, onCostUpdated, refreshKey }: { products: Pro
     expensesApi.sumProductionExpenses(weekStartISO, weekEndISO)
       .then((sum) => { if (active) setAlreadyExpensed(sum) })
       .catch(() => { if (active) setAlreadyExpensed(0) })
+    return () => { active = false }
+  }, [weekStartISO, weekEndISO])
+
+  useEffect(() => {
+    let active = true
+    expensesApi.sumBeverageExpenses(weekStartISO, weekEndISO)
+      .then((sum) => { if (active) setAlreadyExpensedBeverages(sum) })
+      .catch(() => { if (active) setAlreadyExpensedBeverages(0) })
     return () => { active = false }
   }, [weekStartISO, weekEndISO])
 
@@ -1086,6 +1098,38 @@ function ProductionGrid({ products, onCostUpdated, refreshKey }: { products: Pro
       showToast('error', err instanceof Error ? err.message : 'Error al cargar el gasto')
     } finally {
       setLoadingExpense(false)
+    }
+  }
+
+  // Costo de bebidas de la semana — mismo cálculo que totalProductionCost pero solo con
+  // los productos de categoría Bebidas, para cargarlo como gasto aparte (categoría
+  // "bebidas", no "materia_prima").
+  const totalBeverageCost = activeProducts
+    .filter((p) => !isNotBeverage(p))
+    .reduce((s, p) => s + productTotals(p.id).produced * (getWeekCost(p) ?? 0), 0)
+  const pendingBeverageExpenseAmount = Math.max(0, totalBeverageCost - alreadyExpensedBeverages)
+
+  const handleLoadBeverageExpense = async () => {
+    if (pendingBeverageExpenseAmount <= 0) { showToast('error', 'No hay bebidas nuevas para cargar'); return }
+    setLoadingBeverageExpense(true)
+    try {
+      const fromLabel = weekStart.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })
+      const toLabel = allWeekDays[4].toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })
+      await expensesApi.createExpense({
+        description: `Ingreso de bebidas del ${fromLabel} al ${toLabel}`,
+        category: 'bebidas',
+        expense_type: 'variable',
+        amount: pendingBeverageExpenseAmount,
+        date: today,
+        supplier_id: expenseSupplierId || null,
+        notes: null,
+      })
+      setAlreadyExpensedBeverages((prev) => prev + pendingBeverageExpenseAmount)
+      showToast('success', `Gasto de bebidas cargado: ${formatPrice(pendingBeverageExpenseAmount)}`)
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : 'Error al cargar el gasto')
+    } finally {
+      setLoadingBeverageExpense(false)
     }
   }
 
@@ -1293,6 +1337,36 @@ function ProductionGrid({ products, onCostUpdated, refreshKey }: { products: Pro
           </div>
         </div>
       </div>
+
+      {/* Bebidas: costo aparte, categoría de gasto distinta a materia prima */}
+      {(totalBeverageCost > 0 || alreadyExpensedBeverages > 0) && (
+        <div className="bg-cyan-50 rounded-xl p-3 flex items-center justify-between gap-3">
+          <div className="text-left">
+            <p className="text-[9px] font-bold text-cyan-600 uppercase tracking-widest mb-1">
+              {alreadyExpensedBeverages > 0 ? 'Costo de bebidas sin cargar' : 'Costo de bebidas de esta semana'}
+            </p>
+            <p className="text-2xl font-black text-cyan-700">{formatPrice(pendingBeverageExpenseAmount)}</p>
+            {alreadyExpensedBeverages > 0 && (
+              <p className="text-[10px] text-cyan-500 mt-0.5">Ya cargaste {formatPrice(alreadyExpensedBeverages)} esta semana</p>
+            )}
+          </div>
+          <button
+            onClick={handleLoadBeverageExpense}
+            disabled={loadingBeverageExpense || pendingBeverageExpenseAmount <= 0}
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-white bg-cyan-600 hover:bg-cyan-700 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm shrink-0"
+            title="Crea un gasto variable de bebidas solo por lo nuevo que todavía no se cargó, sin tipearlo a mano"
+          >
+            {loadingBeverageExpense ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : pendingBeverageExpenseAmount <= 0 ? (
+              <CheckCircle2 className="w-3.5 h-3.5" />
+            ) : (
+              <TrendingDown className="w-3.5 h-3.5" />
+            )}
+            {pendingBeverageExpenseAmount <= 0 ? 'Al día' : `Cargar ${formatPrice(pendingBeverageExpenseAmount)}`}
+          </button>
+        </div>
+      )}
 
       {/* Grid */}
       {loading ? (
