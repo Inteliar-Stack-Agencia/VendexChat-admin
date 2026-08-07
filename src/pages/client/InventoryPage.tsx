@@ -1814,16 +1814,23 @@ function StockCloseGrid({ products, autoOpenCount }: { products: Product[]; auto
     try {
       const weekDatesISO = weekDays.map(toISO)
       const saveDate = weekDatesISO.includes(closeDate) ? closeDate : weekDatesISO[weekDatesISO.length - 1]
+      const sobranteCounts: Record<string, number> = {}
       await Promise.all(
         activeProducts.map(async (p) => {
           const sobrante = parseInt(pending[p.id]?.sobrante || '0') || 0
           const consumo = parseInt(pending[p.id]?.consumo_interno || '0') || 0
           const merma = parseInt(pending[p.id]?.merma || '0') || 0
+          sobranteCounts[p.id] = sobrante
           if (sobrante > 0 || consumo > 0 || merma > 0) {
             await productionApi.upsertStockClose(saveDate, p.id, { sobrante, consumo_interno: consumo, merma })
           }
         })
       )
+      // El sobrante que se guarda acá también se registra como conteo rápido del día
+      // (saveDate) — si no, getSobranteDefault sigue prefiriendo el último conteo rápido
+      // guardado (que puede ser más viejo y estar desactualizado) por sobre lo que se
+      // acaba de corregir a mano acá, y la corrección desaparece al recargar la pantalla.
+      await productionApi.saveDailyStockCount(saveDate, sobranteCounts)
 
       // Auto-cargar la pestaña Ventas con lo vendido de mostrador que todavía no está
       // explicado por ningún otro canal (Pedidos, Despachos a Empresas o carga manual) ×
