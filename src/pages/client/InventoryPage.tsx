@@ -1091,6 +1091,7 @@ function ProductionGrid({ products, onCostUpdated, refreshKey }: { products: Pro
         date: today,
         supplier_id: expenseSupplierId || null,
         notes: null,
+        production_charge: true,
       })
       setAlreadyExpensed((prev) => prev + pendingExpenseAmount)
       showToast('success', `Gasto cargado: ${formatPrice(pendingExpenseAmount)}`)
@@ -1123,6 +1124,7 @@ function ProductionGrid({ products, onCostUpdated, refreshKey }: { products: Pro
         date: today,
         supplier_id: expenseSupplierId || null,
         notes: null,
+        production_charge: true,
       })
       setAlreadyExpensedBeverages((prev) => prev + pendingBeverageExpenseAmount)
       showToast('success', `Gasto de bebidas cargado: ${formatPrice(pendingBeverageExpenseAmount)}`)

@@ -38,6 +38,10 @@ export interface Expense {
   amount: number
   date: string
   notes: string | null
+  // Marca los gastos generados por "Cargar como gasto" en Producción (materia prima o
+  // bebidas) — independiente del texto de la descripción, para que renombrarla no rompa
+  // el tracking de "cuánto ya se cargó esta semana" (ver sumProductionExpenses).
+  production_charge?: boolean
   created_at: string
 }
 
@@ -256,11 +260,13 @@ export const expensesApi = {
     })
   },
 
-  // Suma lo YA cargado como gasto de producción en un rango de fechas (por categoría +
-  // prefijo de descripción). Se usa en "Cargar como gasto" (Inventario → Producción)
-  // para cobrar solo la DIFERENCIA nueva cuando se sigue cargando producción durante
-  // la semana — no recalcula ni pisa lo ya cargado, suma una línea nueva por la parte
-  // que todavía no se había cargado.
+  // Suma lo YA cargado como gasto de producción en un rango de fechas, identificado por
+  // el flag production_charge (no por el texto de la descripción — si se edita para que
+  // sea más clara, ej. "Lima ensaladas 3/8 al 7/8" en vez de "Ingreso de viandas...", el
+  // flag sigue reconociéndola igual). Se usa en "Cargar como gasto" (Inventario →
+  // Producción) para cobrar solo la DIFERENCIA nueva cuando se sigue cargando producción
+  // durante la semana — no recalcula ni pisa lo ya cargado, suma una línea nueva por la
+  // parte que todavía no se había cargado.
   sumProductionExpenses: async (from: string, to: string) => {
     const storeId = await getStoreId()
     const { data, error } = await supabase
@@ -268,7 +274,7 @@ export const expensesApi = {
       .select('amount')
       .eq('store_id', storeId)
       .eq('category', 'materia_prima')
-      .ilike('description', 'Ingreso de viandas%')
+      .eq('production_charge', true)
       .gte('date', from)
       .lte('date', to)
     if (error) throw error
@@ -285,7 +291,7 @@ export const expensesApi = {
       .select('amount')
       .eq('store_id', storeId)
       .eq('category', 'bebidas')
-      .ilike('description', 'Ingreso de bebidas%')
+      .eq('production_charge', true)
       .gte('date', from)
       .lte('date', to)
     if (error) throw error
