@@ -1,0 +1,15 @@
+# Los archivos en /assets/ tienen hash de contenido en el nombre (ej. CompanyDispatchPage-Br5hVoy-.js)
+# así que son inmutables: un cambio en el código siempre genera un nombre nuevo. Se pueden
+# cachear "para siempre" sin riesgo de servir una versión vieja.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# index.html en cambio SÍ cambia en cada deploy (referencia los nuevos nombres de archivo con
+# hash). Si Cloudflare (o el navegador) lo cachea aunque sea unos minutos, un usuario puede
+# quedar con un index.html viejo que pide un chunk que ya no existe en el deploy actual →
+# "Failed to fetch dynamically imported module". Por eso se fuerza a no cachearlo nunca.
+/index.html
+  Cache-Control: no-cache, no-store, must-revalidate
+
+/
+  Cache-Control: no-cache, no-store, must-revalidate
