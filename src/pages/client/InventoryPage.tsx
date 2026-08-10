@@ -2303,6 +2303,10 @@ function SalesGrid({ products }: { products: Product[] }) {
   // Plata registrada en Caja (cierres diarios) esta semana, para comparar contra lo
   // vendido (que ahora se autocompleta desde el Cierre de Stock).
   const [cajaTotal, setCajaTotal] = useState<number | null>(null)
+  // Desglose por medio de pago de lo registrado en Caja — para poder ir descontando de
+  // "Ventas estimadas" lo que ya entró por QR/transferencia/tarjeta y quedarnos con
+  // cuánto efectivo debería haber en la caja.
+  const [cajaByMethod, setCajaByMethod] = useState({ efectivo: 0, qr: 0, transferencia: 0, tarjeta: 0, other: 0 })
 
   const allWeekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
   const weekDays = allWeekDays.filter(d => d.getDay() >= 1 && d.getDay() <= 5)
@@ -2323,6 +2327,13 @@ function SalesGrid({ products }: { products: Product[] }) {
           ? sessions.reduce((s, sess) => s + sess.sales_efectivo + sess.sales_qr + sess.sales_transferencia + sess.sales_tarjeta + sess.sales_other, 0)
           : null,
       )
+      setCajaByMethod(sessions.reduce((acc, sess) => ({
+        efectivo: acc.efectivo + sess.sales_efectivo,
+        qr: acc.qr + sess.sales_qr,
+        transferencia: acc.transferencia + sess.sales_transferencia,
+        tarjeta: acc.tarjeta + sess.sales_tarjeta,
+        other: acc.other + sess.sales_other,
+      }), { efectivo: 0, qr: 0, transferencia: 0, tarjeta: 0, other: 0 }))
     } catch {
       showToast('error', 'Error al cargar ventas')
     } finally {
@@ -2460,12 +2471,12 @@ function SalesGrid({ products }: { products: Product[] }) {
         </button>
       </div>
 
-      {/* Summary banner: total vendido (se autocompleta desde el Cierre de Stock) vs.
-          lo efectivamente registrado en Caja esa semana */}
+      {/* Summary banner: ventas estimadas (se autocompleta desde "Vendido (estimado)" del
+          Cierre de Stock) vs. lo efectivamente registrado en Caja esa semana */}
       <div className="flex flex-wrap gap-3">
-        <div className="flex-1 min-w-[200px] bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-center">
+        <div className="flex-1 min-w-[200px] bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-center" title="Sale de multiplicar 'Vendido (estimado)' de Cierre de Stock por el precio de lista de cada producto">
           <div className="text-2xl font-black text-emerald-700">{formatPrice(grandTotal)}</div>
-          <div className="text-xs text-emerald-600 font-semibold">Total vendido esta semana</div>
+          <div className="text-xs text-emerald-600 font-semibold">Ventas estimadas</div>
         </div>
         <div className="flex-1 min-w-[200px] bg-indigo-50 border border-indigo-200 rounded-xl p-4 text-center">
           <div className="text-2xl font-black text-indigo-700">{cajaTotal != null ? formatPrice(cajaTotal) : '—'}</div>
@@ -2478,6 +2489,56 @@ function SalesGrid({ products }: { products: Product[] }) {
           <span>{formatPrice(grandTotal - cajaTotal)}</span>
         </div>
       )}
+
+      {/* Conciliación de efectivo: a las ventas estimadas se le va descontando lo que ya
+          entró por medios no efectivo (QR, transferencia, tarjeta) — lo que queda es lo
+          que debería haber en efectivo en la caja, para compararlo contra lo contado. */}
+      {(() => {
+        const noEfectivo = cajaByMethod.qr + cajaByMethod.transferencia + cajaByMethod.tarjeta + cajaByMethod.other
+        const efectivoEsperado = grandTotal - noEfectivo
+        const diffEfectivo = efectivoEsperado - cajaByMethod.efectivo
+        return (
+          <div className="rounded-xl border border-gray-200 bg-white p-4 space-y-2">
+            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Conciliación de efectivo</p>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-gray-500">Ventas estimadas</span>
+              <span className="font-bold text-gray-700">{formatPrice(grandTotal)}</span>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-gray-500">− QR / Mercado Pago</span>
+              <span className="font-semibold text-rose-500">{formatPrice(cajaByMethod.qr)}</span>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-gray-500">− Transferencias</span>
+              <span className="font-semibold text-rose-500">{formatPrice(cajaByMethod.transferencia)}</span>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-gray-500">− Tarjeta</span>
+              <span className="font-semibold text-rose-500">{formatPrice(cajaByMethod.tarjeta)}</span>
+            </div>
+            {cajaByMethod.other > 0 && (
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-500">− Otros medios</span>
+                <span className="font-semibold text-rose-500">{formatPrice(cajaByMethod.other)}</span>
+              </div>
+            )}
+            <div className="flex items-center justify-between text-sm border-t border-gray-100 pt-2">
+              <span className="font-bold text-gray-700">= Efectivo esperado</span>
+              <span className="font-black text-emerald-700">{formatPrice(efectivoEsperado)}</span>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-gray-500">Efectivo registrado en Caja</span>
+              <span className="font-semibold text-gray-600">{formatPrice(cajaByMethod.efectivo)}</span>
+            </div>
+            {Math.abs(diffEfectivo) > 1 && (
+              <div className={`rounded-lg px-3 py-2 text-xs font-bold flex items-center justify-between ${diffEfectivo > 0 ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'}`}>
+                <span>{diffEfectivo > 0 ? 'Falta efectivo contra lo esperado' : 'Sobra efectivo contra lo esperado'}</span>
+                <span>{formatPrice(Math.abs(diffEfectivo))}</span>
+              </div>
+            )}
+          </div>
+        )
+      })()}
 
       {activeProducts.length === 0 ? (
         <div className="text-center py-12 text-gray-400">
