@@ -954,6 +954,11 @@ function ProductionGrid({ products, onCostUpdated, refreshKey }: { products: Pro
 
   const weekLabel = `${weekStart.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })} – ${allWeekDays[4].toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })}`
 
+  // Devuelve los datos recién leídos (no solo los deja en el state) porque enterEditMode
+  // los necesita YA, en la misma función — leer el state (weekData) después de un await
+  // puede devolver el valor viejo por el closure del render anterior, y precargar edición
+  // con datos viejos es lo que provocaba que "Editar semana" pisara a 0 cantidades ya
+  // guardadas si se apretaba justo durante la carga.
   const load = useCallback(async () => {
     setLoading(true)
     setPendingQty({})
@@ -962,12 +967,14 @@ function ProductionGrid({ products, onCostUpdated, refreshKey }: { products: Pro
     try {
       const [data, lastFridayCount] = await Promise.all([
         productionApi.getWeekData(weekStartISO, weekEndISO),
-        productionApi.getDailyStockCount(toISO(addDays(weekDays[weekDays.length - 1], -7))).catch(() => ({})),
+        productionApi.getDailyStockCount(toISO(addDays(weekDays[weekDays.length - 1], -7))).catch(() => ({} as Record<string, number>)),
       ])
       setWeekData(data)
       setLastWeekFridayCounts(lastFridayCount)
+      return { data, lastFridayCount }
     } catch {
       showToast('error', 'Error al cargar producción')
+      return null
     } finally {
       setLoading(false)
     }
@@ -1022,14 +1029,6 @@ function ProductionGrid({ products, onCostUpdated, refreshKey }: { products: Pro
     return total
   }
 
-  const getReingresoVal = (productId: string): string => {
-    if (pendingReingreso[productId] !== undefined) return pendingReingreso[productId]
-    const saved = getSavedReingreso(productId)
-    if (saved > 0) return String(saved)
-    const suggested = lastWeekFridayCounts[productId] ?? 0
-    return suggested > 0 ? String(suggested) : ''
-  }
-
   // Cost for this week: pendingCosts > production_log cost > product.cost_price
   const getWeekCost = (product: Product): number | null => {
     if (pendingCosts[product.id] !== undefined) return parseFloat(pendingCosts[product.id]) || null
@@ -1077,10 +1076,49 @@ function ProductionGrid({ products, onCostUpdated, refreshKey }: { products: Pro
   // Carga SOLO la diferencia nueva de producción como un gasto variable de materia
   // prima — ya se sabe cuánto salió cada unidad (costo cargado arriba), no hay que
   // recalcularlo ni tipearlo a mano en Gastos.
+  // Escribe en production_log las cantidades/costos tipeados en pantalla (sin salir de
+  // modo edición ni tocar el toast) — usada tanto por "Guardar cambios" como, antes de
+  // cargar el gasto, por los dos botones "Cargar como gasto". Antes, "Cargar como gasto"
+  // calculaba el monto con lo tipeado en pantalla (pendingQty) pero nunca lo guardaba en
+  // production_log — si el usuario refrescaba o perdía la sesión de edición antes de
+  // apretar "Guardar cambios", el gasto quedaba cargado en Caja/Balance pero la
+  // producción real nunca se guardaba (plata cargada, cantidades perdidas).
+  const persistPending = async () => {
+    const storeId = await import('../../services/coreApi').then(m => m.getStoreId())
+    const weekDatesISO = weekDays.map(d => toISO(d))
+
+    const entries: Record<string, Record<string, number>> = {}
+    for (const p of activeProducts) {
+      entries[p.id] = {}
+      for (const d of weekDatesISO) {
+        entries[p.id][d] = parseInt(pendingQty[p.id]?.[d] || '0') || 0
+      }
+    }
+
+    const costs: Record<string, number | null> = {}
+    for (const p of activeProducts) {
+      const v = pendingCosts[p.id]
+      costs[p.id] = v !== undefined && v !== '' ? parseFloat(v) : (weekData?.costs[p.id] ?? null)
+    }
+
+    await productionApi.saveWeekEntries(weekDatesISO, entries, costs, storeId)
+
+    const mondayDate = weekDatesISO[0]
+    await Promise.all(
+      activeProducts.map(async (p) => {
+        const reingreso = parseInt(pendingReingreso[p.id] || '0') || 0
+        if (reingreso !== getSavedReingreso(p.id)) {
+          await productionApi.upsertReingreso(mondayDate, p.id, reingreso)
+        }
+      })
+    )
+  }
+
   const handleLoadAsExpense = async () => {
     if (pendingExpenseAmount <= 0) { showToast('error', 'No hay producción nueva para cargar'); return }
     setLoadingExpense(true)
     try {
+      if (editMode) await persistPending()
       const fromLabel = weekStart.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })
       const toLabel = allWeekDays[4].toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })
       await expensesApi.createExpense({
@@ -1114,6 +1152,7 @@ function ProductionGrid({ products, onCostUpdated, refreshKey }: { products: Pro
     if (pendingBeverageExpenseAmount <= 0) { showToast('error', 'No hay bebidas nuevas para cargar'); return }
     setLoadingBeverageExpense(true)
     try {
+      if (editMode) await persistPending()
       const fromLabel = weekStart.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })
       const toLabel = allWeekDays[4].toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })
       await expensesApi.createExpense({
@@ -1135,18 +1174,25 @@ function ProductionGrid({ products, onCostUpdated, refreshKey }: { products: Pro
     }
   }
 
-  const enterEditMode = () => {
-    // Pre-fill pending with current saved values so user sees what exists
+  const enterEditMode = async () => {
+    // Se relee directo de la base (no del state weekData) para precargar edición siempre
+    // con lo último guardado — si se confiara en weekData y todavía no hubiera terminado
+    // de refrescar tras un save anterior, se precargaría en 0 y el próximo "Guardar
+    // cambios" pisaría cantidades que en realidad ya estaban guardadas.
+    const fresh = await load()
+    const data = fresh?.data ?? weekData
+    const lastFridayCount = fresh?.lastFridayCount ?? lastWeekFridayCounts
+
     const initQty: Record<string, Record<string, string>> = {}
     const initCosts: Record<string, string> = {}
     for (const p of activeProducts) {
       initQty[p.id] = {}
       for (const day of weekDays) {
         const d = toISO(day)
-        const v = getProduction(p.id, d)
+        const v = data?.production[p.id]?.[d] ?? 0
         initQty[p.id][d] = v === 0 ? '' : String(v)
       }
-      const wc = weekData?.costs[p.id]
+      const wc = data?.costs[p.id]
       const fallback = p.cost_price != null ? Number(p.cost_price) : null
       const cost = wc ?? fallback
       initCosts[p.id] = cost != null ? String(cost) : ''
@@ -1154,7 +1200,15 @@ function ProductionGrid({ products, onCostUpdated, refreshKey }: { products: Pro
     setPendingQty(initQty)
     setPendingCosts(initCosts)
     const initReingreso: Record<string, string> = {}
-    for (const p of activeProducts) initReingreso[p.id] = getReingresoVal(p.id)
+    for (const p of activeProducts) {
+      let saved = 0
+      for (const day of weekDays) saved += data?.reingresos[p.id]?.[toISO(day)] ?? 0
+      if (saved > 0) initReingreso[p.id] = String(saved)
+      else {
+        const suggested = lastFridayCount[p.id] ?? 0
+        initReingreso[p.id] = suggested > 0 ? String(suggested) : ''
+      }
+    }
     setPendingReingreso(initReingreso)
     setEditMode(true)
   }
@@ -1195,39 +1249,7 @@ function ProductionGrid({ products, onCostUpdated, refreshKey }: { products: Pro
   const handleSave = async () => {
     setSaving(true)
     try {
-      const storeId = await import('../../services/coreApi').then(m => m.getStoreId())
-      const weekDatesISO = weekDays.map(d => toISO(d))
-
-      // Build entries map from pendingQty
-      const entries: Record<string, Record<string, number>> = {}
-      for (const p of activeProducts) {
-        entries[p.id] = {}
-        for (const d of weekDatesISO) {
-          entries[p.id][d] = parseInt(pendingQty[p.id]?.[d] || '0') || 0
-        }
-      }
-
-      // Build costs map: use pending cost or fallback to existing week cost
-      const costs: Record<string, number | null> = {}
-      for (const p of activeProducts) {
-        const v = pendingCosts[p.id]
-        costs[p.id] = v !== undefined && v !== '' ? parseFloat(v) : (weekData?.costs[p.id] ?? null)
-      }
-
-      await productionApi.saveWeekEntries(weekDatesISO, entries, costs, storeId)
-
-      // Reingreso se guarda aparte (no es producción nueva, no afecta el costo/gasto de
-      // esta semana) — anclado al lunes, un valor por semana por producto.
-      const mondayDate = weekDatesISO[0]
-      await Promise.all(
-        activeProducts.map(async (p) => {
-          const reingreso = parseInt(pendingReingreso[p.id] || '0') || 0
-          if (reingreso !== getSavedReingreso(p.id)) {
-            await productionApi.upsertReingreso(mondayDate, p.id, reingreso)
-          }
-        })
-      )
-
+      await persistPending()
       showToast('success', 'Producción guardada')
       setEditMode(false)
       setPendingQty({})
@@ -1265,9 +1287,9 @@ function ProductionGrid({ products, onCostUpdated, refreshKey }: { products: Pro
               </button>
             </>
           ) : (
-            <button onClick={enterEditMode}
-              className="flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-white bg-orange-500 hover:bg-orange-600 rounded-xl transition-colors shadow-sm">
-              <TableProperties className="w-4 h-4" />
+            <button onClick={enterEditMode} disabled={loading}
+              className="flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-white bg-orange-500 hover:bg-orange-600 rounded-xl transition-colors shadow-sm disabled:opacity-60">
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <TableProperties className="w-4 h-4" />}
               Editar semana
             </button>
           )}
