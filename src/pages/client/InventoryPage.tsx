@@ -1870,9 +1870,15 @@ function StockCloseGrid({ products, autoOpenCount }: { products: Product[]; auto
       acc.ingresos += t.ingresos; acc.costo += t.costo; acc.margen += t.margen
       acc.costoSobrante += t.costoSobrante; acc.costoConsumo += t.costoConsumo; acc.costoMerma += t.costoMerma; acc.costoReingreso += t.costoReingreso
       acc.facturadoReal += t.facturadoReal; acc.cobradoReal += t.cobradoReal; acc.pendienteCobro += t.pendienteCobro
+      // "Vendido (estimado)" es lo disponible menos sobrante/consumo/merma — si nadie
+      // contó sobrante todavía este producto esta semana, ese sobrante vale 0 por default
+      // (no porque se haya confirmado que no quedó nada), y el estimado queda inflado al
+      // techo teórico. Se cuentan los productos con stock disponible que todavía no
+      // tienen un conteo real cargado para poder avisarlo.
+      if (t.totalDisponible > 0 && mostRecentCounts[p.id] === undefined) acc.uncounted += 1
       return acc
     },
-    { sobrante: 0, consumo: 0, merma: 0, produced: 0, reingreso: 0, vendido: 0, registrado: 0, sinExplicar: 0, ingresos: 0, costo: 0, margen: 0, costoSobrante: 0, costoConsumo: 0, costoMerma: 0, costoReingreso: 0, facturadoReal: 0, cobradoReal: 0, pendienteCobro: 0 },
+    { sobrante: 0, consumo: 0, merma: 0, produced: 0, reingreso: 0, vendido: 0, registrado: 0, sinExplicar: 0, ingresos: 0, costo: 0, margen: 0, costoSobrante: 0, costoConsumo: 0, costoMerma: 0, costoReingreso: 0, facturadoReal: 0, cobradoReal: 0, pendienteCobro: 0, uncounted: 0 },
   )
   // Costo total de la mercadería disponible esta semana (producción nueva + reingreso de
   // sobrante). No coincide con "Costo total producción" de la pestaña Producción cuando
@@ -2044,9 +2050,14 @@ function StockCloseGrid({ products, autoOpenCount }: { products: Product[]; auto
           <p className="text-[9px] font-bold text-teal-500 uppercase tracking-widest mb-1">Producido</p>
           <p className="text-xl font-black text-teal-700">{grandTotals.produced}</p>
         </div>
-        <div className="bg-emerald-50 rounded-xl p-3 text-center">
-          <p className="text-[9px] font-bold text-emerald-600 uppercase tracking-widest mb-1">Vendido real</p>
+        <div className="bg-emerald-50 rounded-xl p-3 text-center" title="Disponible (producido + reingreso) menos sobrante, consumo interno y merma. No es una venta confirmada por caja — es lo que debería haberse vendido si el conteo de sobrante está al día.">
+          <p className="text-[9px] font-bold text-emerald-600 uppercase tracking-widest mb-1">Vendido (estimado)</p>
           <p className="text-xl font-black text-emerald-700">{grandTotals.vendido}</p>
+          {grandTotals.uncounted > 0 && (
+            <p className="text-[9px] font-bold text-amber-600 mt-1">
+              ⚠ {grandTotals.uncounted} sin contar sobrante
+            </p>
+          )}
         </div>
         <div className="bg-indigo-50 rounded-xl p-3 text-center">
           <p className="text-[9px] font-bold text-indigo-500 uppercase tracking-widest mb-1">Ingresos</p>
