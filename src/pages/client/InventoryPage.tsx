@@ -2297,10 +2297,6 @@ function StockCloseGrid({ products, autoOpenCount }: { products: Product[]; auto
 function SalesGrid({ products }: { products: Product[] }) {
   const [weekStart, setWeekStart] = useState<Date>(() => getWeekStart(new Date()))
   const [salesData, setSalesData] = useState<Record<string, Record<string, number>>>({})
-  const [loading, setLoading] = useState(true)
-  const [editMode, setEditMode] = useState(false)
-  const [pending, setPending] = useState<Record<string, Record<string, string>>>({})
-  const [saving, setSaving] = useState(false)
   // Plata registrada en Caja (cierres diarios) esta semana, para comparar contra lo
   // vendido (que ahora se autocompleta desde el Cierre de Stock).
   const [cajaTotal, setCajaTotal] = useState<number | null>(null)
@@ -2315,13 +2311,13 @@ function SalesGrid({ products }: { products: Product[] }) {
   const weekEndISO = toISO(allWeekDays[6])
   const weekLabel = `${weekStart.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })} – ${weekDays[weekDays.length - 1].toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })}`
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    try {
-      const [data, sessions] = await Promise.all([
-        productionApi.getWeekSalesAmounts(weekStartISO, weekEndISO),
-        cashApi.list({ from: weekStartISO, to: weekEndISO }).catch(() => []),
-      ])
+  useEffect(() => {
+    let active = true
+    Promise.all([
+      productionApi.getWeekSalesAmounts(weekStartISO, weekEndISO),
+      cashApi.list({ from: weekStartISO, to: weekEndISO }).catch(() => []),
+    ]).then(([data, sessions]) => {
+      if (!active) return
       setSalesData(data)
       setCajaTotal(
         sessions.length > 0
@@ -2335,128 +2331,24 @@ function SalesGrid({ products }: { products: Product[] }) {
         tarjeta: acc.tarjeta + sess.sales_tarjeta,
         other: acc.other + sess.sales_other,
       }), { efectivo: 0, qr: 0, transferencia: 0, tarjeta: 0, other: 0 }))
-    } catch {
-      showToast('error', 'Error al cargar ventas')
-    } finally {
-      setLoading(false)
-    }
+    }).catch(() => { if (active) showToast('error', 'Error al cargar ventas') })
+    return () => { active = false }
   }, [weekStartISO, weekEndISO])
-
-  useEffect(() => { load() }, [load])
-  useEffect(() => { setEditMode(false); setPending({}) }, [weekStartISO])
 
   const activeProducts = products.filter(p => p.is_active)
 
-  const groups = (() => {
-    const byCategory: Record<string, Product[]> = {}
-    for (const p of activeProducts) {
-      const key = p.category_name || 'Sin categoría'
-      if (!byCategory[key]) byCategory[key] = []
-      byCategory[key].push(p)
-    }
-    return Object.entries(byCategory)
-      .map(([name, items]) => ({ name, items: items.sort((a, b) => a.name.localeCompare(b.name, 'es')) }))
-      .sort((a, b) => a.name.localeCompare(b.name, 'es'))
-  })()
-
   const getAmount = (productId: string, date: string): number => salesData[productId]?.[date] ?? 0
 
-  const getVal = (productId: string, date: string): string => {
-    if (pending[productId]?.[date] !== undefined) return pending[productId][date]
-    const v = getAmount(productId, date)
-    return v === 0 ? '' : String(v)
-  }
-
-  const handleChange = (productId: string, date: string, val: string) => {
-    setPending(prev => ({ ...prev, [productId]: { ...(prev[productId] || {}), [date]: val } }))
-  }
-
   const productWeekTotal = (productId: string) =>
-    weekDays.reduce((s, d) => {
-      const iso = toISO(d)
-      const pv = pending[productId]?.[iso]
-      return s + (pv !== undefined ? (parseFloat(pv) || 0) : getAmount(productId, iso))
-    }, 0)
-
-  const dayTotal = (date: string) =>
-    activeProducts.reduce((s, p) => {
-      const pv = pending[p.id]?.[date]
-      return s + (pv !== undefined ? (parseFloat(pv) || 0) : getAmount(p.id, date))
-    }, 0)
+    weekDays.reduce((s, d) => s + getAmount(productId, toISO(d)), 0)
 
   const grandTotal = activeProducts.reduce((s, p) => s + productWeekTotal(p.id), 0)
 
-  const enterEditMode = () => {
-    const init: Record<string, Record<string, string>> = {}
-    for (const p of activeProducts) {
-      init[p.id] = {}
-      for (const d of weekDays) {
-        const iso = toISO(d)
-        const v = getAmount(p.id, iso)
-        init[p.id][iso] = v === 0 ? '' : String(v)
-      }
-    }
-    setPending(init)
-    setEditMode(true)
-  }
-
-  const cancelEdit = () => {
-    setEditMode(false)
-    setPending({})
-  }
-
-  const handleSave = async () => {
-    setSaving(true)
-    try {
-      const weekDatesISO = weekDays.map(toISO)
-      const entries: Record<string, Record<string, number>> = {}
-      for (const p of activeProducts) {
-        entries[p.id] = {}
-        for (const d of weekDatesISO) {
-          entries[p.id][d] = parseFloat(pending[p.id]?.[d] || '0') || 0
-        }
-      }
-      await productionApi.saveWeekSalesAmounts(weekDatesISO, entries)
-      showToast('success', 'Ventas guardadas')
-      setEditMode(false)
-      setPending({})
-      await load()
-    } catch (err) {
-      showToast('error', err instanceof Error ? err.message : 'Error al guardar')
-    } finally {
-      setSaving(false)
-    }
-  }
-
   return (
     <div className="space-y-4">
-      {/* Edit / Save bar */}
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-xs text-gray-400">
-          {editMode ? 'Corregí el monto de un producto puntual si no coincide con lo estimado' : 'Se completa solo con el sobrante que contás en Cierre de Stock — corregí acá un producto puntual si hace falta'}
-        </p>
-        <div className="flex items-center gap-2 shrink-0">
-          {editMode ? (
-            <>
-              <button onClick={cancelEdit}
-                className="px-4 py-2 text-sm font-semibold text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors">
-                Cancelar
-              </button>
-              <button onClick={handleSave} disabled={saving}
-                className="flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-white bg-teal-600 hover:bg-teal-700 rounded-xl transition-colors disabled:opacity-60 shadow-sm">
-                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                Guardar cambios
-              </button>
-            </>
-          ) : (
-            <button onClick={enterEditMode}
-              className="flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-colors shadow-sm">
-              <TrendingUp className="w-4 h-4" />
-              Corregir un producto
-            </button>
-          )}
-        </div>
-      </div>
+      <p className="text-xs text-gray-400 text-center">
+        Se completa solo con el sobrante que contás en Cierre de Stock — no depende de Pedidos ni del POS
+      </p>
 
       {/* Week navigator */}
       <div className="flex items-center justify-between">
@@ -2541,86 +2433,6 @@ function SalesGrid({ products }: { products: Product[] }) {
         )
       })()}
 
-      {activeProducts.length === 0 ? (
-        <div className="text-center py-12 text-gray-400">
-          <TrendingUp className="w-10 h-10 mx-auto mb-3 opacity-30" />
-          <p className="font-semibold">Sin productos activos</p>
-        </div>
-      ) : loading ? (
-        <div className="text-center py-10 text-gray-400 text-sm">Cargando...</div>
-      ) : (
-        <div className={`overflow-x-auto rounded-xl border bg-white transition-colors ${editMode ? 'border-amber-200 ring-2 ring-amber-100' : 'border-gray-200'}`}>
-          <table className="min-w-full text-sm">
-            <thead>
-              <tr className={`border-b ${editMode ? 'bg-amber-50 border-amber-100' : 'bg-gray-50 border-gray-200'}`}>
-                <th className={`px-3 py-2 text-left text-xs font-black text-gray-500 uppercase tracking-wider min-w-[160px] sticky left-0 z-10 ${editMode ? 'bg-amber-50' : 'bg-gray-50'}`}>Producto</th>
-                {weekDays.map(d => (
-                  <th key={toISO(d)} className="px-2 py-2 text-center text-xs font-black text-gray-500 uppercase tracking-wider min-w-[90px]">
-                    <div>{DAY_SHORT[d.getDay()]}</div>
-                    <div className="text-[10px] font-normal text-gray-400">{d.getDate()}</div>
-                  </th>
-                ))}
-                <th className="px-2 py-2 text-center text-xs font-black text-emerald-600 uppercase tracking-wider">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {groups.map(group => (
-                <>
-                  <tr key={`cat-${group.name}`} className="bg-gray-100">
-                    <td colSpan={weekDays.length + 2} className="px-3 py-1.5 text-[10px] font-black text-gray-500 uppercase tracking-widest sticky left-0">
-                      {group.name}
-                    </td>
-                  </tr>
-                  {group.items.map((product, i) => (
-                    <tr key={product.id} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}>
-                      <td className="px-3 py-2 font-medium text-gray-800 sticky left-0 bg-inherit">{product.name}</td>
-                      {weekDays.map(d => {
-                        const iso = toISO(d)
-                        const amt = getAmount(product.id, iso)
-                        return (
-                          <td key={iso} className="px-2 py-1.5 text-center">
-                            {editMode ? (
-                              <input
-                                type="number" min="0" step="0.01" placeholder="0"
-                                value={getVal(product.id, iso)}
-                                onChange={(e) => handleChange(product.id, iso, e.target.value)}
-                                className="w-20 text-center border border-emerald-300 rounded-lg px-1 py-1 text-xs font-bold text-emerald-700 focus:outline-none focus:ring-1 focus:ring-emerald-400 bg-emerald-50"
-                              />
-                            ) : (
-                              <span className="text-xs text-gray-600">{amt > 0 ? formatPrice(amt) : <span className="text-gray-300">—</span>}</span>
-                            )}
-                          </td>
-                        )
-                      })}
-                      <td className="px-2 py-2 text-center font-black text-emerald-700">
-                        {productWeekTotal(product.id) > 0 ? formatPrice(productWeekTotal(product.id)) : '—'}
-                      </td>
-                    </tr>
-                  ))}
-                </>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr className="bg-gray-100 border-t-2 border-gray-300">
-                <td className="px-3 py-3 text-xs font-black text-gray-600 uppercase sticky left-0 bg-gray-100">Total semana</td>
-                {weekDays.map(d => {
-                  const iso = toISO(d)
-                  const t = dayTotal(iso)
-                  return (
-                    <td key={iso} className="px-2 py-3 text-center font-black text-gray-700 text-xs">
-                      {t > 0 ? formatPrice(t) : '—'}
-                    </td>
-                  )
-                })}
-                <td className="px-2 py-3 text-center font-black text-emerald-700">{formatPrice(grandTotal)}</td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      )}
-      <p className="text-[10px] text-gray-400 text-center">
-        {editMode ? 'Los cambios no se guardan hasta que hagas clic en "Guardar cambios"' : 'Estos montos salen del sobrante contado en Cierre de Stock, no de Pedidos ni del POS — editar acá es solo para corregir un producto puntual'}
-      </p>
     </div>
   )
 }
