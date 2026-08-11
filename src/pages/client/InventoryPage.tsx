@@ -2291,7 +2291,8 @@ function StockCloseGrid({ products, autoOpenCount }: { products: Product[]; auto
   )
 }
 
-// ─── Sales Grid (carga manual de $$$, no depende de Pedidos) ──────────────────
+// ─── Sales Grid (se autocompleta con el sobrante contado en Cierre de Stock —
+// la edición manual es solo para corregir un producto puntual, no la forma normal de cargar) ──
 
 function SalesGrid({ products }: { products: Product[] }) {
   const [weekStart, setWeekStart] = useState<Date>(() => getWeekStart(new Date()))
@@ -2432,7 +2433,7 @@ function SalesGrid({ products }: { products: Product[] }) {
       {/* Edit / Save bar */}
       <div className="flex items-center justify-between gap-3">
         <p className="text-xs text-gray-400">
-          {editMode ? 'Ingresá cuánto vendiste en pesos de cada producto, por día' : 'Cargá a mano cuánto vendiste — no depende de Pedidos ni del POS'}
+          {editMode ? 'Corregí el monto de un producto puntual si no coincide con lo estimado' : 'Se completa solo con el sobrante que contás en Cierre de Stock — corregí acá un producto puntual si hace falta'}
         </p>
         <div className="flex items-center gap-2 shrink-0">
           {editMode ? (
@@ -2451,7 +2452,7 @@ function SalesGrid({ products }: { products: Product[] }) {
             <button onClick={enterEditMode}
               className="flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-colors shadow-sm">
               <TrendingUp className="w-4 h-4" />
-              Cargar ventas
+              Corregir un producto
             </button>
           )}
         </div>
@@ -2618,7 +2619,7 @@ function SalesGrid({ products }: { products: Product[] }) {
         </div>
       )}
       <p className="text-[10px] text-gray-400 text-center">
-        {editMode ? 'Los cambios no se guardan hasta que hagas clic en "Guardar cambios"' : 'Cargá manualmente cuánto vendiste cada día — no depende de Pedidos ni del POS'}
+        {editMode ? 'Los cambios no se guardan hasta que hagas clic en "Guardar cambios"' : 'Estos montos salen del sobrante contado en Cierre de Stock, no de Pedidos ni del POS — editar acá es solo para corregir un producto puntual'}
       </p>
     </div>
   )
