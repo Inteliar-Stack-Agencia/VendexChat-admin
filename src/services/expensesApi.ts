@@ -245,19 +245,45 @@ export const expensesApi = {
       siblingStoreIds = (siblings || []).map(s => s.id)
     }
 
+    const storeIds = [storeId, ...siblingStoreIds]
+
     const { data, error } = await supabase
       .from('company_invoices')
       .select('total, invoiced_at, client:company_clients(name)')
-      .in('store_id', [storeId, ...siblingStoreIds])
+      .in('store_id', storeIds)
       .eq('status', 'facturado')
       .gte('invoiced_at', from)
       .lte('invoiced_at', to)
     if (error) throw error
-    return (data || []).map(i => {
+    const fromInvoices = (data || []).map(i => {
       const client = i.client as unknown as { name: string } | { name: string }[] | null
       const clientName = Array.isArray(client) ? client[0]?.name : client?.name
       return { total: Number(i.total ?? 0), created_at: i.invoiced_at as string, label: clientName || 'Empresa' }
     })
+
+    // Además de la factura formal a Empresas (arriba), un Pedido normal puede llevar una
+    // empresa cargada (metadata.company_name — el mismo dato que se muestra como "🏢
+    // Empresa" en el listado de Pedidos) y quedar sin cobrar igual: esa plata también es
+    // deuda de una empresa y tiene que aparecer acá, aunque nunca haya pasado por
+    // company_invoices/el flujo de despacho.
+    const { data: pendingOrders, error: ordersError } = await supabase
+      .from('orders')
+      .select('total, paid_amount, metadata, created_at')
+      .in('store_id', storeIds)
+      .neq('status', 'cancelled')
+      .in('payment_status', ['pending', 'partial'])
+      .gte('created_at', from)
+      .lte('created_at', to)
+    if (ordersError) throw ordersError
+    const fromOrders: { total: number; created_at: string; label: string }[] = []
+    for (const o of pendingOrders || []) {
+      const label = ((o.metadata || {}) as Record<string, unknown>).company_name as string | undefined
+      if (!label) continue
+      const pending = Number(o.total) - Number(o.paid_amount ?? 0)
+      if (pending > 0) fromOrders.push({ total: pending, created_at: o.created_at, label })
+    }
+
+    return [...fromInvoices, ...fromOrders]
   },
 
   // Suma lo YA cargado como gasto de producción en un rango de fechas, identificado por
