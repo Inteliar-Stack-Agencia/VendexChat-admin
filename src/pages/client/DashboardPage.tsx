@@ -153,10 +153,12 @@ export default function DashboardPage() {
 
   // Tiendas satélite B2B (ej. Empresas) no producen ni cuentan stock propio, ni manejan
   // caja — son solo despacho/facturación, así que los recordatorios de "abrir caja" y
-  // "contar stock" no aplican ahí.
+  // "contar stock" no aplican ahí. La Plata tampoco los usa (aunque es una tienda
+  // independiente, no dispatch-only) — se pidió explícitamente ocultarlos ahí también.
   const isDispatchOnlySatellite = !!(tenant?.slug && REVENUE_ABSORBED_INTO[tenant.slug])
+  const skipsCashStockReminders = isDispatchOnlySatellite || tenant?.slug === 'laplata'
 
-  const hasCashAccess = !isDispatchOnlySatellite && (isSuperadmin || (() => {
+  const hasCashAccess = !skipsCashStockReminders && (isSuperadmin || (() => {
     const plan = subscription?.plan_type || 'free'
     const status = subscription?.status || 'active'
     const trialEnd = subscription?.current_period_end ? new Date(subscription.current_period_end) : null
