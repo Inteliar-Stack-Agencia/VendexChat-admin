@@ -507,6 +507,15 @@ function MonthDetailView({ month, year, revenueEntries, pendingInvoices, expense
               </div>
             ))}
           </div>
+          <div className="p-4 border-t border-amber-100 bg-amber-50/30 flex items-center justify-between">
+            <div>
+              <p className="text-xs font-black text-gray-600 uppercase tracking-widest">Saldo esperado</p>
+              <p className="text-[11px] text-gray-400 mt-0.5">Resultado del mes + lo pendiente, si se cobrara todo</p>
+            </div>
+            <p className={`text-lg font-black ${result + totalPending >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+              {result + totalPending >= 0 ? '+' : ''}{formatPrice(result + totalPending)}
+            </p>
+          </div>
         </Card>
       )}
 
