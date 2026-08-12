@@ -20,6 +20,17 @@ export interface Env {
 interface StoreRow {
   slug: string
   custom_path: string | null
+  name: string | null
+  description: string | null
+  logo_url: string | null
+}
+
+interface ResolvedTenant {
+  slug: string
+  remainingPath: string
+  name: string | null
+  description: string | null
+  logoUrl: string | null
 }
 
 const NOT_FOUND_HTML = `<!DOCTYPE html>
@@ -58,14 +69,16 @@ async function resolveTenant(
   hostname: string,
   pathname: string,
   env: Env
-): Promise<{ slug: string; remainingPath: string } | null> {
+): Promise<ResolvedTenant | null> {
 
   // Extraer el primer segmento del path: "/laplata/productos" → "laplata"
   const segments = pathname.replace(/^\//, '').split('/')
   const firstSegment = segments[0] || ''
 
-  // Traer todos los tenants con este custom_domain (máximo 20, suficiente)
-  const url = `${env.SUPABASE_URL}/rest/v1/stores?select=slug,custom_path&custom_domain=eq.${encodeURIComponent(hostname)}&is_active=eq.true&limit=20`
+  // Traer todos los tenants con este custom_domain (máximo 20, suficiente) — de paso
+  // trae nombre/descripción/logo para poder pisar los meta tags de OG/Twitter del HTML
+  // proxeado con los datos reales de la tienda (ver rewriteMetaTags).
+  const url = `${env.SUPABASE_URL}/rest/v1/stores?select=slug,custom_path,name,description,logo_url&custom_domain=eq.${encodeURIComponent(hostname)}&is_active=eq.true&limit=20`
 
   const res = await fetch(url, {
     headers: {
@@ -80,26 +93,34 @@ async function resolveTenant(
   const rows = await res.json() as StoreRow[]
   if (!rows.length) return null
 
+  const toTenant = (row: StoreRow, remainingPath: string): ResolvedTenant => ({
+    slug: row.slug,
+    remainingPath,
+    name: row.name,
+    description: row.description,
+    logoUrl: row.logo_url,
+  })
+
   // Intentar match path-based primero
   if (firstSegment) {
     const pathMatch = rows.find(r => r.custom_path === firstSegment)
     if (pathMatch) {
       // El path restante es todo lo que viene después del primer segmento
       const remaining = '/' + segments.slice(1).join('/')
-      return { slug: pathMatch.slug, remainingPath: remaining === '/' ? '' : remaining }
+      return toTenant(pathMatch, remaining === '/' ? '' : remaining)
     }
   }
 
   // Fallback: tenant sin custom_path (hostname-based puro)
   const hostnameMatch = rows.find(r => !r.custom_path)
   if (hostnameMatch) {
-    return { slug: hostnameMatch.slug, remainingPath: pathname === '/' ? '' : pathname }
+    return toTenant(hostnameMatch, pathname === '/' ? '' : pathname)
   }
 
   return null
 }
 
-async function proxyTo(targetUrl: string, request: Request, hostname: string): Promise<Response> {
+async function proxyTo(targetUrl: string, request: Request): Promise<Response> {
   const proxyRequest = new Request(targetUrl, {
     method: request.method,
     headers: (() => {
@@ -126,6 +147,49 @@ async function proxyTo(targetUrl: string, request: Request, hostname: string): P
 // Cubre directorios conocidos Y cualquier archivo con extensión estática en la raíz.
 const STATIC_ASSET_RE = /^\/(assets|_next|icons|images|static)(\/?.*)?$|^\/.+\.(js|css|png|jpg|jpeg|svg|ico|webp|gif|woff|woff2|ttf|eot|json|txt|xml|webmanifest|map)$/i
 
+// El HTML que devuelve el storefront (index.html único, servido igual para cualquier
+// tienda) trae meta tags genéricos de marketing de VendexChat — cuando alguien comparte
+// el link de SU tienda por WhatsApp, la vista previa muestra "VendexChat" en vez del
+// nombre/descripción de la tienda. Se pisan acá, en el proxy, con los datos reales de
+// la tienda ya resueltos (así no depende de tocar el storefront ni de que sea SSR — los
+// crawlers de WhatsApp/Facebook no ejecutan JS, necesitan los tags ya en el HTML).
+class AttrRewriter {
+  constructor(private attr: string, private value: string) {}
+  element(el: Element) { el.setAttribute(this.attr, this.value) }
+}
+
+class TextRewriter {
+  constructor(private value: string) {}
+  element(el: Element) { el.setInnerContent(this.value) }
+}
+
+function rewriteMetaTags(response: Response, tenant: ResolvedTenant, requestUrl: string): Response {
+  const contentType = response.headers.get('content-type') || ''
+  if (!contentType.includes('text/html')) return response
+
+  const storeName = tenant.name?.trim()
+  if (!storeName) return response // sin nombre no hay con qué reemplazar, se deja el HTML tal cual
+
+  const title = `${storeName} — Pedí por WhatsApp`
+  const description = tenant.description?.trim() || `Mirá el catálogo de ${storeName} y pedí directo por WhatsApp.`
+
+  let rewriter = new HTMLRewriter()
+    .on('title', new TextRewriter(title))
+    .on('meta[property="og:title"]', new AttrRewriter('content', title))
+    .on('meta[property="og:description"]', new AttrRewriter('content', description))
+    .on('meta[property="og:url"]', new AttrRewriter('content', requestUrl))
+    .on('meta[name="twitter:title"]', new AttrRewriter('content', title))
+    .on('meta[name="twitter:description"]', new AttrRewriter('content', description))
+
+  if (tenant.logoUrl) {
+    rewriter = rewriter
+      .on('meta[property="og:image"]', new AttrRewriter('content', tenant.logoUrl))
+      .on('meta[name="twitter:image"]', new AttrRewriter('content', tenant.logoUrl))
+  }
+
+  return rewriter.transform(response)
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url)
@@ -141,14 +205,14 @@ export default {
       const base = env.STOREFRONT_URL.replace(/\/$/, '')
       const targetUrl = `${base}${url.pathname}${url.search}`
       try {
-        return await proxyTo(targetUrl, request, hostname)
+        return await proxyTo(targetUrl, request)
       } catch {
         return new Response('Asset not found', { status: 404 })
       }
     }
 
     // Resolver tenant
-    let tenant: { slug: string; remainingPath: string } | null = null
+    let tenant: ResolvedTenant | null = null
     try {
       tenant = await resolveTenant(hostname, url.pathname, env)
     } catch (err) {
@@ -169,7 +233,8 @@ export default {
     const targetUrl = `${base}/${tenant.slug}${tenant.remainingPath}${url.search}`
 
     try {
-      return await proxyTo(targetUrl, request, hostname)
+      const response = await proxyTo(targetUrl, request)
+      return rewriteMetaTags(response, tenant, request.url)
     } catch (err) {
       console.error('[domain-proxy] Error proxying:', err)
       return new Response('Error al conectar con la tienda', { status: 502 })
