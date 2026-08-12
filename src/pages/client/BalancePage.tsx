@@ -604,6 +604,11 @@ function MonthDetailView({ month, year, revenueEntries, pendingInvoices, expense
 
 // ─── Main Page ──────────────────────────────────────────────────────────────────
 
+// Arranque del historial que se muestra en Balance & P&L — se pidió explícitamente
+// empezar a reportar desde agosto 2026 en adelante, sin borrar los datos reales de la
+// base (gastos/pedidos de antes siguen ahí, solo dejan de contar en este reporte).
+const REPORT_START_DATE = '2026-08-01'
+
 export default function BalancePage() {
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [revenueOrders, setRevenueOrders] = useState<RevenueEntry[]>([])
@@ -623,9 +628,9 @@ export default function BalancePage() {
         expensesApi.getPendingCompanyInvoices(year),
         expensesApi.listPartners(),
       ])
-      setExpenses(exp)
-      setRevenueOrders(revenue)
-      setPendingInvoices(pending)
+      setExpenses(exp.filter(e => e.date >= REPORT_START_DATE))
+      setRevenueOrders(revenue.filter(r => r.created_at >= REPORT_START_DATE))
+      setPendingInvoices(pending.filter(p => p.created_at >= REPORT_START_DATE))
       setPartners(partnerList)
       setDbError(false)
     } catch (err: unknown) {
