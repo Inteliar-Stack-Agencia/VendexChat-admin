@@ -1661,8 +1661,6 @@ function StockCloseGrid({ products, autoOpenCount }: { products: Product[]; auto
   const [dispatchedByName, setDispatchedByName] = useState<Record<string, number>>({})
   // $ facturado y $ cobrado de esos despachos, agrupados por nombre de producto normalizado
   const [dispatchPaymentByName, setDispatchPaymentByName] = useState<Record<string, { facturado: number; cobrado: number }>>({})
-  // $ cobrado en ventas directas esta semana, agrupado por medio de pago (efectivo/qr/transferencia/tarjeta/other)
-  const [paymentBreakdown, setPaymentBreakdown] = useState<Record<string, number>>({})
   // Ventas de mostrador cargadas a mano esta semana (nunca pasaron por un Pedido)
   const [manualSales, setManualSales] = useState<ManualStockSale[]>([])
   // Conteo rápido más reciente de la semana (no necesariamente del viernes — puede ser
@@ -1693,16 +1691,14 @@ function StockCloseGrid({ products, autoOpenCount }: { products: Product[]; auto
     setPending({})
     setEditMode(false)
     try {
-      const [data, dispatchItems, breakdown, manual, recentCount, todayCount] = await Promise.all([
+      const [data, dispatchItems, manual, recentCount, todayCount] = await Promise.all([
         productionApi.getWeekData(weekStartISO, weekEndISO),
         companyDispatchApi.crossStoreDispatchItemsWithPaymentByDate(weekStartISO, weekEndISO).catch(() => []),
-        productionApi.getWeekPaymentBreakdown(weekStartISO, weekEndISO).catch(() => ({})),
         productionApi.listManualSales(weekStartISO).catch(() => []),
         productionApi.getMostRecentStockCount(weekStartISO, weekEndISO).catch(() => ({})),
         productionApi.getDailyStockCount(today).catch(() => ({})),
       ])
       setWeekData(data)
-      setPaymentBreakdown(breakdown)
       setManualSales(manual)
       setMostRecentCounts(recentCount)
       setTodayCounts(todayCount)
@@ -1808,11 +1804,6 @@ function StockCloseGrid({ products, autoOpenCount }: { products: Product[]; auto
     manualSales
       .filter((m) => m.product_id === productId)
       .reduce((acc, m) => ({ qty: acc.qty + m.quantity, amount: acc.amount + Number(m.amount) }), { qty: 0, amount: 0 })
-
-  const manualByChannel: Record<ManualSaleChannel, number> = manualSales.reduce(
-    (acc, m) => ({ ...acc, [m.channel]: acc[m.channel] + Number(m.amount) }),
-    { efectivo: 0, transferencia: 0, qr: 0, tarjeta: 0 },
-  )
 
   const productTotals = (product: Product) => {
     const totalProduced = getTotalProduced(product.id)
@@ -2100,49 +2091,6 @@ function StockCloseGrid({ products, autoOpenCount }: { products: Product[]; auto
         <p className="text-xl font-black text-gray-700">{formatPrice(costoTotalDisponible)}</p>
       </div>
 
-      {/* Cobrado por canal: de dónde vino la plata cobrada esta semana */}
-      <div>
-        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Cobrado por canal</p>
-        <div className="grid grid-cols-2 sm:grid-cols-7 gap-2">
-          <div className="bg-lime-50 rounded-xl p-2.5 text-center">
-            <p className="text-[9px] font-bold text-lime-600 uppercase tracking-widest mb-0.5">Efectivo</p>
-            <p className="text-sm font-black text-lime-700">{formatPrice((paymentBreakdown.efectivo || 0) + manualByChannel.efectivo)}</p>
-          </div>
-          <div className="bg-sky-50 rounded-xl p-2.5 text-center">
-            <p className="text-[9px] font-bold text-sky-600 uppercase tracking-widest mb-0.5">Transferencia</p>
-            <p className="text-sm font-black text-sky-700">{formatPrice((paymentBreakdown.transferencia || 0) + manualByChannel.transferencia)}</p>
-          </div>
-          <div className="bg-fuchsia-50 rounded-xl p-2.5 text-center">
-            <p className="text-[9px] font-bold text-fuchsia-600 uppercase tracking-widest mb-0.5">QR / MP</p>
-            <p className="text-sm font-black text-fuchsia-700">{formatPrice((paymentBreakdown.qr || 0) + manualByChannel.qr)}</p>
-          </div>
-          <div className="bg-orange-50 rounded-xl p-2.5 text-center">
-            <p className="text-[9px] font-bold text-orange-600 uppercase tracking-widest mb-0.5">Tarjeta</p>
-            <p className="text-sm font-black text-orange-700">{formatPrice((paymentBreakdown.tarjeta || 0) + manualByChannel.tarjeta)}</p>
-          </div>
-          <div className="bg-violet-50 rounded-xl p-2.5 text-center">
-            <p className="text-[9px] font-bold text-violet-600 uppercase tracking-widest mb-0.5">Empresas (packs)</p>
-            <p className="text-sm font-black text-violet-700">
-              {formatPrice(Object.values(dispatchPaymentByName).reduce((s, v) => s + v.cobrado, 0))}
-            </p>
-          </div>
-          <div className="bg-amber-50 rounded-xl p-2.5 text-center">
-            <p className="text-[9px] font-bold text-amber-600 uppercase tracking-widest mb-0.5">Facturado a Empresas (pendiente)</p>
-            <p className="text-sm font-black text-amber-700">
-              {formatPrice(Math.max(0, Object.values(dispatchPaymentByName).reduce((s, v) => s + v.facturado - v.cobrado, 0)))}
-            </p>
-            <p className="text-[8px] text-amber-500 mt-0.5">Ya se despachó, falta cobrar — precio real de cada empresa</p>
-          </div>
-          {(paymentBreakdown.other || 0) > 0 && (
-            <div className="bg-gray-100 rounded-xl p-2.5 text-center">
-              <p className="text-[9px] font-bold text-gray-500 uppercase tracking-widest mb-0.5">Otro / sin especificar</p>
-              <p className="text-sm font-black text-gray-700">{formatPrice(paymentBreakdown.other || 0)}</p>
-              <p className="text-[8px] text-gray-400 mt-0.5">Pedidos sin medio de pago cargado</p>
-            </div>
-          )}
-        </div>
-      </div>
-
       {/* Ventas de mostrador cargadas a mano esta semana */}
       {manualSales.length > 0 && (
         <div>
@@ -2309,6 +2257,11 @@ function SalesGrid({ products }: { products: Product[] }) {
   // ganancia sin duplicar la lógica de cálculo — mismas fórmulas, mismos números.
   const [weekData, setWeekData] = useState<Awaited<ReturnType<typeof productionApi.getWeekData>> | null>(null)
   const [mostRecentCounts, setMostRecentCounts] = useState<Record<string, number>>({})
+  // "Cobrado por canal" — se movió acá desde Cierre de Stock. $ cobrado en ventas
+  // directas agrupado por medio de pago, + lo despachado/facturado a Empresas.
+  const [paymentBreakdown, setPaymentBreakdown] = useState<Record<string, number>>({})
+  const [dispatchPaymentByName, setDispatchPaymentByName] = useState<Record<string, { facturado: number; cobrado: number }>>({})
+  const [manualSales, setManualSales] = useState<ManualStockSale[]>([])
 
   const allWeekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
   const weekDays = allWeekDays.filter(d => d.getDay() >= 1 && d.getDay() <= 5)
@@ -2323,7 +2276,10 @@ function SalesGrid({ products }: { products: Product[] }) {
       cashApi.list({ from: weekStartISO, to: weekEndISO }).catch(() => []),
       productionApi.getWeekData(weekStartISO, weekEndISO),
       productionApi.getMostRecentStockCount(weekStartISO, weekEndISO).catch(() => ({})),
-    ]).then(([data, sessions, weekProdData, recentCounts]) => {
+      productionApi.getWeekPaymentBreakdown(weekStartISO, weekEndISO).catch(() => ({})),
+      companyDispatchApi.crossStoreDispatchItemsWithPaymentByDate(weekStartISO, weekEndISO).catch(() => []),
+      productionApi.listManualSales(weekStartISO).catch(() => []),
+    ]).then(([data, sessions, weekProdData, recentCounts, breakdown, dispatchItems, manual]) => {
       if (!active) return
       setSalesData(data)
       setCajaTotal(
@@ -2340,6 +2296,16 @@ function SalesGrid({ products }: { products: Product[] }) {
       }), { efectivo: 0, qr: 0, transferencia: 0, tarjeta: 0, other: 0 }))
       setWeekData(weekProdData)
       setMostRecentCounts(recentCounts)
+      setPaymentBreakdown(breakdown)
+      setManualSales(manual)
+      const paymentByName: Record<string, { facturado: number; cobrado: number }> = {}
+      for (const item of dispatchItems) {
+        const key = normalizeName(item.product_name)
+        if (!paymentByName[key]) paymentByName[key] = { facturado: 0, cobrado: 0 }
+        paymentByName[key].facturado += item.facturado
+        paymentByName[key].cobrado += item.cobrado
+      }
+      setDispatchPaymentByName(paymentByName)
     }).catch(() => { if (active) showToast('error', 'Error al cargar ventas') })
     return () => { active = false }
   }, [weekStartISO, weekEndISO])
@@ -2378,6 +2344,11 @@ function SalesGrid({ products }: { products: Product[] }) {
       return acc
     },
     { vendido: 0, reingreso: 0, merma: 0, costoMerma: 0, margen: 0 },
+  )
+
+  const manualByChannel: Record<ManualSaleChannel, number> = manualSales.reduce(
+    (acc, m) => ({ ...acc, [m.channel]: acc[m.channel] + Number(m.amount) }),
+    { efectivo: 0, transferencia: 0, qr: 0, tarjeta: 0 },
   )
 
   return (
@@ -2491,6 +2462,48 @@ function SalesGrid({ products }: { products: Product[] }) {
         )
       })()}
 
+      {/* Cobrado por canal: de dónde vino la plata cobrada esta semana */}
+      <div>
+        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Cobrado por canal</p>
+        <div className="grid grid-cols-2 sm:grid-cols-7 gap-2">
+          <div className="bg-lime-50 rounded-xl p-2.5 text-center">
+            <p className="text-[9px] font-bold text-lime-600 uppercase tracking-widest mb-0.5">Efectivo</p>
+            <p className="text-sm font-black text-lime-700">{formatPrice((paymentBreakdown.efectivo || 0) + manualByChannel.efectivo)}</p>
+          </div>
+          <div className="bg-sky-50 rounded-xl p-2.5 text-center">
+            <p className="text-[9px] font-bold text-sky-600 uppercase tracking-widest mb-0.5">Transferencia</p>
+            <p className="text-sm font-black text-sky-700">{formatPrice((paymentBreakdown.transferencia || 0) + manualByChannel.transferencia)}</p>
+          </div>
+          <div className="bg-fuchsia-50 rounded-xl p-2.5 text-center">
+            <p className="text-[9px] font-bold text-fuchsia-600 uppercase tracking-widest mb-0.5">QR / MP</p>
+            <p className="text-sm font-black text-fuchsia-700">{formatPrice((paymentBreakdown.qr || 0) + manualByChannel.qr)}</p>
+          </div>
+          <div className="bg-orange-50 rounded-xl p-2.5 text-center">
+            <p className="text-[9px] font-bold text-orange-600 uppercase tracking-widest mb-0.5">Tarjeta</p>
+            <p className="text-sm font-black text-orange-700">{formatPrice((paymentBreakdown.tarjeta || 0) + manualByChannel.tarjeta)}</p>
+          </div>
+          <div className="bg-violet-50 rounded-xl p-2.5 text-center">
+            <p className="text-[9px] font-bold text-violet-600 uppercase tracking-widest mb-0.5">Empresas (packs)</p>
+            <p className="text-sm font-black text-violet-700">
+              {formatPrice(Object.values(dispatchPaymentByName).reduce((s, v) => s + v.cobrado, 0))}
+            </p>
+          </div>
+          <div className="bg-amber-50 rounded-xl p-2.5 text-center">
+            <p className="text-[9px] font-bold text-amber-600 uppercase tracking-widest mb-0.5">Facturado a Empresas (pendiente)</p>
+            <p className="text-sm font-black text-amber-700">
+              {formatPrice(Math.max(0, Object.values(dispatchPaymentByName).reduce((s, v) => s + v.facturado - v.cobrado, 0)))}
+            </p>
+            <p className="text-[8px] text-amber-500 mt-0.5">Ya se despachó, falta cobrar — precio real de cada empresa</p>
+          </div>
+          {(paymentBreakdown.other || 0) > 0 && (
+            <div className="bg-gray-100 rounded-xl p-2.5 text-center">
+              <p className="text-[9px] font-bold text-gray-500 uppercase tracking-widest mb-0.5">Otro / sin especificar</p>
+              <p className="text-sm font-black text-gray-700">{formatPrice(paymentBreakdown.other || 0)}</p>
+              <p className="text-[8px] text-gray-400 mt-0.5">Pedidos sin medio de pago cargado</p>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   )
 }
