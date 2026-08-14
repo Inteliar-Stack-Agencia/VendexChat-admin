@@ -2325,7 +2325,11 @@ function SalesGrid({ products }: { products: Product[] }) {
   const getSavedWeekField = (productId: string, field: 'sobrante' | 'consumo_interno' | 'merma'): number =>
     weekDays.reduce((s, d) => s + (weekData?.stock[productId]?.[toISO(d)]?.[field] ?? 0), 0)
 
-  const weekSummary = activeProducts.reduce(
+  // Bebidas aparte — igual que "Producido" en Cierre de Stock/Producción, para que el
+  // desglose cierre a mano contra Producido (que ya excluye bebidas): Producido + Reingreso
+  // (viandas) − Sobrante − Consumo − Merma (viandas) = Vendido (viandas).
+  const emptySummary = { vendido: 0, reingreso: 0, merma: 0, costoMerma: 0, margen: 0 }
+  const { viandas: weekSummary, bebidas: weekSummaryBebidas } = activeProducts.reduce(
     (acc, p) => {
       const totalProduced = weekDays.reduce((s, d) => s + (weekData?.production[p.id]?.[toISO(d)] ?? 0), 0)
       const reingreso = weekDays.reduce((s, d) => s + (weekData?.reingresos[p.id]?.[toISO(d)] ?? 0), 0)
@@ -2336,14 +2340,15 @@ function SalesGrid({ products }: { products: Product[] }) {
       const cost = weekData?.costs[p.id] ?? (p.cost_price != null ? Number(p.cost_price) : null)
       const ingresos = vendidoReal * Number(p.price || 0)
       const margen = ingresos - vendidoReal * (cost ?? 0)
-      acc.vendido += vendidoReal
-      acc.reingreso += reingreso
-      acc.merma += merma
-      acc.costoMerma += merma * (cost ?? 0)
-      acc.margen += margen
+      const bucket = p.category_name === 'Bebidas' ? acc.bebidas : acc.viandas
+      bucket.vendido += vendidoReal
+      bucket.reingreso += reingreso
+      bucket.merma += merma
+      bucket.costoMerma += merma * (cost ?? 0)
+      bucket.margen += margen
       return acc
     },
-    { vendido: 0, reingreso: 0, merma: 0, costoMerma: 0, margen: 0 },
+    { viandas: { ...emptySummary }, bebidas: { ...emptySummary } },
   )
 
   const manualByChannel: Record<ManualSaleChannel, number> = manualSales.reduce(
@@ -2384,24 +2389,31 @@ function SalesGrid({ products }: { products: Product[] }) {
         </div>
       </div>
       {/* Desglose de la semana: mismas cifras que Cierre de Stock, para ver de un vistazo
-          cuánto se vendió, qué se reingresó, qué se tiró y qué ganancia deja. */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          cuánto se vendió, qué se reingresó, qué se tiró y qué ganancia deja. Bebidas
+          aparte (no cuentan como "producido") para que Vendido/Reingreso/Merma cierren a
+          mano contra el tile de "Producido" de Producción/Cierre de Stock. */}
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         <div className="bg-teal-50 rounded-xl p-3 text-center">
-          <p className="text-[9px] font-bold text-teal-500 uppercase tracking-widest mb-1">Vendido (estimado)</p>
+          <p className="text-[9px] font-bold text-teal-500 uppercase tracking-widest mb-1">Vendido (viandas)</p>
           <p className="text-lg font-black text-teal-700">{weekSummary.vendido}</p>
         </div>
         <div className="bg-blue-50 rounded-xl p-3 text-center">
-          <p className="text-[9px] font-bold text-blue-500 uppercase tracking-widest mb-1">Reingreso</p>
+          <p className="text-[9px] font-bold text-blue-500 uppercase tracking-widest mb-1">Reingreso (viandas)</p>
           <p className="text-lg font-black text-blue-700">{weekSummary.reingreso}</p>
         </div>
         <div className="bg-red-50 rounded-xl p-3 text-center">
-          <p className="text-[9px] font-bold text-red-500 uppercase tracking-widest mb-1">Merma</p>
+          <p className="text-[9px] font-bold text-red-500 uppercase tracking-widest mb-1">Merma (viandas)</p>
           <p className="text-lg font-black text-red-600">{weekSummary.merma}</p>
           <p className="text-[10px] text-red-400">{formatPrice(weekSummary.costoMerma)}</p>
         </div>
-        <div className={`rounded-xl p-3 text-center ${weekSummary.margen >= 0 ? 'bg-green-50' : 'bg-red-50'}`}>
-          <p className={`text-[9px] font-bold uppercase tracking-widest mb-1 ${weekSummary.margen >= 0 ? 'text-green-600' : 'text-red-500'}`}>Ganancia estimada</p>
-          <p className={`text-lg font-black ${weekSummary.margen >= 0 ? 'text-green-700' : 'text-red-600'}`}>{formatPrice(weekSummary.margen)}</p>
+        <div className="bg-cyan-50 rounded-xl p-3 text-center">
+          <p className="text-[9px] font-bold text-cyan-600 uppercase tracking-widest mb-1">Bebidas vendidas</p>
+          <p className="text-lg font-black text-cyan-700">{weekSummaryBebidas.vendido}</p>
+          {weekSummaryBebidas.merma > 0 && <p className="text-[10px] text-cyan-500">merma: {weekSummaryBebidas.merma}</p>}
+        </div>
+        <div className={`rounded-xl p-3 text-center ${weekSummary.margen + weekSummaryBebidas.margen >= 0 ? 'bg-green-50' : 'bg-red-50'}`}>
+          <p className={`text-[9px] font-bold uppercase tracking-widest mb-1 ${weekSummary.margen + weekSummaryBebidas.margen >= 0 ? 'text-green-600' : 'text-red-500'}`}>Ganancia estimada</p>
+          <p className={`text-lg font-black ${weekSummary.margen + weekSummaryBebidas.margen >= 0 ? 'text-green-700' : 'text-red-600'}`}>{formatPrice(weekSummary.margen + weekSummaryBebidas.margen)}</p>
         </div>
       </div>
 
