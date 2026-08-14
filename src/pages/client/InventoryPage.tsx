@@ -2304,6 +2304,11 @@ function SalesGrid({ products }: { products: Product[] }) {
   // "Ventas estimadas" lo que ya entró por QR/transferencia/tarjeta y quedarnos con
   // cuánto efectivo debería haber en la caja.
   const [cajaByMethod, setCajaByMethod] = useState({ efectivo: 0, qr: 0, transferencia: 0, tarjeta: 0, other: 0 })
+  // Mismos datos que usa Cierre de Stock (producción/stock/reingreso/costos + conteo más
+  // reciente de sobrante) para armar acá el desglose de unidades vendidas/merma/reingreso/
+  // ganancia sin duplicar la lógica de cálculo — mismas fórmulas, mismos números.
+  const [weekData, setWeekData] = useState<Awaited<ReturnType<typeof productionApi.getWeekData>> | null>(null)
+  const [mostRecentCounts, setMostRecentCounts] = useState<Record<string, number>>({})
 
   const allWeekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
   const weekDays = allWeekDays.filter(d => d.getDay() >= 1 && d.getDay() <= 5)
@@ -2316,7 +2321,9 @@ function SalesGrid({ products }: { products: Product[] }) {
     Promise.all([
       productionApi.getWeekSalesAmounts(weekStartISO, weekEndISO),
       cashApi.list({ from: weekStartISO, to: weekEndISO }).catch(() => []),
-    ]).then(([data, sessions]) => {
+      productionApi.getWeekData(weekStartISO, weekEndISO),
+      productionApi.getMostRecentStockCount(weekStartISO, weekEndISO).catch(() => ({})),
+    ]).then(([data, sessions, weekProdData, recentCounts]) => {
       if (!active) return
       setSalesData(data)
       setCajaTotal(
@@ -2331,6 +2338,8 @@ function SalesGrid({ products }: { products: Product[] }) {
         tarjeta: acc.tarjeta + sess.sales_tarjeta,
         other: acc.other + sess.sales_other,
       }), { efectivo: 0, qr: 0, transferencia: 0, tarjeta: 0, other: 0 }))
+      setWeekData(weekProdData)
+      setMostRecentCounts(recentCounts)
     }).catch(() => { if (active) showToast('error', 'Error al cargar ventas') })
     return () => { active = false }
   }, [weekStartISO, weekEndISO])
@@ -2343,6 +2352,33 @@ function SalesGrid({ products }: { products: Product[] }) {
     weekDays.reduce((s, d) => s + getAmount(productId, toISO(d)), 0)
 
   const grandTotal = activeProducts.reduce((s, p) => s + productWeekTotal(p.id), 0)
+
+  // Mismas fórmulas que "Vendido (estimado)" de Cierre de Stock — se repiten acá (en vez
+  // de importar el cálculo de StockCloseGrid) porque esta grilla no necesita nada de la
+  // edición/despacho a empresas/ventas de mostrador, solo el resumen de la semana.
+  const getSavedWeekField = (productId: string, field: 'sobrante' | 'consumo_interno' | 'merma'): number =>
+    weekDays.reduce((s, d) => s + (weekData?.stock[productId]?.[toISO(d)]?.[field] ?? 0), 0)
+
+  const weekSummary = activeProducts.reduce(
+    (acc, p) => {
+      const totalProduced = weekDays.reduce((s, d) => s + (weekData?.production[p.id]?.[toISO(d)] ?? 0), 0)
+      const reingreso = weekDays.reduce((s, d) => s + (weekData?.reingresos[p.id]?.[toISO(d)] ?? 0), 0)
+      const sobrante = mostRecentCounts[p.id] !== undefined ? mostRecentCounts[p.id] : getSavedWeekField(p.id, 'sobrante')
+      const consumo = getSavedWeekField(p.id, 'consumo_interno')
+      const merma = getSavedWeekField(p.id, 'merma')
+      const vendidoReal = Math.max(0, totalProduced + reingreso - sobrante - consumo - merma)
+      const cost = weekData?.costs[p.id] ?? (p.cost_price != null ? Number(p.cost_price) : null)
+      const ingresos = vendidoReal * Number(p.price || 0)
+      const margen = ingresos - vendidoReal * (cost ?? 0)
+      acc.vendido += vendidoReal
+      acc.reingreso += reingreso
+      acc.merma += merma
+      acc.costoMerma += merma * (cost ?? 0)
+      acc.margen += margen
+      return acc
+    },
+    { vendido: 0, reingreso: 0, merma: 0, costoMerma: 0, margen: 0 },
+  )
 
   return (
     <div className="space-y-4">
@@ -2376,6 +2412,28 @@ function SalesGrid({ products }: { products: Product[] }) {
           <div className="text-xs text-indigo-600 font-semibold">Registrado en Caja esta semana</div>
         </div>
       </div>
+      {/* Desglose de la semana: mismas cifras que Cierre de Stock, para ver de un vistazo
+          cuánto se vendió, qué se reingresó, qué se tiró y qué ganancia deja. */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="bg-teal-50 rounded-xl p-3 text-center">
+          <p className="text-[9px] font-bold text-teal-500 uppercase tracking-widest mb-1">Vendido (estimado)</p>
+          <p className="text-lg font-black text-teal-700">{weekSummary.vendido}</p>
+        </div>
+        <div className="bg-blue-50 rounded-xl p-3 text-center">
+          <p className="text-[9px] font-bold text-blue-500 uppercase tracking-widest mb-1">Reingreso</p>
+          <p className="text-lg font-black text-blue-700">{weekSummary.reingreso}</p>
+        </div>
+        <div className="bg-red-50 rounded-xl p-3 text-center">
+          <p className="text-[9px] font-bold text-red-500 uppercase tracking-widest mb-1">Merma</p>
+          <p className="text-lg font-black text-red-600">{weekSummary.merma}</p>
+          <p className="text-[10px] text-red-400">{formatPrice(weekSummary.costoMerma)}</p>
+        </div>
+        <div className={`rounded-xl p-3 text-center ${weekSummary.margen >= 0 ? 'bg-green-50' : 'bg-red-50'}`}>
+          <p className={`text-[9px] font-bold uppercase tracking-widest mb-1 ${weekSummary.margen >= 0 ? 'text-green-600' : 'text-red-500'}`}>Ganancia estimada</p>
+          <p className={`text-lg font-black ${weekSummary.margen >= 0 ? 'text-green-700' : 'text-red-600'}`}>{formatPrice(weekSummary.margen)}</p>
+        </div>
+      </div>
+
       {cajaTotal != null && Math.abs(grandTotal - cajaTotal) > 1 && (
         <div className={`rounded-lg px-3 py-2 text-xs font-bold flex items-center justify-between ${grandTotal - cajaTotal > 0 ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'}`}>
           <span>{grandTotal - cajaTotal > 0 ? 'Vendiste más de lo registrado en Caja (falta cargarlo o hubo descuento)' : 'En Caja hay más de lo que muestra Ventas'}</span>
