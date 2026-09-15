@@ -36,10 +36,21 @@ function normalizeText(s: string): string {
 // el nombre esté tipeado exactamente igual en cada pedido.
 function matchesCompany(orderCompanyName: string, query: string): boolean {
   if (!orderCompanyName || !orderCompanyName.trim()) return false;
-  const orderWords = new Set(normalizeText(orderCompanyName).split(/\s+/).filter((w) => w.length >= 3));
+  const orderNorm = normalizeText(orderCompanyName);
+  const orderWords = new Set(orderNorm.split(/\s+/).filter((w) => w.length >= 3));
   const queryWords = normalizeText(query).split(/\s+/).filter((w) => w.length >= 3);
   if (queryWords.length === 0) return false;
-  return queryWords.some((w) => orderWords.has(w));
+  if (queryWords.some((w) => orderWords.has(w))) return true;
+
+  // Fallback por sigla: "AVSA" no comparte ninguna palabra con "Argentina Valores",
+  // pero es la sigla de "Argentina Valores S.A." — si el nombre del pedido es una
+  // sola palabra corta que arranca con las iniciales de la consulta, también matchea.
+  const orderTokens = orderNorm.split(/\s+/).filter(Boolean);
+  if (orderTokens.length === 1 && orderTokens[0].length <= 6) {
+    const initials = queryWords.map((w) => w[0]).join("");
+    if (initials.length >= 2 && orderTokens[0].startsWith(initials)) return true;
+  }
+  return false;
 }
 
 interface OrderItemRow {
