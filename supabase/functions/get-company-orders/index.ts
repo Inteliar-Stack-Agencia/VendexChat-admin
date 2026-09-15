@@ -59,6 +59,9 @@ interface OrderItemRow {
   quantity: number;
   unit_price: number;
   subtotal: number;
+  // Muchos pedidos reales tienen order_items.product_name en null (se cargó solo el
+  // product_id) — se resuelve el nombre real vía el embed de products.
+  products: { name: string } | { name: string }[] | null;
 }
 
 interface OrderRow {
@@ -135,7 +138,7 @@ Deno.serve(async (req: Request) => {
     // empresa se hace en JS con matching difuso sobre metadata->>company_name, que
     // PostgREST no puede normalizar del lado del servidor.
     const params = new URLSearchParams({
-      select: "id,order_number,customer_name,customer_whatsapp,status,total,subtotal,customer_notes,payment_status,paid_amount,metadata,created_at,order_items(product_id,product_name,quantity,unit_price,subtotal)",
+      select: "id,order_number,customer_name,customer_whatsapp,status,total,subtotal,customer_notes,payment_status,paid_amount,metadata,created_at,order_items(product_id,product_name,quantity,unit_price,subtotal,products(name))",
       store_id: `eq.${storeId}`,
       order: "created_at.desc",
       limit: "500",
@@ -173,12 +176,15 @@ Deno.serve(async (req: Request) => {
         paid_amount: o.paid_amount != null ? Number(o.paid_amount) : null,
         observaciones: o.customer_notes,
         created_at: o.created_at,
-        items: (o.order_items || []).map((it) => ({
-          product_name: it.product_name,
-          quantity: it.quantity,
-          unit_price: Number(it.unit_price),
-          subtotal: Number(it.subtotal),
-        })),
+        items: (o.order_items || []).map((it) => {
+          const productJoin = Array.isArray(it.products) ? it.products[0] : it.products;
+          return {
+            product_name: productJoin?.name || it.product_name || "SIN PRODUCTO",
+            quantity: it.quantity,
+            unit_price: Number(it.unit_price),
+            subtotal: Number(it.subtotal),
+          };
+        }),
       }));
 
     return jsonResponse(
