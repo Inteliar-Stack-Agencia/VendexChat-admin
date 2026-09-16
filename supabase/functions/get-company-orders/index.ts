@@ -1,8 +1,10 @@
 // get-company-orders — SOLO LECTURA.
 //
-// Primera herramienta de un futuro agente/orquestador: dado un store_id y el nombre
-// de una empresa, devuelve los pedidos de esa empresa en un rango de fechas. No hace
-// ningún insert/update/delete — es intencional, para poder exponerla a un agente sin
+// Primera herramienta de un futuro agente/orquestador: dado un store_id, devuelve
+// los pedidos de la tienda en un rango de fechas. company_name es opcional — si se
+// pasa, filtra por esa empresa (matching difuso); si no, trae todos los pedidos,
+// incluidos los de consumidor final sin empresa asociada. No hace ningún
+// insert/update/delete — es intencional, para poder exponerla a un agente sin
 // riesgo de que toque datos.
 //
 // Mismo patrón que ya usan store-ai-chat/telegram-bot: fetch directo a PostgREST con
@@ -123,9 +125,9 @@ Deno.serve(async (req: Request) => {
   if (!storeId || !uuidRe.test(storeId)) {
     return jsonResponse({ error: "store_id inválido o faltante" }, 400);
   }
-  if (!companyName.trim()) {
-    return jsonResponse({ error: "company_name faltante" }, 400);
-  }
+  // company_name es opcional: sin ella, trae todos los pedidos de la tienda en el
+  // rango pedido, sin filtrar por empresa. Antes era obligatoria — un consumidor
+  // final sin empresa asociada quedaba invisible sin ningún modo de traerlo.
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -161,8 +163,9 @@ Deno.serve(async (req: Request) => {
     }
 
     const rows = (await res.json()) as OrderRow[];
-    const matched = rows
-      .filter((o) => matchesCompany((o.metadata?.company_name as string) || "", companyName))
+    const matched = (companyName.trim()
+      ? rows.filter((o) => matchesCompany((o.metadata?.company_name as string) || "", companyName))
+      : rows)
       .slice(0, limit)
       .map((o) => ({
         order_number: o.order_number,
@@ -188,7 +191,7 @@ Deno.serve(async (req: Request) => {
       }));
 
     return jsonResponse(
-      { store_id: storeId, company_name: companyName, count: matched.length, orders: matched },
+      { store_id: storeId, company_name: companyName.trim() || null, count: matched.length, orders: matched },
       200,
     );
   } catch (e: unknown) {
