@@ -1110,6 +1110,16 @@ function dayToDate(weekStartISO: string, day: string): string {
   return d.toISOString().split('T')[0]
 }
 
+// El modelo a veces agrega texto suelto antes o después del JSON aunque se le pida que
+// no lo haga (ej: "Aquí está el JSON solicitado:"). Buscar el primer "{" y el último "}"
+// es más robusto que solo pelar los ```json ... ``` — funciona aunque no haya code fence.
+function extractJsonObject(text: string): string {
+  const start = text.indexOf('{')
+  const end = text.lastIndexOf('}')
+  if (start === -1 || end === -1 || end < start) return text.trim()
+  return text.slice(start, end + 1)
+}
+
 function findProductByName(name: string | null, products: Product[]): Product | null {
   if (!name) return null
   const norm = normalizeMatch(name)
@@ -1198,9 +1208,14 @@ function AIBulkEntryTab({ clients, products, onSaved }: { clients: CompanyClient
       const activeProducts = products.filter(p => p.is_active).map(p => p.name).join(', ')
       const clientNames = clients.filter(c => c.is_active).map(c => c.name).join(', ')
 
-      const systemPrompt = `Sos un asistente que convierte pedidos semanales de comida, mandados por WhatsApp en texto libre y desprolijo, a JSON estructurado.
+      const systemPrompt = `Sos un asistente que convierte pedidos de comida para empresas, mandados por WhatsApp en texto libre y desprolijo, a JSON estructurado.
 
-El texto puede tener pedidos de VARIAS empresas mezclados. Cada bloque de empresa suele empezar con el nombre de la empresa o de un empleado, seguido de líneas con el día de la semana y el plato elegido ese día. El formato de cada línea varía (con o sin dos puntos, mayúsculas/minúsculas, abreviaturas como "c/" por "con", "j y queso" por "jamón y queso").
+El texto puede tener pedidos de VARIAS empresas mezclados, y puede venir en CUALQUIERA de estos formatos (incluso mezclados en el mismo texto) — tenés que reconocer cuál es:
+
+1. Bloques semanales por empleado, con el día de la semana y el plato de cada día (ej: "Juliana: lunes milanesa, martes tarta"). Acá SÍ hay día explícito por cada pedido.
+2. Líneas sueltas de un pedido puntual para un solo día, tipo "empleado, producto, precio" o "empleado - producto $precio" (ej: "juliana , tortilla ,$13000"). Acá NO hay día mencionado — es un pedido para el día que ya está seleccionado en el formulario, así que "day" va en null.
+
+El formato de cada línea varía (con o sin dos puntos, con o sin comas, mayúsculas/minúsculas, abreviaturas como "c/" por "con", "j y queso" por "jamón y queso", con o sin "$" en el precio).
 
 Empresas ya registradas (elegí la más parecida para "matched_company"; si el texto no menciona ninguna empresa reconocible en ese bloque, usá null):
 ${clientNames || '(ninguna registrada todavía)'}
@@ -1209,19 +1224,22 @@ Catálogo de productos disponibles (elegí el más parecido al plato para "match
 ${activeProducts || '(sin productos activos)'}
 
 Devolvé SOLO un JSON válido, sin texto adicional ni bloques de código markdown, con este formato exacto:
-{"companies": [{"company_raw": "texto que identifica a la empresa en el mensaje, o \\"Sin identificar\\" si no hay ninguno", "matched_company": "nombre EXACTO de una empresa de la lista, o null", "employees": [{"employee_name": "string", "orders": [{"day": "lunes|martes|miercoles|jueves|viernes|sabado|domingo", "dish_raw": "texto original del plato tal cual aparece", "matched_product": "nombre EXACTO de un producto del catálogo, o null"}]}]}]}`
+{"companies": [{"company_raw": "texto que identifica a la empresa en el mensaje, o \\"Sin identificar\\" si no hay ninguno", "matched_company": "nombre EXACTO de una empresa de la lista, o null", "employees": [{"employee_name": "string", "orders": [{"day": "lunes|martes|miercoles|jueves|viernes|sabado|domingo, o null si el texto no menciona ningún día para ese pedido", "dish_raw": "texto original del plato tal cual aparece", "matched_product": "nombre EXACTO de un producto del catálogo, o null", "unit_price_raw": número sin signos ni puntos de miles si el texto menciona un precio explícito para ese pedido (ej: "$13000" -> 13000), o null si no menciona precio}]}]}]}`
 
       const response = await callAI([
         { role: 'system', content: systemPrompt },
         { role: 'user', content: rawText },
       ])
 
-      const cleaned = response.replace(/```json\s*|```/g, '').trim()
+      const cleaned = extractJsonObject(response)
       const parsed = JSON.parse(cleaned) as {
         companies: {
           company_raw: string
           matched_company: string | null
-          employees: { employee_name: string; orders: { day: string; dish_raw: string; matched_product: string | null }[] }[]
+          employees: {
+            employee_name: string
+            orders: { day: string | null; dish_raw: string; matched_product: string | null; unit_price_raw: number | null }[]
+          }[]
         }[]
       }
 
@@ -1235,14 +1253,19 @@ Devolvé SOLO un JSON válido, sin texto adicional ni bloques de código markdow
             employee_name: e.employee_name.trim(),
             orders: (e.orders || []).map(o => {
               const matchedProduct = findProductByName(o.matched_product, products)
+              // El texto puede no mencionar ningún día (ej: una línea suelta "empleado,
+              // producto, precio" para un solo pedido puntual) — en ese caso se asume el
+              // lunes de la semana elegida arriba, ya que no hay forma de adivinarlo mejor.
+              const day = o.day || ''
+              const explicitPrice = typeof o.unit_price_raw === 'number' && o.unit_price_raw > 0 ? o.unit_price_raw : null
               return {
-                day: o.day,
-                date: dayToDate(weekStart, o.day),
+                day,
+                date: dayToDate(weekStart, day),
                 dish_raw: o.dish_raw,
                 product_id: matchedProduct?.id || null,
                 product_name: matchedProduct?.name || o.dish_raw,
                 quantity: 1,
-                unit_price: priceForProduct(matchedClient, matchedProduct),
+                unit_price: explicitPrice ?? priceForProduct(matchedClient, matchedProduct),
               }
             }),
           })),
@@ -1268,7 +1291,8 @@ Devolvé SOLO un JSON válido, sin texto adicional ni bloques de código markdow
       showToast('success', `${totalOrders} pedidos detectados en ${newGroups.length} empresa${newGroups.length !== 1 ? 's' : ''} — revisá antes de guardar`)
     } catch (err) {
       console.error(err)
-      showToast('error', 'No se pudo procesar el texto. Revisá el formato o cargá manual en "Entrada rápida".')
+      const detail = err instanceof Error ? err.message : 'Revisá el formato o cargá manual en "Entrada rápida".'
+      showToast('error', `No se pudo procesar el texto: ${detail}`)
     } finally {
       setProcessing(false)
     }
@@ -1327,7 +1351,7 @@ Devolvé SOLO un JSON válido, sin texto adicional ni bloques de código markdow
     for (const emp of group.employees) {
       text += `*${emp.employee_name}*\n`
       const sorted = [...emp.orders].sort((a, b) => (DAY_OFFSETS[normalizeMatch(a.day)] ?? 0) - (DAY_OFFSETS[normalizeMatch(b.day)] ?? 0))
-      for (const o of sorted) text += `${DAY_LABELS[normalizeMatch(o.day)] || o.day}: ${o.product_name}\n`
+      for (const o of sorted) text += `${o.day ? (DAY_LABELS[normalizeMatch(o.day)] || o.day) : 'Pedido'}: ${o.product_name}\n`
       text += '\n'
     }
     text += `Total: ${formatPrice(groupTotal(group))}`
@@ -1483,7 +1507,7 @@ Devolvé SOLO un JSON válido, sin texto adicional ni bloques de código markdow
                       <div className="space-y-1.5">
                         {emp.orders.map((o, oi) => (
                           <div key={oi} className="flex items-center gap-2 text-sm">
-                            <span className="w-20 shrink-0 text-[11px] font-bold text-gray-400 uppercase">{DAY_LABELS[normalizeMatch(o.day)] || o.day}</span>
+                            <span className="w-20 shrink-0 text-[11px] font-bold text-gray-400 uppercase">{o.day ? (DAY_LABELS[normalizeMatch(o.day)] || o.day) : 'Sin día'}</span>
                             <div className="flex-1 flex items-center gap-1.5 min-w-0">
                               <select
                                 value={o.product_id || '__custom__'}

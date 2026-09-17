@@ -38,7 +38,25 @@ export async function callAI(
         body: { messages: enhancedMessages, model: GROQ_MODEL },
     })
 
-    if (error) throw new Error(`AI error: ${error.message}`)
+    if (error) throw new Error(await extractFunctionErrorMessage(error))
 
     return data?.choices?.[0]?.message?.content ?? ''
+}
+
+// supabase.functions.invoke() no expone el cuerpo JSON del error cuando la función
+// responde con un status distinto de 2xx — solo un mensaje genérico ("Edge Function
+// returned a non-2xx status code"), sin importar qué haya fallado en realidad (Groq
+// caído, modelo dado de baja, clave inválida, body inválido). El detalle real viaja en
+// error.context, que es la Response cruda de la función — hay que leerlo a mano.
+async function extractFunctionErrorMessage(error: { message: string; context?: Response }): Promise<string> {
+    const ctx = error.context
+    if (ctx && typeof ctx.clone === 'function') {
+        try {
+            const body = await ctx.clone().json()
+            if (typeof body?.error === 'string' && body.error) return body.error
+        } catch {
+            // el cuerpo no era JSON legible — nos quedamos con error.message
+        }
+    }
+    return error.message
 }
