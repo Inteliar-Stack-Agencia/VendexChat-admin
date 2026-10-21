@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
-import { Landmark, Plus, ChevronLeft, ChevronRight, RefreshCw, Trash2, X, CheckCircle2, AlertCircle, ClipboardList } from 'lucide-react'
+import { Landmark, Plus, ChevronLeft, ChevronRight, RefreshCw, Trash2, X, CheckCircle2, AlertCircle, ClipboardList, FileDown } from 'lucide-react'
 import { Button, Card } from '../../components/common'
 import FeatureGuard from '../../components/FeatureGuard'
 import { showToast } from '../../components/common/Toast'
@@ -9,6 +9,7 @@ import { productionApi } from '../../services/productionApi'
 import { productsApi } from '../../services/productsApi'
 import { companyDispatchApi } from '../../services/companyDispatchApi'
 import { formatPrice } from '../../utils/helpers'
+import CashReportPrint from './components/CashReportPrint'
 
 const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0]
 
@@ -250,6 +251,7 @@ export default function CashRegisterPage() {
   const [editSession, setEditSession] = useState<CashSession | null>(null)
   const [formDate, setFormDate] = useState(today)
   const [deleting, setDeleting] = useState<string | null>(null)
+  const [reportSession, setReportSession] = useState<CashSession | null>(null)
 
   // Pantallazo de unidades vendidas hoy vs. lo registrado en Caja — el conteo en sí
   // se carga desde Inventario → Cierre/Stock, acá solo se lee para cruzarlo con la plata.
@@ -590,6 +592,13 @@ export default function CashRegisterPage() {
                   </div>
 
                   <button
+                    onClick={e => { e.stopPropagation(); setReportSession(s) }}
+                    title="Descargar reporte de arqueo"
+                    className="p-1.5 text-gray-300 hover:text-emerald-600 shrink-0 transition-colors"
+                  >
+                    <FileDown className="w-4 h-4" />
+                  </button>
+                  <button
                     onClick={e => { e.stopPropagation(); handleDelete(s) }}
                     disabled={deleting === s.id}
                     className="p-1.5 text-gray-300 hover:text-red-500 shrink-0 transition-colors"
@@ -638,6 +647,13 @@ export default function CashRegisterPage() {
           session={editSession}
           onSave={handleSave}
           onClose={() => setShowForm(false)}
+        />
+      )}
+
+      {reportSession && (
+        <CashReportPrint
+          session={reportSession}
+          onClose={() => setReportSession(null)}
         />
       )}
     </FeatureGuard>
