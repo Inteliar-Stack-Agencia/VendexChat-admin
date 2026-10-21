@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { X, Printer } from 'lucide-react'
 import { tenantApi } from '../../../services/tenantApi'
+import { supabase } from '../../../supabaseClient'
 import { showToast } from '../../../components/common/Toast'
 import { formatPrice } from '../../../utils/helpers'
 import type { CashSession } from '../../../services/cashApi'
@@ -16,7 +17,13 @@ const PM_ROWS: { label: string; field: keyof CashSession }[] = [
 
 function formatDateLong(date: string) {
   const [y, m, d] = date.split('-').map(Number)
-  return new Date(y, m - 1, d).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' })
+  return new Date(y, m - 1, d).toLocaleDateString('es-AR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })
+}
+
+// Folio corto y estable a partir del id del cierre, para que el documento sea
+// identificable y rastreable en el sistema (ej. si el seguro pide verificarlo).
+function folioFromId(id: string) {
+  return id.replace(/-/g, '').slice(0, 8).toUpperCase()
 }
 
 interface CashReportPrintProps {
@@ -30,17 +37,28 @@ interface CashReportPrintProps {
 export default function CashReportPrint({ session, onClose }: CashReportPrintProps) {
   const [storeName, setStoreName] = useState('')
   const [storeAddress, setStoreAddress] = useState('')
+  const [storeContact, setStoreContact] = useState('')
+  const [generatedByEmail, setGeneratedByEmail] = useState('')
 
   useEffect(() => {
     tenantApi.getMe()
-      .then(t => { setStoreName(t.name); setStoreAddress(t.address || '') })
+      .then(t => {
+        setStoreName(t.name)
+        setStoreAddress(t.address || '')
+        setStoreContact([t.email, t.whatsapp].filter(Boolean).join(' · '))
+      })
       .catch(() => showToast('error', 'No se pudo cargar el nombre de la tienda'))
+    supabase.auth.getUser()
+      .then(({ data }) => setGeneratedByEmail(data.user?.email || ''))
+      .catch(() => {})
   }, [])
 
   const totalSales = session.sales_efectivo + session.sales_qr + session.sales_transferencia + session.sales_tarjeta + session.sales_other
   const expectedCash = session.opening_cash + session.sales_efectivo - session.cash_out
   const diff = session.closing_cash != null ? session.closing_cash - expectedCash : null
   const generatedAt = new Date().toLocaleString('es-AR')
+  const savedAt = new Date(session.updated_at).toLocaleString('es-AR')
+  const folio = folioFromId(session.id)
 
   return createPortal(
     <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4 print:p-0 print:bg-white">
@@ -61,11 +79,17 @@ export default function CashReportPrint({ session, onClose }: CashReportPrintPro
         </div>
 
         <div className="p-8 print:p-6">
+          <div className="flex items-center justify-between text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-4">
+            <span>Generado con VendexChat</span>
+            <span>N° {folio}</span>
+          </div>
+
           <div className="text-center mb-6">
             <h1 className="text-lg font-black text-gray-900">{storeName || 'Tienda'}</h1>
             {storeAddress && <p className="text-xs text-gray-500">{storeAddress}</p>}
+            {storeContact && <p className="text-xs text-gray-400">{storeContact}</p>}
             <p className="text-sm font-bold text-gray-700 mt-3">ARQUEO DE CAJA</p>
-            <p className="text-sm text-gray-600 capitalize">{formatDateLong(session.date)}</p>
+            <p className="text-base font-black text-gray-900 capitalize">{formatDateLong(session.date)}</p>
           </div>
 
           <table className="w-full text-sm mb-4">
@@ -145,7 +169,11 @@ export default function CashReportPrint({ session, onClose }: CashReportPrintPro
             </div>
           )}
 
-          <p className="text-[10px] text-gray-400 mt-8">Reporte generado el {generatedAt}.</p>
+          <div className="mt-8 pt-3 border-t border-gray-100 text-[10px] text-gray-400 space-y-0.5">
+            <p>Cierre de caja guardado en el sistema el {savedAt}.</p>
+            <p>Reporte generado el {generatedAt}{generatedByEmail && ` por ${generatedByEmail}`}.</p>
+            <p>Documento N° {folio} · VendexChat · vendexchat.app</p>
+          </div>
         </div>
       </div>
     </div>,
