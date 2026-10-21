@@ -60,10 +60,10 @@ function CashForm({ date, session, onSave, onClose }: CashFormProps) {
   const set = (field: keyof CashSessionForm, val: unknown) =>
     setForm(prev => ({ ...prev, [field]: val }))
 
-  const loadFromPOS = async (silent = false) => {
+  const loadFromPOS = async (silent = false, forDate = form.date) => {
     setLoadingPOS(true)
     try {
-      const totals = await cashApi.getSalesByPaymentMethod(date)
+      const totals = await cashApi.getSalesByPaymentMethod(forDate)
       setForm(prev => ({
         ...prev,
         sales_efectivo: totals.efectivo,
@@ -131,7 +131,21 @@ function CashForm({ date, session, onSave, onClose }: CashFormProps) {
             <h2 className="font-bold text-gray-900">
               {session ? 'Editar cierre' : 'Nuevo cierre de caja'}
             </h2>
-            <p className="text-xs text-gray-400 mt-0.5">{date}</p>
+            {isNew ? (
+              <input
+                type="date"
+                max={today}
+                value={form.date}
+                onChange={e => {
+                  const newDate = e.target.value
+                  set('date', newDate)
+                  loadFromPOS(true, newDate)
+                }}
+                className="mt-1 text-xs text-gray-600 border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+              />
+            ) : (
+              <p className="text-xs text-gray-400 mt-0.5">{date}</p>
+            )}
           </div>
           <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100"><X className="w-5 h-5 text-gray-500" /></button>
         </div>
