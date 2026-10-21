@@ -7,6 +7,14 @@
   }
 }
 
+/* Al imprimir el arqueo de caja (CashReportPrint, montado con un portal fuera de
+   #root), ocultar el resto de la app (sidebar, overlays) y que solo se vea el reporte. */
+@media print {
+  #root {
+    display: none !important;
+  }
+}
+
 /* Scrollbar personalizado */
 ::-webkit-scrollbar {
   width: 6px;
